@@ -30,12 +30,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=shared \
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy pyproject.toml for dependencies
+COPY pyproject.toml .
 
-# Install Python dependencies
+# Install Poetry and Python dependencies
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
-    pip install --no-cache-dir -r requirements.txt
+    pip install poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi
 
 # Copy application code
 COPY . .

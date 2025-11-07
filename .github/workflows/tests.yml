@@ -32,10 +32,10 @@ jobs:
     - name: Start sandbox container
       run: |
         cd services
-        docker-compose up -d
+        docker compose up -d
         echo "Waiting for container to be healthy..."
         sleep 10
-        docker-compose ps
+        docker compose ps
     
     - name: Wait for services to be ready
       run: |
@@ -68,13 +68,13 @@ jobs:
       if: failure()
       run: |
         cd services
-        docker-compose logs
+        docker compose logs
     
     - name: Stop sandbox container
       if: always()
       run: |
         cd services
-        docker-compose down -v
+        docker compose down -v
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4

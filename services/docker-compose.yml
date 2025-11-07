@@ -2,10 +2,10 @@ version: '3.8'
 
 services:
   # Redis with RediSearch (Vector Search) - Built from Dockerfile
-  cache:
+  sandbox:
     build:
       context: ..
-      dockerfile: services/cache/Dockerfile
+      dockerfile: services/sandbox/Dockerfile
     image: vuhitra-cache:latest
     container_name: vuhitra-redis
     ports:

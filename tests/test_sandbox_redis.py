@@ -1,8 +1,5 @@
 import pytest
 import redis
-import os
-
-
 def is_container_running():
     """Check if the Redis container is running and accessible."""
     try:

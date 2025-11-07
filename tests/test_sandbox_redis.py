@@ -1,12 +1,45 @@
 import pytest
 import redis
+import os
+import yaml
+
+
+def load_redis_password():
+    """Load Redis password from secrets.yaml or environment variable"""
+    # Try environment variable first
+    password = os.getenv("REDIS_PASSWORD")
+    if password:
+        return password
+    
+    # Try loading from secrets.yaml
+    secrets_path = os.path.join(os.path.dirname(__file__), '..', 'secrets.yaml')
+    if os.path.exists(secrets_path):
+        try:
+            with open(secrets_path) as f:
+                secrets = yaml.safe_load(f)
+                password = secrets.get('redis', {}).get('password')
+                if password:
+                    return password
+        except:
+            pass
+    
+    # No password found - this is a critical error
+    raise ValueError(
+        "REDIS_PASSWORD is required! Set it as an environment variable or in secrets.yaml. "
+        "See docs/SECRETS.md for setup instructions."
+    )
+
+
+REDIS_PASSWORD = load_redis_password()
+
+
 def is_container_running():
     """Check if the Redis container is running and accessible."""
     try:
-        client = redis.Redis(host='localhost', port=16379, socket_connect_timeout=2)
+        client = redis.Redis(host='localhost', port=16379, password=REDIS_PASSWORD, socket_connect_timeout=2)
         client.ping()
         return True
-    except (redis.ConnectionError, redis.TimeoutError):
+    except (redis.ConnectionError, redis.TimeoutError, redis.AuthenticationError):
         return False
 
 
@@ -16,7 +49,7 @@ def redis_client():
     if not is_container_running():
         pytest.skip("Sandbox container is not running")
     
-    client = redis.Redis(host='localhost', port=16379, decode_responses=True)
+    client = redis.Redis(host='localhost', port=16379, password=REDIS_PASSWORD, decode_responses=True)
     yield client
     client.close()
 

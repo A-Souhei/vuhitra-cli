@@ -52,5 +52,11 @@ EXPOSE 6379 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Start Redis and the Flask application
-CMD redis-server --daemonize yes --bind 0.0.0.0 --protected-mode no && python main.py
+# Start Redis with password authentication and the Flask application
+# REDIS_PASSWORD environment variable is required for security
+CMD if [ -z "$REDIS_PASSWORD" ]; then \
+        echo "ERROR: REDIS_PASSWORD environment variable is required"; \
+        exit 1; \
+    fi && \
+    redis-server --daemonize yes --bind 0.0.0.0 --protected-mode yes --requirepass "$REDIS_PASSWORD" && \
+    python main.py

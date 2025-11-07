@@ -30,6 +30,8 @@ jobs:
         pip install -r requirements.txt
     
     - name: Start sandbox container
+      env:
+        REDIS_PASSWORD: testpassword123
       run: |
         cd services
         docker compose up -d
@@ -38,10 +40,12 @@ jobs:
         docker compose ps
     
     - name: Wait for services to be ready
+      env:
+        REDIS_PASSWORD: testpassword123
       run: |
         echo "Waiting for Redis to be ready..."
         for i in {1..30}; do
-          if docker exec vuhitra-redis redis-cli ping > /dev/null 2>&1; then
+          if docker exec vuhitra-redis redis-cli -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
             echo "Redis is ready!"
             break
           fi
@@ -60,6 +64,8 @@ jobs:
         done
     
     - name: Run tests
+      env:
+        REDIS_PASSWORD: testpassword123
       run: |
         chmod +x run_tests.sh
         ./run_tests.sh -v

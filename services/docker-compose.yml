@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  # Redis - Built from Dockerfile
+  # Redis sandbox service - Built from Dockerfile
   sandbox:
     build:
       context: ..
       dockerfile: services/sandbox/Dockerfile
-    image: vuhitra-cache:latest
+    image: vuhitra-sandbox:latest
     container_name: vuhitra-redis
     ports:
       - "16379:6379"     # Redis port
@@ -14,9 +14,9 @@ services:
     volumes:
       - redis_data:/data
     environment:
-      - REDIS_ARGS=--save 60 1 --loglevel warning
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5

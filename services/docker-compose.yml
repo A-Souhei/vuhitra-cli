@@ -1,16 +1,15 @@
 version: '3.8'
 
 services:
-  # Redis sandbox service - Built from Dockerfile
-  sandbox:
+  # Redis service - Built from Dockerfile
+  redis:
     build:
       context: ..
-      dockerfile: services/sandbox/Dockerfile
-    image: vuhitra-sandbox:latest
+      dockerfile: services/redis/Dockerfile
+    image: vuhitra-redis:latest
     container_name: vuhitra-redis
     ports:
       - "16379:6379"     # Redis port
-      - "18001:8000"     # App port
     volumes:
       - redis_data:/data
     environment:
@@ -24,9 +23,117 @@ services:
     networks:
       - vuhitra-network
 
+  # Sandbox service - Built from Dockerfile
+  sandbox:
+    build:
+      context: ..
+      dockerfile: services/sandbox/Dockerfile
+    image: vuhitra-sandbox:latest
+    container_name: vuhitra-sandbox
+    ports:
+      - "18001:8000"     # App port
+    volumes:
+      - workspace:/app/WORKSPACE
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vuhitra-network
+
+  spark:
+    image: ghcr.io/nexus-mdg/spark-3.5:latest
+    restart: always
+    container_name: vuhitra-spark-master
+    env_file:
+      - .env
+    environment:
+      - SPARK_MODE=${SPARK_MODE}
+      - SPARK_RPC_AUTHENTICATION_ENABLED=${SPARK_RPC_AUTHENTICATION_ENABLED}
+      - SPARK_RPC_ENCRYPTION_ENABLED=${SPARK_RPC_ENCRYPTION_ENABLED}
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=${SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED}
+      - SPARK_SSL_ENABLED=${SPARK_SSL_ENABLED}
+      - SPARK_MASTER_HOST=${SPARK_MASTER_HOST}
+      - SPARK_MASTER_WEBUI_PORT=${SPARK_MASTER_WEBUI_PORT}  # Set Web UI to port 8081
+      # Ensure PySpark uses python3 in cluster
+      - PYSPARK_PYTHON=${PYSPARK_PYTHON}
+    volumes:
+      - spark-data:/opt/bitnami/spark/data
+      - ./spark-apps:/opt/bitnami/spark/apps  # Mount for your Spark applications
+
+  spark-worker:
+    image: ghcr.io/nexus-mdg/spark-3.5:latest
+    container_name: vuhitra-spark-worker
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=${SPARK_MASTER_URL}
+      - SPARK_WORKER_WEBUI_PORT=${SPARK_WORKER_WEBUI_PORT}
+      # Ensure executors run python3
+      - PYSPARK_PYTHON=${PYSPARK_PYTHON}
+    depends_on:
+      - spark
+
+  # Elasticsearch service - Built from Dockerfile
+  elasticsearch:
+    build:
+      context: ..
+      dockerfile: services/elasticsearch/Dockerfile
+    image: vuhitra-elasticsearch:latest
+    container_name: vuhitra-elasticsearch
+    ports:
+      - "9200:9200"      # HTTP API
+      - "9300:9300"      # Transport
+    volumes:
+      - elasticsearch_data:/var/lib/elasticsearch
+      - elasticsearch_logs:/var/log/elasticsearch
+    environment:
+      - discovery.type=single-node
+      - cluster.name=vuhitra-cluster
+      - node.name=vuhitra-node-1
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - vuhitra-network
 
 volumes:
   redis_data:
+    driver: local
+  workspace:
+    driver: local
+  spark-data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  elasticsearch_logs:
     driver: local
 
 networks:

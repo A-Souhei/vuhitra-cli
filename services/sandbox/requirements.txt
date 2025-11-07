@@ -1,0 +1,5 @@
+# Python dependencies for sandbox service
+Flask==3.0.0
+Werkzeug==3.0.1
+PyYAML==6.0.3
+sentry-sdk==2.0.0

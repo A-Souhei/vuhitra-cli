@@ -37,3 +37,7 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Secrets - DO NOT COMMIT
+secrets.yaml
+services/.env
+.env

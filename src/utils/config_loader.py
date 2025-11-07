@@ -1,10 +1,13 @@
 import yaml
+import os
 from src.errors_handler import handle_exception
 
 class ConfigLoader:
-    def __init__(self, config_path='config.yaml'):
+    def __init__(self, config_path='config.yaml', secrets_path='secrets.yaml'):
         self.config_path = config_path
+        self.secrets_path = secrets_path
         self.config = self._load()
+        self.secrets = self._load_secrets()
     
     def _load(self):
         try:
@@ -28,10 +31,44 @@ class ConfigLoader:
                 'error': 'Failed to load config'
             })
             return {}
+    
+    def _load_secrets(self):
+        """Load secrets from secrets.yaml file"""
+        try:
+            if os.path.exists(self.secrets_path):
+                with open(self.secrets_path) as f:
+                    return yaml.safe_load(f) or {}
+            else:
+                # Secrets file is optional, return empty dict if not found
+                return {}
+        except yaml.YAMLError as e:
+            handle_exception(e, context={
+                'secrets_path': self.secrets_path,
+                'error': 'Invalid YAML format in secrets file'
+            })
+            return {}
+        except Exception as e:
+            handle_exception(e, context={
+                'secrets_path': self.secrets_path,
+                'error': 'Failed to load secrets'
+            })
+            return {}
 
     def get(self, *keys, default=None):
         """Get nested config value using dot notation"""
         value = self.config
+        for key in keys:
+            if isinstance(value, dict):
+                value = value.get(key)
+            else:
+                return default
+            if value is None:
+                return default
+        return value
+    
+    def get_secret(self, *keys, default=None):
+        """Get nested secret value using dot notation"""
+        value = self.secrets
         for key in keys:
             if isinstance(value, dict):
                 value = value.get(key)
@@ -73,3 +110,13 @@ class ConfigLoader:
     
     def get_sentry_config(self):
         return self.get('sentry', default={})
+    
+    def get_redis_password(self):
+        """Get Redis password from secrets file"""
+        password = self.get_secret('redis', 'password')
+        if not password:
+            raise ValueError(
+                "Redis password is required! Set it in secrets.yaml. "
+                "See docs/SECRETS.md for setup instructions."
+            )
+        return password

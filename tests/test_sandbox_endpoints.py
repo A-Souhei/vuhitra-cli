@@ -30,7 +30,7 @@ def cleanup():
     # Clean up after test
     try:
         requests.delete(f"{SANDBOX_BASE_URL}/remove-all", timeout=5)
-    except:
+    except (requests.ConnectionError, requests.Timeout):
         pass
 
 

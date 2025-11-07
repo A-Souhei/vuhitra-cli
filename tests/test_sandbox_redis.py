@@ -1,33 +1,24 @@
 import pytest
 import redis
-import os
-import yaml
+
+from src.utils.config_loader import ConfigLoader
 
 
 def load_redis_password():
-    """Load Redis password from secrets.yaml or environment variable"""
-    # Try environment variable first
-    password = os.getenv("REDIS_PASSWORD")
-    if password:
-        return password
-    
-    # Try loading from secrets.yaml
-    secrets_path = os.path.join(os.path.dirname(__file__), '..', 'secrets.yaml')
-    if os.path.exists(secrets_path):
-        try:
-            with open(secrets_path) as f:
-                secrets = yaml.safe_load(f)
-                password = secrets.get('redis', {}).get('password')
-                if password:
-                    return password
-        except (yaml.YAMLError, IOError, KeyError):
-            pass
-    
-    # No password found - this is a critical error
-    raise ValueError(
-        "REDIS_PASSWORD is required! Set it as an environment variable or in secrets.yaml. "
-        "See docs/SECRETS.md for setup instructions."
-    )
+    """Load Redis password from secrets or environment variable"""
+    try:
+        config_loader = ConfigLoader()
+        return config_loader.get_redis_password()
+    except Exception:
+        # If config loader fails, try environment variable
+        import os
+        password = os.getenv("REDIS_PASSWORD")
+        if password:
+            return password
+        raise ValueError(
+            "REDIS_PASSWORD is required! Set it as an environment variable or in secrets.yaml. "
+            "See docs/SECRETS.md for setup instructions."
+        )
 
 
 REDIS_PASSWORD = load_redis_password()

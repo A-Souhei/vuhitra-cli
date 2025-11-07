@@ -1,9 +1,12 @@
 import shutil
+import logging
 from pathlib import Path
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
@@ -39,7 +42,8 @@ def upload_file():
             "path": str(filepath)
         }), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to upload file: {str(e)}"}), 500
+        logger.error(f"Failed to upload file {filename}: {str(e)}")
+        return jsonify({"error": "Failed to upload file"}), 500
 
 
 @app.route('/upload-directory', methods=['POST'])
@@ -69,7 +73,8 @@ def upload_directory():
             file.save(str(filepath))
             uploaded_files.append(filename)
         except Exception as e:
-            failed_files.append({"filename": filename, "error": str(e)})
+            logger.error(f"Failed to upload file {filename}: {str(e)}")
+            failed_files.append({"filename": filename, "error": "Failed to save file"})
     
     response = {
         "message": f"Uploaded {len(uploaded_files)} file(s)",
@@ -111,7 +116,8 @@ def remove_file(filename):
         else:
             return jsonify({"error": "Not a file"}), 400
     except Exception as e:
-        return jsonify({"error": f"Failed to remove file: {str(e)}"}), 500
+        logger.error(f"Failed to remove file {safe_filename}: {str(e)}")
+        return jsonify({"error": "Failed to remove file"}), 500
 
 
 @app.route('/remove-all', methods=['DELETE'])
@@ -132,7 +138,8 @@ def remove_all_files():
             "removed_count": removed_count
         }), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to remove all files: {str(e)}"}), 500
+        logger.error(f"Failed to remove all files: {str(e)}")
+        return jsonify({"error": "Failed to remove all files"}), 500
 
 
 @app.route('/list', methods=['GET'])
@@ -155,7 +162,8 @@ def list_files():
             "files": files
         }), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
+        logger.error(f"Failed to list files: {str(e)}")
+        return jsonify({"error": "Failed to list files"}), 500
 
 
 if __name__ == '__main__':

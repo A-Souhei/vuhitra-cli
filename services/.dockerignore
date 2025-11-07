@@ -3,7 +3,7 @@
 
 # Git
 .git
-../../.gitignore
+.gitignore
 .github
 
 # Python

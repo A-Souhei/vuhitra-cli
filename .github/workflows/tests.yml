@@ -43,7 +43,7 @@ jobs:
         export REDIS_PASSWORD=testpassword123
         echo "Waiting for Redis to be ready..."
         for i in {1..30}; do
-          if docker exec vuhitra-redis redis-cli -a "testpassword123" ping > /dev/null 2>&1; then
+          if docker exec -e REDISCLI_AUTH="testpassword123" vuhitra-redis redis-cli ping > /dev/null 2>&1; then
             echo "Redis is ready!"
             break
           fi

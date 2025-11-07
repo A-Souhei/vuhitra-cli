@@ -23,5 +23,9 @@ model:
     - qwen2.5-coder:7b-instruct-q4_K_M
     - qwen2.5-coder:7b
 
-# Host configuration
-host: 192.168.31.23
+# Ollama server configuration
+ollama:
+  host: 192.168.31.23
+  protocol: http
+  port: 11434
+  api_path: /api/generate

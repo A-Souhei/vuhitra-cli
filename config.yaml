@@ -29,3 +29,23 @@ ollama:
   protocol: http
   port: 11434
   api_path: /api/generate
+
+# Environment configuration
+environment:
+  # Mode: DEV or PROD (default: DEV)
+  mode: DEV
+  # Enable logging in DEV mode
+  enable_logging: true
+
+# Sentry configuration for error tracking
+sentry:
+  # Sentry DSN (leave empty to disable Sentry)
+  dsn: ""
+  # Environment name for Sentry
+  environment: development
+  # Enable tracing
+  traces_sample_rate: 1.0
+  # Send default PII (Personally Identifiable Information)
+  send_default_pii: false
+  # Attach stacktrace
+  attach_stacktrace: true

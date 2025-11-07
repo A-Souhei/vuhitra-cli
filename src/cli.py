@@ -1,6 +1,17 @@
 import sys
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
+from src.errors_handler import handle_exception, capture_message, get_error_handler
+from src.utils.config_loader import ConfigLoader
+
+def initialize_error_handler():
+    """Initialize the error handler with configuration."""
+    try:
+        config = ConfigLoader()
+        error_handler = get_error_handler()
+        error_handler.configure(config_loader=config)
+    except Exception as e:
+        print(f"WARNING: Failed to initialize error handler: {str(e)}", file=sys.stderr)
 
 def interactive_mode(model):
     print(f"vuhitra-cli interactive mode (model: {model})")
@@ -18,19 +29,44 @@ def interactive_mode(model):
         except (KeyboardInterrupt, EOFError):
             print("\nExiting...")
             break
+        except Exception as e:
+            handle_exception(e, context={
+                'mode': 'interactive',
+                'model': model
+            })
+            print(f"ERROR: {str(e)}")
 
 def non_interactive_mode(model, prompt):
-    response = generate(model, prompt)
-    print(response)
+    try:
+        response = generate(model, prompt)
+        print(response)
+    except Exception as e:
+        handle_exception(e, context={
+            'mode': 'non_interactive',
+            'model': model,
+            'prompt_length': len(prompt)
+        })
+        print(f"ERROR: {str(e)}")
 
 def main():
-    parser = ArgumentParser()
-    args = parser.parse_args()
+    initialize_error_handler()
     
-    if args.prompt:
-        non_interactive_mode(args.model, args.prompt)
-    else:
-        interactive_mode(args.model)
+    try:
+        parser = ArgumentParser()
+        args = parser.parse_args()
+        
+        capture_message("CLI started", level="info", context={
+            'mode': 'interactive' if not args.prompt else 'non_interactive',
+            'model': args.model
+        })
+        
+        if args.prompt:
+            non_interactive_mode(args.model, args.prompt)
+        else:
+            interactive_mode(args.model)
+    except Exception as e:
+        handle_exception(e, context={'function': 'main'})
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

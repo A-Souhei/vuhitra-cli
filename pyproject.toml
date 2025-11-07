@@ -1,0 +1,19 @@
+[project]
+name = "vuhitra-cli"
+version = "0.1.0"
+description = "a minimalist? cli to use ollama LLM"
+authors = [
+    {name = "toavina",email = "toavinahajaina@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests (>=2.32.5,<3.0.0)",
+    "pyyaml (>=6.0.3,<7.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

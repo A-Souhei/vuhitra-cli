@@ -9,12 +9,19 @@ cli:
 # Model configuration
 model:
   # Default model to use
-  default: llama3
+  default: llama3.1:8b
   # Available models list
   available:
-    - llama3
-    - codellama
-    - mistral
+    - llama3.1:8b
+    - qwen3-vl:8b
+    - qwen3:latest
+    - qwen2-math:1.5b
+    - qwen2-math:7b
+    - qwen2.5-coder:7b-instruct-q5_K_M
+    - qwen2.5-coder:14b-instruct-q4_K_M
+    - qwen2.5-coder:3b
+    - qwen2.5-coder:7b-instruct-q4_K_M
+    - qwen2.5-coder:7b
 
 # Host configuration
 host: 192.168.31.23

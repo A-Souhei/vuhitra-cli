@@ -20,7 +20,7 @@ def load_redis_password():
                 password = secrets.get('redis', {}).get('password')
                 if password:
                     return password
-        except:
+        except (yaml.YAMLError, IOError, KeyError):
             pass
     
     # No password found - this is a critical error

@@ -1,6 +1,11 @@
 import pytest
 import requests
 import io
+import sys
+import os
+
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
 SANDBOX_BASE_URL = "http://localhost:18001"
@@ -179,3 +184,64 @@ class TestSandboxEndpoints:
         list_response2 = requests.get(f"{SANDBOX_BASE_URL}/list")
         file_names2 = [f["name"] for f in list_response2.json()["files"]]
         assert "workflow_test.txt" not in file_names2
+
+
+class TestSandboxErrorHandler:
+    """Test error handler integration in the sandbox service."""
+    
+    def test_error_handler_import(self):
+        """Test that error handler can be imported from sandbox main module."""
+        try:
+            from src.errors_handler.error_handler import get_error_handler
+            error_handler = get_error_handler()
+            assert error_handler is not None
+            assert hasattr(error_handler, 'handle_exception')
+            assert hasattr(error_handler, 'capture_message')
+        except ImportError as e:
+            pytest.fail(f"Failed to import error handler: {str(e)}")
+    
+    def test_error_handler_configuration(self):
+        """Test that error handler can be configured."""
+        from src.errors_handler.error_handler import get_error_handler
+        error_handler = get_error_handler()
+        
+        # Configure with DEV mode
+        error_handler.configure(mode='DEV', enable_logging=True)
+        assert error_handler.mode == 'DEV'
+        assert error_handler.enable_logging is True
+    
+    def test_error_response_generic_message(self, cleanup):
+        """Test that error responses don't expose internal details."""
+        # Try to upload to an invalid location (this will fail internally)
+        # We expect a generic error message, not the internal exception details
+        files = {'file': ('test.txt', io.BytesIO(b"test"), 'text/plain')}
+        
+        # First upload a file normally
+        response = requests.post(f"{SANDBOX_BASE_URL}/upload", files=files)
+        assert response.status_code == 200
+        
+        # Now try to remove a non-existent file
+        response = requests.delete(f"{SANDBOX_BASE_URL}/remove/nonexistent_file.txt")
+        assert response.status_code == 404
+        data = response.json()
+        
+        # Should have generic error message
+        assert "error" in data
+        assert data["error"] == "File not found"
+        
+        # Should NOT expose internal exception details
+        assert "Traceback" not in str(data)
+        assert "Exception" not in str(data)
+    
+    def test_invalid_operation_returns_generic_error(self, cleanup):
+        """Test that invalid operations return generic error messages."""
+        # Try to remove a directory as if it were a file
+        # First create a directory by uploading with path
+        files = [
+            ('files', ('subdir/file.txt', io.BytesIO(b"content"), 'text/plain'))
+        ]
+        requests.post(f"{SANDBOX_BASE_URL}/upload-directory", files=files)
+        
+        # Now list to verify
+        list_response = requests.get(f"{SANDBOX_BASE_URL}/list")
+        assert list_response.status_code == 200

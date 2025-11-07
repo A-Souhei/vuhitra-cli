@@ -37,6 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
 
 # Copy application code
 COPY ./services/sandbox/src/main.py /app/main.py
+COPY ./src /app/src
 
 # Create WORKSPACE directory and non-root user
 RUN useradd -m vuhitra && \

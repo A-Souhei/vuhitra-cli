@@ -1,18 +1,52 @@
 import shutil
-import logging
+import sys
+import os
 from pathlib import Path
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.errors_handler.error_handler import get_error_handler
+
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+# Initialize error handler
+error_handler = get_error_handler()
+error_handler.configure(mode=os.getenv('VUHITRA_MODE', 'DEV'), enable_logging=True)
 
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+
+
+class SandboxException(Exception):
+    """Custom exception for sandbox operations"""
+    def __init__(self, message, operation=None, status_code=500, **context):
+        super().__init__(message)
+        self.message = message
+        self.operation = operation
+        self.status_code = status_code
+        self.context = context
+
+
+@app.errorhandler(SandboxException)
+def handle_sandbox_exception(e):
+    """Handle sandbox exceptions with error handler integration"""
+    context = {"operation": e.operation} if e.operation else {}
+    context.update(e.context)
+    
+    error_handler.handle_exception(e, context=context)
+    return jsonify({"error": e.message}), e.status_code
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_exception(e):
+    """Handle any unexpected exceptions"""
+    error_handler.handle_exception(e, context={"operation": "unexpected_error"})
+    return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/health', methods=['GET'])
@@ -36,14 +70,14 @@ def upload_file():
     
     try:
         file.save(str(filepath))
-        return jsonify({
-            "message": "File uploaded successfully",
-            "filename": filename,
-            "path": str(filepath)
-        }), 200
     except Exception as e:
-        logger.error(f"Failed to upload file {filename}: {str(e)}")
-        return jsonify({"error": "Failed to upload file"}), 500
+        raise SandboxException("Failed to upload file", operation="upload_file", filename=filename) from e
+    
+    return jsonify({
+        "message": "File uploaded successfully",
+        "filename": filename,
+        "path": str(filepath)
+    }), 200
 
 
 @app.route('/upload-directory', methods=['POST'])
@@ -73,7 +107,10 @@ def upload_directory():
             file.save(str(filepath))
             uploaded_files.append(filename)
         except Exception as e:
-            logger.error(f"Failed to upload file {filename}: {str(e)}")
+            error_handler.handle_exception(e, context={
+                "operation": "upload_directory",
+                "filename": filename
+            })
             failed_files.append({"filename": filename, "error": "Failed to save file"})
     
     response = {
@@ -109,15 +146,19 @@ def remove_file(filename):
     try:
         if filepath.is_file():
             filepath.unlink()
-            return jsonify({
-                "message": "File removed successfully",
-                "filename": safe_filename
-            }), 200
         else:
-            return jsonify({"error": "Not a file"}), 400
+            raise SandboxException("Not a file", operation="remove_file", 
+                                 filename=safe_filename, status_code=400)
+    except SandboxException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to remove file {safe_filename}: {str(e)}")
-        return jsonify({"error": "Failed to remove file"}), 500
+        raise SandboxException("Failed to remove file", operation="remove_file", 
+                             filename=safe_filename) from e
+    
+    return jsonify({
+        "message": "File removed successfully",
+        "filename": safe_filename
+    }), 200
 
 
 @app.route('/remove-all', methods=['DELETE'])
@@ -132,14 +173,13 @@ def remove_all_files():
             elif item.is_dir():
                 shutil.rmtree(item)
                 removed_count += 1
-        
-        return jsonify({
-            "message": "All files removed successfully",
-            "removed_count": removed_count
-        }), 200
     except Exception as e:
-        logger.error(f"Failed to remove all files: {str(e)}")
-        return jsonify({"error": "Failed to remove all files"}), 500
+        raise SandboxException("Failed to remove all files", operation="remove_all_files") from e
+    
+    return jsonify({
+        "message": "All files removed successfully",
+        "removed_count": removed_count
+    }), 200
 
 
 @app.route('/list', methods=['GET'])
@@ -155,15 +195,14 @@ def list_files():
                     "size": item.stat().st_size,
                     "modified": item.stat().st_mtime
                 })
-        
-        return jsonify({
-            "workspace": str(WORKSPACE_DIR),
-            "file_count": len(files),
-            "files": files
-        }), 200
     except Exception as e:
-        logger.error(f"Failed to list files: {str(e)}")
-        return jsonify({"error": "Failed to list files"}), 500
+        raise SandboxException("Failed to list files", operation="list_files") from e
+    
+    return jsonify({
+        "workspace": str(WORKSPACE_DIR),
+        "file_count": len(files),
+        "files": files
+    }), 200
 
 
 if __name__ == '__main__':

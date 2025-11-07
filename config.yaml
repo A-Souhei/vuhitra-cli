@@ -1,0 +1,20 @@
+# Configuration file for vuhitra-cli
+# This file contains settings for the LLM CLI application
+
+# CLI settings
+cli:
+  # Default prompt behavior, timeout, etc.
+  default_timeout: 30
+
+# Model configuration
+model:
+  # Default model to use
+  default: llama3
+  # Available models list
+  available:
+    - llama3
+    - codellama
+    - mistral
+
+# Host configuration
+host: 192.168.31.23

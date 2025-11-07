@@ -1,0 +1,64 @@
+# Docker ignore file - exclude from Docker build context
+# Location: services/.dockerignore (for services/cache/Dockerfile)
+
+# Git
+.git
+../../.gitignore
+.github
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tests (don't need in production image)
+tests/
+run_tests.sh
+pytest.ini
+
+# Development files
+.env
+.env.local
+poetry.lock
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak

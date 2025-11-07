@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Redis with RediSearch (Vector Search) - Built from Dockerfile
+  # Redis - Built from Dockerfile
   sandbox:
     build:
       context: ..

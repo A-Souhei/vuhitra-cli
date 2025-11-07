@@ -1,5 +1,5 @@
 # Docker ignore file - exclude from Docker build context
-# Location: services/.dockerignore (for services/cache/Dockerfile)
+# Location: services/.dockerignore (for services/sandbox/Dockerfile)
 
 # Git
 .git

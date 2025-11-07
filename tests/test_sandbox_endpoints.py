@@ -1,7 +1,6 @@
 import pytest
 import requests
 import io
-import os
 
 
 SANDBOX_BASE_URL = "http://localhost:18001"

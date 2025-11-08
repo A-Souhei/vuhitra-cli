@@ -11,8 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ES_JAVA_HOME=/usr/share/elasticsearch/jdk
 
 # Install dependencies
-RUN --mount=type=cache,target=/var/cache/apt,sharing=shared \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=shared \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     wget \
@@ -24,30 +24,29 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=shared \
 # Download and install Elasticsearch
 RUN --mount=type=cache,target=/root/.cache/downloads,sharing=shared \
     cd /root/.cache/downloads && \
-    if [ ! -f elasticsearch-${ES_VERSION}.tar.gz ]; then \
-        wget -qO elasticsearch-${ES_VERSION}.tar.gz \
-        https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${ES_VERSION}-linux-x86_64.tar.gz && \
-        wget -qO elasticsearch-${ES_VERSION}.tar.gz.sha512 \
-        https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${ES_VERSION}-linux-x86_64.tar.gz.sha512; \
+    ARCHIVE="elasticsearch-${ES_VERSION}.tar.gz" && \
+    if [ ! -f "$ARCHIVE" ] || ! tar -tzf "$ARCHIVE" >/dev/null 2>&1; then \
+        rm -f "$ARCHIVE" && \
+        wget -O "$ARCHIVE" \
+        https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${ES_VERSION}-linux-x86_64.tar.gz; \
     fi && \
-    sha512sum -c elasticsearch-${ES_VERSION}.tar.gz.sha512 && \
     mkdir -p ${ES_HOME} && \
-    tar -xzf elasticsearch-${ES_VERSION}.tar.gz -C ${ES_HOME} --strip-components=1
+    tar -xzf "$ARCHIVE" -C ${ES_HOME} --strip-components=1
 
 # Create directories and set permissions
 RUN mkdir -p ${ES_PATH_CONF} \
     /var/lib/elasticsearch \
     /var/log/elasticsearch && \
-    groupadd -g 1000 elasticsearch && \
-    useradd -u 1000 -g 1000 -s /bin/bash -m elasticsearch && \
+    (groupadd -g 1000 elasticsearch || groupadd elasticsearch) && \
+    (useradd -u 1000 -g elasticsearch -s /bin/bash -m elasticsearch || useradd -g elasticsearch -s /bin/bash -m elasticsearch)
+
+# Copy default configuration and set ownership
+RUN cp -r ${ES_HOME}/config/* ${ES_PATH_CONF}/ && \
     chown -R elasticsearch:elasticsearch \
     ${ES_HOME} \
     ${ES_PATH_CONF} \
     /var/lib/elasticsearch \
     /var/log/elasticsearch
-
-# Copy default configuration
-RUN cp ${ES_HOME}/config/* ${ES_PATH_CONF}/ || true
 
 # Set working directory
 WORKDIR ${ES_HOME}

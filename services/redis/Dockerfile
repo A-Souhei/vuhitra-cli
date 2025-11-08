@@ -11,8 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 WORKDIR /app
 
 # Install Redis and dependencies
-RUN --mount=type=cache,target=/var/cache/apt,sharing=shared \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=shared \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     redis-server \

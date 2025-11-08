@@ -1,0 +1,56 @@
+version: '3.8'
+
+# Spark services in separate compose file
+# To use: docker compose -f docker-compose.yml -f docker-compose.spark.yml up -d
+# Note: This requires authentication to pull the private Spark image
+
+services:
+  spark:
+    image: ghcr.io/nexus-mdg/spark-3.5:latest
+    restart: always
+    container_name: vuhitra-spark-master
+    env_file:
+      - .env
+    environment:
+      - SPARK_MODE=${SPARK_MODE}
+      - SPARK_RPC_AUTHENTICATION_ENABLED=${SPARK_RPC_AUTHENTICATION_ENABLED}
+      - SPARK_RPC_ENCRYPTION_ENABLED=${SPARK_RPC_ENCRYPTION_ENABLED}
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=${SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED}
+      - SPARK_SSL_ENABLED=${SPARK_SSL_ENABLED}
+      - SPARK_MASTER_HOST=${SPARK_MASTER_HOST}
+      - SPARK_MASTER_WEBUI_PORT=${SPARK_MASTER_WEBUI_PORT}  # Set Web UI to port 8081
+      # Ensure PySpark uses python3 in cluster
+      - PYSPARK_PYTHON=${PYSPARK_PYTHON}
+    ports:
+      - "7077:7077"     # Spark master port
+      - "8081:8081"     # Spark master Web UI
+    volumes:
+      - spark-data:/opt/bitnami/spark/data
+      - ./spark-apps:/opt/bitnami/spark/apps  # Mount for your Spark applications
+    networks:
+      - vuhitra-network
+
+  spark-worker:
+    image: ghcr.io/nexus-mdg/spark-3.5:latest
+    container_name: vuhitra-spark-worker
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=${SPARK_MASTER_URL}
+      - SPARK_WORKER_WEBUI_PORT=${SPARK_WORKER_WEBUI_PORT}
+      # Ensure executors run python3
+      - PYSPARK_PYTHON=${PYSPARK_PYTHON}
+    depends_on:
+      - spark
+    networks:
+      - vuhitra-network
+
+volumes:
+  spark-data:
+    driver: local
+
+networks:
+  vuhitra-network:
+    external: true

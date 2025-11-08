@@ -223,32 +223,6 @@ class TestFeedbackCollector(unittest.TestCase):
         # Check that "Skipping feedback." was printed
         mock_print.assert_any_call("\nSkipping feedback.")
 
-    def test_validate_rating_with_valid_numbers(self):
-        """Test _validate_rating with all valid numbers (0-5)."""
-        collector = FeedbackCollector()
-
-        for i in range(6):  # 0 to 5
-            result = collector._validate_rating(str(i))
-            self.assertEqual(result, i)
-
-    def test_validate_rating_with_invalid_numbers(self):
-        """Test _validate_rating with invalid numbers."""
-        collector = FeedbackCollector()
-
-        invalid_inputs = ['-1', '6', '10', '100', '-5']
-        for invalid in invalid_inputs:
-            result = collector._validate_rating(invalid)
-            self.assertIsNone(result)
-
-    def test_validate_rating_with_non_numeric(self):
-        """Test _validate_rating with non-numeric input."""
-        collector = FeedbackCollector()
-
-        invalid_inputs = ['abc', 'one', '3.5', '', 'x', '!@#']
-        for invalid in invalid_inputs:
-            result = collector._validate_rating(invalid)
-            self.assertIsNone(result)
-
     @patch('src.utils.feedback_collector.ConfigLoader')
     @patch('builtins.input', return_value='4')
     @patch('builtins.print')

@@ -98,7 +98,10 @@ class ConfigLoader:
     
     def get_cli_timeout(self):
         return self.get('cli', 'default_timeout', default=30)
-    
+
+    def get_feedback_enabled(self):
+        return self.get('cli', 'enable_feedback', default=False)
+
     def get_environment_mode(self):
         return self.get('environment', 'mode', default='DEV')
     

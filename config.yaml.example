@@ -1,11 +1,14 @@
 # Configuration file for vuhitra-cli
 # This file contains settings for the LLM CLI application
+# Copy this file to config.yaml and modify according to your needs
 
 # CLI settings
 cli:
   # Default prompt behavior, timeout, etc.
   default_timeout: 30
   # Enable/disable feedback collection in interactive mode
+  # When enabled, users will be prompted to rate their satisfaction (0-5) after each response
+  # 0=Disappointed, 1=Very dissatisfied, 2=Dissatisfied, 3=Neutral, 4=Satisfied, 5=Very satisfied
   enable_feedback: true
 
 # Model configuration
@@ -27,7 +30,7 @@ model:
 
 # Ollama server configuration
 ollama:
-  host: 192.168.31.23
+  host: localhost
   protocol: http
   port: 11434
   api_path: /api/generate

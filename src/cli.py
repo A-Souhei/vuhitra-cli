@@ -3,6 +3,7 @@ from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
 from src.utils.config_loader import ConfigLoader
+from src.utils.feedback_collector import FeedbackCollector
 
 def initialize_error_handler():
     """Initialize the error handler with configuration."""
@@ -16,7 +17,10 @@ def initialize_error_handler():
 def interactive_mode(model):
     print(f"vuhitra-cli interactive mode (model: {model})")
     print("Type 'exit' or 'quit' to leave, Ctrl+C to interrupt\n")
-    
+
+    # Initialize feedback collector
+    feedback_collector = FeedbackCollector()
+
     while True:
         try:
             prompt = input(">>> ")
@@ -26,6 +30,18 @@ def interactive_mode(model):
                 response = generate(model, prompt)
                 print(response)
                 print()
+
+                # Collect feedback if enabled
+                feedback_data = feedback_collector.collect_feedback(prompt, response)
+
+                # TODO: Send feedback_data to ElasticSearch service when implemented
+                # For now, feedback is collected and can be logged/stored as needed
+                if feedback_data:
+                    # Placeholder for future ElasticSearch integration
+                    # This is where we'll send: prompt, response, rating, timestamp
+                    # along with prompt_keywords and prompt_sentiment
+                    pass
+
         except (KeyboardInterrupt, EOFError):
             print("\nExiting...")
             break

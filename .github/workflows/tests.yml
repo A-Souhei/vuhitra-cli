@@ -29,10 +29,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Create .env file
+      run: |
+        cd services
+        cp .env.example .env
+        sed -i 's/REDIS_PASSWORD=.*/REDIS_PASSWORD=testpassword123/' .env
+
     - name: Start sandbox container
       run: |
         cd services
-        export REDIS_PASSWORD=testpassword123
         docker compose up -d
         echo "Waiting for container to be healthy..."
         sleep 10

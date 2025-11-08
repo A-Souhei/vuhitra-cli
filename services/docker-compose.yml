@@ -67,9 +67,14 @@ services:
       - SPARK_MASTER_WEBUI_PORT=${SPARK_MASTER_WEBUI_PORT}  # Set Web UI to port 8081
       # Ensure PySpark uses python3 in cluster
       - PYSPARK_PYTHON=${PYSPARK_PYTHON}
+    ports:
+      - "7077:7077"     # Spark master port
+      - "8081:8081"     # Spark master Web UI
     volumes:
       - spark-data:/opt/bitnami/spark/data
       - ./spark-apps:/opt/bitnami/spark/apps  # Mount for your Spark applications
+    networks:
+      - vuhitra-network
 
   spark-worker:
     image: ghcr.io/nexus-mdg/spark-3.5:latest
@@ -85,6 +90,8 @@ services:
       - PYSPARK_PYTHON=${PYSPARK_PYTHON}
     depends_on:
       - spark
+    networks:
+      - vuhitra-network
 
   # Elasticsearch service - Built from Dockerfile
   elasticsearch:

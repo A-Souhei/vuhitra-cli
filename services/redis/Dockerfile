@@ -31,7 +31,7 @@ EXPOSE 6379
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
-    CMD redis-cli -a "${REDIS_PASSWORD}" ping || exit 1
+    CMD sh -c 'redis-cli -a "$REDIS_PASSWORD" ping || exit 1'
 
 # Start Redis with password authentication
 # REDIS_PASSWORD environment variable is required for security

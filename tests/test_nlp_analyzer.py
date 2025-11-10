@@ -1,0 +1,110 @@
+"""
+Tests for NLP analyzer.
+"""
+import pytest
+from unittest.mock import Mock, patch
+from services.sandbox.src.nlp_analyzer import NLPAnalyzer
+
+
+class TestNLPAnalyzer:
+    """Test NLPAnalyzer functionality."""
+
+    def test_analyze_sentiment(self):
+        """Test sentiment analysis."""
+        analyzer = NLPAnalyzer()
+        
+        # Positive sentiment
+        result = analyzer.analyze_sentiment("I love this! It's wonderful and amazing!")
+        assert "vader_score" in result
+        assert "spacy_score" in result
+        assert result["vader_score"] > 0  # VADER should detect positive sentiment
+        
+        # Negative sentiment
+        result = analyzer.analyze_sentiment("This is terrible and awful!")
+        assert result["vader_score"] < 0  # VADER should detect negative sentiment
+
+    def test_extract_keywords(self):
+        """Test keyword extraction."""
+        analyzer = NLPAnalyzer()
+        
+        text = "Python programming is great for data science and machine learning applications"
+        keywords = analyzer.extract_keywords(text, top_n=5)
+        
+        assert isinstance(keywords, list)
+        assert len(keywords) <= 5
+        if analyzer.nlp:  # Only if spaCy model is loaded
+            assert len(keywords) > 0
+
+    def test_detect_code_with_python(self):
+        """Test code detection with Python code."""
+        analyzer = NLPAnalyzer()
+        
+        code = """
+        def hello_world():
+            print("Hello, World!")
+            return True
+        """
+        
+        is_code, purpose = analyzer.detect_code(code)
+        
+        assert is_code is True
+        assert purpose == "function definition"
+
+    def test_detect_code_with_class(self):
+        """Test code detection with class definition."""
+        analyzer = NLPAnalyzer()
+        
+        code = """
+        class MyClass:
+            def __init__(self):
+                self.value = 0
+        """
+        
+        is_code, purpose = analyzer.detect_code(code)
+        
+        assert is_code is True
+        assert purpose == "class definition"
+
+    def test_detect_code_with_conditional(self):
+        """Test code detection with conditional logic."""
+        analyzer = NLPAnalyzer()
+        
+        code = """
+        if x > 0:
+            print("positive")
+        else:
+            print("negative")
+        """
+        
+        is_code, purpose = analyzer.detect_code(code)
+        
+        assert is_code is True
+        assert purpose == "conditional logic"
+
+    def test_detect_code_with_regular_text(self):
+        """Test code detection with regular text."""
+        analyzer = NLPAnalyzer()
+        
+        text = "This is a regular sentence about programming concepts."
+        
+        is_code, purpose = analyzer.detect_code(text)
+        
+        assert is_code is False
+        assert purpose == ""
+
+    def test_count_words(self):
+        """Test word counting."""
+        analyzer = NLPAnalyzer()
+        
+        text = "This is a test sentence with seven words."
+        count = analyzer.count_words(text)
+        
+        assert count == 8
+
+    def test_count_words_empty(self):
+        """Test word counting with empty string."""
+        analyzer = NLPAnalyzer()
+        
+        count = analyzer.count_words("")
+        
+        assert count == 0

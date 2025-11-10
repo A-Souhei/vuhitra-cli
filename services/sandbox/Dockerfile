@@ -69,11 +69,16 @@ COPY services/sandbox/requirements.txt .
 
 # Install Python dependencies
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
-    pip install --no-cache-dir --break-system-packages -r requirements.txt
+    pip install --break-system-packages -r requirements.txt
 
-# Download spaCy English language model
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
-    python -m pip install --break-system-packages https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+# Copy and install spaCy large model from local wheel (if exists), otherwise download
+COPY services/sandbox/packages/ /tmp/packages/
+RUN if [ -f /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl ]; then \
+        pip install --break-system-packages /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl; \
+    else \
+        pip install --break-system-packages https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl; \
+    fi && \
+    rm -rf /tmp/packages
 
 # Copy application code
 COPY ./services/sandbox/src /app

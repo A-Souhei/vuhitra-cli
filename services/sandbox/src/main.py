@@ -150,7 +150,11 @@ def remove_file(filename):
         filepath = filepath.resolve()
         if not str(filepath).startswith(str(WORKSPACE_DIR.resolve())):
             return jsonify({"error": "Invalid file path"}), 400
-    except Exception:
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "remove_file_path_validation",
+            "filename": safe_filename
+        })
         return jsonify({"error": "Invalid file path"}), 400
     
     if not filepath.exists():

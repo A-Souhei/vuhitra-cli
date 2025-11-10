@@ -5,8 +5,10 @@ from elasticsearch import Elasticsearch
 from datetime import datetime, timezone
 from typing import Dict
 import logging
+from src.errors_handler.error_handler import get_error_handler
 
 logger = logging.getLogger(__name__)
+error_handler = get_error_handler()
 
 
 class ElasticSearchClient:
@@ -35,9 +37,20 @@ class ElasticSearchClient:
                 logger.info(f"Connected to ElasticSearch at {self.host}:{self.port}")
                 self._create_index_if_not_exists()
             else:
-                logger.warning("ElasticSearch connection failed")
+                error_handler.capture_message(
+                    "ElasticSearch connection failed",
+                    level="warning",
+                    context={"host": self.host, "port": self.port}
+                )
         except Exception as e:
-            logger.error(f"Failed to connect to ElasticSearch: {e}")
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "elasticsearch_connect",
+                    "host": self.host,
+                    "port": self.port
+                }
+            )
             self.es = None
 
     def _create_index_if_not_exists(self):
@@ -86,7 +99,15 @@ class ElasticSearchClient:
             logger.info(f"Saved feedback document: {result['_id']}")
             return True
         except Exception as e:
-            logger.error(f"Failed to save feedback: {e}")
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "save_feedback",
+                    "index": self.index_name,
+                    "has_prompt": "prompt" in data,
+                    "has_response": "response" in data
+                }
+            )
             return False
 
     def is_connected(self) -> bool:

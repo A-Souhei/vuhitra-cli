@@ -5,8 +5,10 @@ import spacy
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from typing import Dict, List, Tuple
 import logging
+from src.errors_handler.error_handler import get_error_handler
 
 logger = logging.getLogger(__name__)
+error_handler = get_error_handler()
 
 
 class NLPAnalyzer:
@@ -16,8 +18,16 @@ class NLPAnalyzer:
         """Initialize NLP tools."""
         try:
             self.nlp = spacy.load("en_core_web_lg")
-        except OSError:
-            logger.warning("spaCy model not found, install with: pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl")
+        except OSError as e:
+            error_handler.capture_message(
+                "spaCy model not found - NLP features will be limited",
+                level="warning",
+                context={
+                    "operation": "nlp_init",
+                    "model": "en_core_web_lg",
+                    "install_command": "pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
+                }
+            )
             self.nlp = None
         
         self.vader = SentimentIntensityAnalyzer()

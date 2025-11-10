@@ -1,1 +1,2 @@
 - WE USE A VENV
+- We have implemented an error handler feature, let's use that in each exception

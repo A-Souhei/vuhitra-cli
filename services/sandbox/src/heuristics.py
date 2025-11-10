@@ -5,6 +5,7 @@ Coordinates NLP analysis and ElasticSearch storage.
 from typing import Dict
 import logging
 import threading
+from src.errors_handler.error_handler import get_error_handler
 
 # Support both relative imports (for local tests) and absolute imports (for Docker)
 try:
@@ -15,6 +16,7 @@ except ImportError:
     from elasticsearch_client import ElasticSearchClient
 
 logger = logging.getLogger(__name__)
+error_handler = get_error_handler()
 
 
 class Heuristics:
@@ -55,25 +57,37 @@ class Heuristics:
         """
         Perform NLP analysis and store in ElasticSearch.
         Runs in background thread.
-        
+
         Args:
             feedback_data: Feedback data to process
         """
+        current_step = "initialization"
         try:
             prompt = feedback_data.get("prompt", "")
             response = feedback_data.get("response", "")
-            
+
             # Analyze prompt
+            current_step = "prompt_sentiment_analysis"
             prompt_sentiment = self.nlp_analyzer.analyze_sentiment(prompt)
+
+            current_step = "prompt_keyword_extraction"
             prompt_keywords = self.nlp_analyzer.extract_keywords(prompt)
+
+            current_step = "prompt_word_count"
             prompt_word_count = self.nlp_analyzer.count_words(prompt)
-            
+
             # Analyze response
+            current_step = "response_keyword_extraction"
             response_keywords = self.nlp_analyzer.extract_keywords(response)
+
+            current_step = "code_detection"
             is_code, code_purpose = self.nlp_analyzer.detect_code(response)
+
+            current_step = "response_word_count"
             response_word_count = self.nlp_analyzer.count_words(response)
-            
+
             # Build complete data structure
+            current_step = "building_data_structure"
             complete_data = {
                 "prompt": prompt,
                 "prompt_keywords": prompt_keywords,
@@ -89,17 +103,27 @@ class Heuristics:
                 "timestamp": feedback_data.get("timestamp"),
                 "execution_time_ms": feedback_data.get("execution_time_ms", 0)
             }
-            
+
             # Store in ElasticSearch
+            current_step = "storing_to_elasticsearch"
             success = self.es_client.save_feedback(complete_data)
-            
+
             if success:
                 logger.info("Feedback processed and stored successfully")
             else:
                 logger.warning("Feedback processed but storage failed")
-                
+
         except Exception as e:
-            logger.error(f"Error processing feedback: {e}")
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "process_feedback",
+                    "step": current_step,
+                    "has_prompt": bool(feedback_data.get("prompt")),
+                    "has_response": bool(feedback_data.get("response")),
+                    "rating": feedback_data.get("rating")
+                }
+            )
 
     def health_check(self) -> Dict[str, bool]:
         """

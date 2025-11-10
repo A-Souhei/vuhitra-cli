@@ -141,6 +141,30 @@ services:
     networks:
       - vuhitra-network
 
+  # Kibana service - UI for Elasticsearch
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: vuhitra-kibana
+    ports:
+      - "5601:5601"      # Kibana Web UI
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=vuhitra-kibana
+      - xpack.security.enabled=false
+      - xpack.encryptedSavedObjects.encryptionKey=fhjskloppd678ehkdfdlliverpoolfcr
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - vuhitra-network
+
 volumes:
   redis_data:
     driver: local

@@ -55,7 +55,7 @@ sentry:
 # Sandbox service configuration
 sandbox:
   host: localhost
-  port: 8000
+  port: 18001
   protocol: http
 
 # ElasticSearch configuration

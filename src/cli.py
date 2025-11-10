@@ -15,13 +15,41 @@ def initialize_error_handler():
     except Exception as e:
         print(f"WARNING: Failed to initialize error handler: {str(e)}", file=sys.stderr)
 
+def fetch_similar_heuristic(prompt):
+    """Fetch similar heuristic from sandbox to enhance LLM context."""
+    try:
+        config = ConfigLoader()
+        sandbox_url = config.get_sandbox_url()
+        endpoint = f"{sandbox_url}/retrieve/similar"
+
+        response = requests.post(
+            endpoint,
+            json={"prompt": prompt, "min_rating": 3},
+            timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Return the formatted insight if available and confidence is good
+        if (data.get('confidence_score', 0) > 0.5 and
+            data.get('insights') and
+            data['insights'].get('formatted_insight')):
+            return data['insights']['formatted_insight']
+
+        return None
+    except Exception as e:
+        # Log error but don't fail the CLI
+        print(f"WARNING: Failed to fetch similar heuristic: {str(e)}", file=sys.stderr)
+        return None
+
+
 def send_feedback_to_sandbox(feedback_data):
     """Send feedback to sandbox for heuristics analysis."""
     try:
         config = ConfigLoader()
         sandbox_url = config.get_sandbox_url()
         endpoint = f"{sandbox_url}/analyze/feedback"
-        
+
         response = requests.post(endpoint, json=feedback_data, timeout=5)
         response.raise_for_status()
         return True
@@ -51,7 +79,15 @@ def interactive_mode(model):
             if prompt.lower() in ['exit', 'quit']:
                 break
             if prompt.strip():
-                response, execution_time_ms = generate(model, prompt)
+                # Fetch similar heuristic to enhance context
+                heuristic_context = fetch_similar_heuristic(prompt)
+
+                # Enhance prompt with heuristic context if available
+                enhanced_prompt = prompt
+                if heuristic_context:
+                    enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+
+                response, execution_time_ms = generate(model, enhanced_prompt)
                 print(response)
                 print()
 
@@ -61,7 +97,7 @@ def interactive_mode(model):
                 if feedback_data:
                     # Add execution time to feedback
                     feedback_data['execution_time_ms'] = execution_time_ms
-                    
+
                     # Send to sandbox for heuristics processing
                     send_feedback_to_sandbox(feedback_data)
 
@@ -77,7 +113,15 @@ def interactive_mode(model):
 
 def non_interactive_mode(model, prompt):
     try:
-        response, execution_time_ms = generate(model, prompt)
+        # Fetch similar heuristic to enhance context
+        heuristic_context = fetch_similar_heuristic(prompt)
+
+        # Enhance prompt with heuristic context if available
+        enhanced_prompt = prompt
+        if heuristic_context:
+            enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+
+        response, execution_time_ms = generate(model, enhanced_prompt)
         print(response)
     except Exception as e:
         handle_exception(e, context={

@@ -9,6 +9,9 @@ from werkzeug.utils import secure_filename
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.errors_handler.error_handler import get_error_handler
 from heuristics import Heuristics
+from heuristics_retriever import HeuristicsRetriever
+from insight_extractor import InsightExtractor
+from elasticsearch_client import ElasticSearchClient
 
 app = Flask(__name__)
 
@@ -22,6 +25,20 @@ heuristics = Heuristics(
     es_port=int(os.getenv('ELASTICSEARCH_PORT', '9200')),
     es_index=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback')
 )
+
+# Initialize ElasticSearch client for retriever
+es_client_instance = ElasticSearchClient(
+    host=os.getenv('ELASTICSEARCH_HOST', 'localhost'),
+    port=int(os.getenv('ELASTICSEARCH_PORT', '9200')),
+    index_name=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback')
+)
+
+# Initialize retriever and insight extractor
+retriever = HeuristicsRetriever(
+    es_client=es_client_instance.es,
+    index_name=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback')
+)
+insight_extractor = InsightExtractor(nlp_model=retriever.nlp)
 
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
@@ -61,10 +78,12 @@ def handle_unexpected_exception(e):
 def health_check():
     """Health check endpoint"""
     health_status = heuristics.health_check()
+    retriever_health = retriever.health_check()
     return jsonify({
-        "status": "healthy", 
+        "status": "healthy",
         "service": "sandbox",
-        "heuristics": health_status
+        "heuristics": health_status,
+        "retriever": retriever_health
     }), 200
 
 
@@ -230,22 +249,175 @@ def analyze_feedback():
     """
     try:
         data = request.get_json()
-        
+
         if not data:
             return jsonify({"error": "No JSON data provided"}), 400
-        
+
         required_fields = ['prompt', 'response', 'rating', 'timestamp']
         missing_fields = [f for f in required_fields if f not in data]
-        
+
         if missing_fields:
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
-        
+
         result = heuristics.process_feedback(data)
         return jsonify(result), 202  # 202 Accepted (async processing)
-        
+
     except Exception as e:
-        raise SandboxException("Failed to process feedback", 
+        raise SandboxException("Failed to process feedback",
                              operation="analyze_feedback") from e
+
+
+@app.route('/retrieve/similar', methods=['POST'])
+def retrieve_similar():
+    """
+    Retrieve the most similar heuristic for a given prompt.
+
+    Expects JSON: {
+        prompt: str,              # User's input prompt (required)
+        min_rating: int,          # Minimum rating threshold (optional, default: 3)
+        max_results: int          # Number of results (optional, default: 1)
+    }
+
+    Returns: {
+        matched_heuristic: dict,  # The best matching document
+        confidence_score: float,  # Overall confidence (0-1)
+        insights: dict,           # Extracted insights
+        scoring_breakdown: dict   # Individual scores for each method
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        if 'prompt' not in data:
+            return jsonify({"error": "Missing required field: prompt"}), 400
+
+        prompt = data['prompt']
+        min_rating = data.get('min_rating', 3)
+        max_results = data.get('max_results', 1)
+
+        # Validate inputs
+        if not isinstance(prompt, str) or len(prompt.strip()) == 0:
+            return jsonify({"error": "Prompt must be a non-empty string"}), 400
+
+        if not isinstance(min_rating, int) or min_rating < 0 or min_rating > 5:
+            return jsonify({"error": "min_rating must be an integer between 0 and 5"}), 400
+
+        # Retrieve best match
+        result = retriever.retrieve_best_match(
+            prompt=prompt,
+            min_rating=min_rating,
+            max_results=max_results
+        )
+
+        if not result:
+            return jsonify({
+                "message": "No suitable match found",
+                "matched_heuristic": None,
+                "confidence_score": 0.0,
+                "insights": None
+            }), 200
+
+        # Extract insights from the matched heuristic
+        insights = insight_extractor.extract_insights(result['matched_heuristic'])
+
+        return jsonify({
+            "matched_heuristic": result['matched_heuristic'],
+            "confidence_score": result['confidence_score'],
+            "insights": insights,
+            "scoring_breakdown": result['scoring_breakdown']
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to retrieve similar heuristic",
+                             operation="retrieve_similar") from e
+
+
+@app.route('/validate/response', methods=['POST'])
+def validate_response():
+    """
+    Validate a response by comparing it with similar past interactions.
+
+    This is an optional post-LLM check to assess response quality
+    against historical high-quality responses.
+
+    Expects JSON: {
+        prompt: str,              # User's input prompt (required)
+        response: str,            # LLM's generated response (required)
+        original_rating: int      # Optional rating if available
+    }
+
+    Returns: {
+        quality_assessment: str,  # Overall quality assessment
+        similar_matches: list,    # List of similar past interactions
+        recommendations: list     # Suggestions for improvement
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        required_fields = ['prompt', 'response']
+        missing_fields = [f for f in required_fields if f not in data]
+
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+
+        prompt = data['prompt']
+        response = data['response']
+        original_rating = data.get('original_rating')
+
+        # Find similar high-quality responses
+        match_result = retriever.retrieve_best_match(
+            prompt=prompt,
+            min_rating=4  # Only compare with high-quality responses
+        )
+
+        if not match_result:
+            return jsonify({
+                "quality_assessment": "No similar high-quality responses found for comparison",
+                "similar_matches": [],
+                "recommendations": ["Continue building history for this type of query"]
+            }), 200
+
+        # Analyze the match
+        matched_doc = match_result['matched_heuristic']
+        confidence = match_result['confidence_score']
+
+        # Generate quality assessment
+        quality_assessment = "Good"
+        recommendations = []
+
+        if confidence > 0.8:
+            quality_assessment = "Excellent - Very similar to past high-quality response"
+        elif confidence > 0.6:
+            quality_assessment = "Good - Comparable to past successful responses"
+            recommendations.append("Consider incorporating techniques from similar past response")
+        else:
+            quality_assessment = "Moderate - Less similar to past high-quality responses"
+            recommendations.append("Review similar past response for alternative approaches")
+
+        # Extract insights from matched response
+        insights = insight_extractor.extract_insights(matched_doc)
+
+        return jsonify({
+            "quality_assessment": quality_assessment,
+            "similar_matches": [{
+                "prompt": matched_doc.get('prompt'),
+                "rating": matched_doc.get('rating'),
+                "confidence": confidence,
+                "key_techniques": insights.get('key_techniques', [])
+            }],
+            "recommendations": recommendations
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to validate response",
+                             operation="validate_response") from e
 
 
 if __name__ == '__main__':

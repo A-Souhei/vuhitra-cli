@@ -77,6 +77,9 @@ class Heuristics:
             prompt_word_count = self.nlp_analyzer.count_words(prompt)
 
             # Analyze response
+            current_step = "response_sentiment_analysis"
+            response_sentiment = self.nlp_analyzer.analyze_sentiment(response)
+
             current_step = "response_keyword_extraction"
             response_keywords = self.nlp_analyzer.extract_keywords(response)
 
@@ -96,6 +99,8 @@ class Heuristics:
                 "prompt_word_count": prompt_word_count,
                 "response": response,
                 "response_keywords": response_keywords,
+                "response_sentiment_vader": response_sentiment["vader_score"],
+                "response_sentiment_spacy": response_sentiment["spacy_score"],
                 "is_code_response": is_code,
                 "code_purpose": code_purpose,
                 "response_word_count": response_word_count,

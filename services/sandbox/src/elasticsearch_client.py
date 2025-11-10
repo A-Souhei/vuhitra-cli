@@ -66,6 +66,8 @@ class ElasticSearchClient:
                         "prompt_word_count": {"type": "integer"},
                         "response": {"type": "text"},
                         "response_keywords": {"type": "keyword"},
+                        "response_sentiment_vader": {"type": "float"},
+                        "response_sentiment_spacy": {"type": "float"},
                         "is_code_response": {"type": "boolean"},
                         "code_purpose": {"type": "text"},
                         "response_word_count": {"type": "integer"},

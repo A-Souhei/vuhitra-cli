@@ -75,11 +75,13 @@ class TestHeuristics:
         # Verify data was saved
         mock_es.save_feedback.assert_called_once()
         saved_data = mock_es.save_feedback.call_args[0][0]
-        
+
         assert "prompt" in saved_data
         assert "prompt_keywords" in saved_data
         assert "prompt_sentiment_vader" in saved_data
         assert "response_keywords" in saved_data
+        assert "response_sentiment_vader" in saved_data
+        assert "response_sentiment_spacy" in saved_data
         assert "is_code_response" in saved_data
 
     @patch('services.sandbox.src.heuristics.ElasticSearchClient')

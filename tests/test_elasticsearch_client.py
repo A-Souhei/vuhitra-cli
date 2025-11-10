@@ -1,8 +1,7 @@
 """
 Tests for ElasticSearch client.
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from services.sandbox.src.elasticsearch_client import ElasticSearchClient
 
 

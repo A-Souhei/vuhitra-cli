@@ -2,7 +2,7 @@
 Heuristics orchestration module.
 Coordinates NLP analysis and ElasticSearch storage.
 """
-from typing import Dict, Optional
+from typing import Dict
 import logging
 import threading
 

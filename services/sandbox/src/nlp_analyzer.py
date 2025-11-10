@@ -3,7 +3,6 @@ NLP analysis module for sentiment analysis, keyword extraction, and code detecti
 """
 import spacy
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-import re
 from typing import Dict, List, Tuple
 import logging
 
@@ -33,20 +32,23 @@ class NLPAnalyzer:
 
     def analyze_sentiment(self, text: str) -> Dict[str, float]:
         """
-        Analyze sentiment using both VADER and spaCy.
+        Analyze sentiment using VADER.
+        Note: spaCy core models don't include sentiment analysis.
+        Both scores use VADER for consistency.
 
         Args:
             text: Input text
 
         Returns:
-            Dict with vader_score and spacy_score
+            Dict with vader_score and spacy_score (both using VADER)
         """
         # VADER sentiment (compound score: -1 to 1)
         vader_score = self.vader.polarity_scores(text)['compound']
 
-        # spaCy sentiment (normalized based on VADER as baseline)
-        # We use VADER as the primary sentiment, spaCy for validation
-        spacy_score = vader_score  # Use VADER score as spaCy baseline
+        # Note: spaCy's core models don't include sentiment analysis
+        # For true dual sentiment, would need spacytextblob or similar
+        # Using VADER for both to maintain data structure consistency
+        spacy_score = vader_score
 
         return {
             "vader_score": round(vader_score, 3),

@@ -25,6 +25,14 @@ def send_feedback_to_sandbox(feedback_data):
         response = requests.post(endpoint, json=feedback_data, timeout=5)
         response.raise_for_status()
         return True
+    except requests.exceptions.HTTPError as e:
+        # Log HTTP-specific errors with more context
+        print(f"WARNING: HTTP error sending feedback to sandbox: {e.response.status_code} - {str(e)}", file=sys.stderr)
+        return False
+    except requests.exceptions.RequestException as e:
+        # Log other request errors (timeout, connection, etc.)
+        print(f"WARNING: Request error sending feedback to sandbox: {str(e)}", file=sys.stderr)
+        return False
     except Exception as e:
         # Log error but don't fail the CLI
         print(f"WARNING: Failed to send feedback to sandbox: {str(e)}", file=sys.stderr)

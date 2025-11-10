@@ -1,8 +1,6 @@
 """
 Tests for NLP analyzer.
 """
-import pytest
-from unittest.mock import Mock, patch
 from services.sandbox.src.nlp_analyzer import NLPAnalyzer
 
 
@@ -99,6 +97,7 @@ class TestNLPAnalyzer:
         text = "This is a test sentence with seven words."
         count = analyzer.count_words(text)
         
+        # "This is a test sentence with seven words." = 8 words total
         assert count == 8
 
     def test_count_words_empty(self):

@@ -3,7 +3,7 @@ ElasticSearch client for storing and managing heuristics data.
 """
 from elasticsearch import Elasticsearch
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict
 import logging
 
 logger = logging.getLogger(__name__)

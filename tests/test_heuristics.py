@@ -1,8 +1,7 @@
 """
 Tests for Heuristics orchestration.
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from services.sandbox.src.heuristics import Heuristics
 
 

@@ -48,6 +48,10 @@ RUN cp -r ${ES_HOME}/config/* ${ES_PATH_CONF}/ && \
     /var/lib/elasticsearch \
     /var/log/elasticsearch
 
+# Copy custom elasticsearch.yml configuration
+COPY services/elasticsearch/elasticsearch.yml ${ES_PATH_CONF}/elasticsearch.yml
+RUN chown elasticsearch:elasticsearch ${ES_PATH_CONF}/elasticsearch.yml
+
 # Set working directory
 WORKDIR ${ES_HOME}
 

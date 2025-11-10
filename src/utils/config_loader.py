@@ -123,3 +123,18 @@ class ConfigLoader:
                 "See docs/SECRETS.md for setup instructions."
             )
         return password
+
+    def get_sandbox_host(self):
+        return self.get('sandbox', 'host', default='localhost')
+    
+    def get_sandbox_port(self):
+        return self.get('sandbox', 'port', default=8000)
+    
+    def get_sandbox_protocol(self):
+        return self.get('sandbox', 'protocol', default='http')
+    
+    def get_sandbox_url(self):
+        protocol = self.get_sandbox_protocol()
+        host = self.get_sandbox_host()
+        port = self.get_sandbox_port()
+        return f"{protocol}://{host}:{port}"

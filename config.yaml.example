@@ -54,3 +54,15 @@ sentry:
   send_default_pii: false
   # Attach stacktrace
   attach_stacktrace: true
+
+# Sandbox service configuration
+sandbox:
+  host: localhost
+  port: 8000
+  protocol: http
+
+# ElasticSearch configuration
+elasticsearch:
+  host: localhost
+  port: 9200
+  index: llm_feedback

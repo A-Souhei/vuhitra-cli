@@ -1,4 +1,5 @@
 import sys
+import requests
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
@@ -14,6 +15,29 @@ def initialize_error_handler():
     except Exception as e:
         print(f"WARNING: Failed to initialize error handler: {str(e)}", file=sys.stderr)
 
+def send_feedback_to_sandbox(feedback_data):
+    """Send feedback to sandbox for heuristics analysis."""
+    try:
+        config = ConfigLoader()
+        sandbox_url = config.get_sandbox_url()
+        endpoint = f"{sandbox_url}/analyze/feedback"
+        
+        response = requests.post(endpoint, json=feedback_data, timeout=5)
+        response.raise_for_status()
+        return True
+    except requests.exceptions.HTTPError as e:
+        # Log HTTP-specific errors with more context
+        print(f"WARNING: HTTP error sending feedback to sandbox: {e.response.status_code} - {str(e)}", file=sys.stderr)
+        return False
+    except requests.exceptions.RequestException as e:
+        # Log other request errors (timeout, connection, etc.)
+        print(f"WARNING: Request error sending feedback to sandbox: {str(e)}", file=sys.stderr)
+        return False
+    except Exception as e:
+        # Log error but don't fail the CLI
+        print(f"WARNING: Failed to send feedback to sandbox: {str(e)}", file=sys.stderr)
+        return False
+
 def interactive_mode(model):
     print(f"vuhitra-cli interactive mode (model: {model})")
     print("Type 'exit' or 'quit' to leave, Ctrl+C to interrupt\n")
@@ -27,20 +51,19 @@ def interactive_mode(model):
             if prompt.lower() in ['exit', 'quit']:
                 break
             if prompt.strip():
-                response = generate(model, prompt)
+                response, execution_time_ms = generate(model, prompt)
                 print(response)
                 print()
 
                 # Collect feedback if enabled
                 feedback_data = feedback_collector.collect_feedback(prompt, response)
 
-                # TODO: Send feedback_data to ElasticSearch service when implemented
-                # For now, feedback is collected and can be logged/stored as needed
                 if feedback_data:
-                    # Placeholder for future ElasticSearch integration
-                    # This is where we'll send: prompt, response, rating, timestamp
-                    # along with prompt_keywords and prompt_sentiment
-                    pass
+                    # Add execution time to feedback
+                    feedback_data['execution_time_ms'] = execution_time_ms
+                    
+                    # Send to sandbox for heuristics processing
+                    send_feedback_to_sandbox(feedback_data)
 
         except (KeyboardInterrupt, EOFError):
             print("\nExiting...")
@@ -54,7 +77,7 @@ def interactive_mode(model):
 
 def non_interactive_mode(model, prompt):
     try:
-        response = generate(model, prompt)
+        response, execution_time_ms = generate(model, prompt)
         print(response)
     except Exception as e:
         handle_exception(e, context={

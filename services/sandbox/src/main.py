@@ -8,12 +8,20 @@ from werkzeug.utils import secure_filename
 # Add parent directory to path to import from src
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.errors_handler.error_handler import get_error_handler
+from heuristics import Heuristics
 
 app = Flask(__name__)
 
 # Initialize error handler
 error_handler = get_error_handler()
 error_handler.configure(mode=os.getenv('VUHITRA_MODE', 'DEV'), enable_logging=True)
+
+# Initialize heuristics service
+heuristics = Heuristics(
+    es_host=os.getenv('ELASTICSEARCH_HOST', 'localhost'),
+    es_port=int(os.getenv('ELASTICSEARCH_PORT', '9200')),
+    es_index=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback')
+)
 
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
@@ -52,7 +60,12 @@ def handle_unexpected_exception(e):
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "sandbox"}), 200
+    health_status = heuristics.health_check()
+    return jsonify({
+        "status": "healthy", 
+        "service": "sandbox",
+        "heuristics": health_status
+    }), 200
 
 
 @app.route('/upload', methods=['POST'])
@@ -137,7 +150,11 @@ def remove_file(filename):
         filepath = filepath.resolve()
         if not str(filepath).startswith(str(WORKSPACE_DIR.resolve())):
             return jsonify({"error": "Invalid file path"}), 400
-    except Exception:
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "remove_file_path_validation",
+            "filename": safe_filename
+        })
         return jsonify({"error": "Invalid file path"}), 400
     
     if not filepath.exists():
@@ -203,6 +220,32 @@ def list_files():
         "file_count": len(files),
         "files": files
     }), 200
+
+
+@app.route('/analyze/feedback', methods=['POST'])
+def analyze_feedback():
+    """
+    Analyze and store LLM feedback with heuristics.
+    Expects JSON: {prompt, response, rating, timestamp, execution_time_ms}
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        required_fields = ['prompt', 'response', 'rating', 'timestamp']
+        missing_fields = [f for f in required_fields if f not in data]
+        
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+        
+        result = heuristics.process_feedback(data)
+        return jsonify(result), 202  # 202 Accepted (async processing)
+        
+    except Exception as e:
+        raise SandboxException("Failed to process feedback", 
+                             operation="analyze_feedback") from e
 
 
 if __name__ == '__main__':

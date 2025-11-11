@@ -5,7 +5,7 @@ This module summarizes historical interactions into concise, actionable insights
 that can be injected into LLM context to improve response quality.
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 import spacy
 
 # Support both relative imports (for local tests) and absolute imports (for Docker)
@@ -208,7 +208,7 @@ class InsightExtractor:
 
         # Also look for common technical terms (capitalized words)
         for token in doc:
-            if token.text[0].isupper() and len(token.text) > 2 and not token.is_stop:
+            if len(token.text) > 0 and token.text[0].isupper() and len(token.text) > 2 and not token.is_stop:
                 # Check if it's a potential library/framework/tool name
                 if token.pos_ in ['PROPN', 'NOUN']:
                     entities.append({

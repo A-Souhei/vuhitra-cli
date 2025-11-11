@@ -368,8 +368,8 @@ def validate_response():
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
         prompt = data['prompt']
-        response = data['response']
-        original_rating = data.get('original_rating')
+        # Note: response and original_rating are validated but not currently used
+        # Future enhancement: compare response content with matched responses
 
         # Find similar high-quality responses
         match_result = retriever.retrieve_best_match(
@@ -388,8 +388,7 @@ def validate_response():
         matched_doc = match_result['matched_heuristic']
         confidence = match_result['confidence_score']
 
-        # Generate quality assessment
-        quality_assessment = "Good"
+        # Generate quality assessment based on confidence
         recommendations = []
 
         if confidence > 0.8:

@@ -5,7 +5,7 @@ NOTE: These tests require proper Flask app setup with all dependencies.
 They are skipped by default and should be run manually with the sandbox service running.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import sys
 import os
 import json

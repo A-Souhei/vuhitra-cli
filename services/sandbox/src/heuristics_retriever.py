@@ -12,11 +12,10 @@ All weights and thresholds are configurable via heuristics_config.yaml.
 The goal is to find the most relevant historical interaction given a user prompt.
 """
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from elasticsearch import Elasticsearch
 from rapidfuzz import fuzz
 import spacy
-import numpy as np
 
 # Support both relative imports (for local tests) and absolute imports (for Docker)
 try:

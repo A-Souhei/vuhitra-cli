@@ -93,8 +93,7 @@ class HeuristicsRetriever:
     def retrieve_best_match(
         self,
         prompt: str,
-        min_rating: int = None,
-        max_results: int = 1
+        min_rating: int = None
     ) -> Optional[Dict]:
         """
         Retrieve the best matching heuristic for the given prompt.
@@ -102,7 +101,6 @@ class HeuristicsRetriever:
         Args:
             prompt: User's input prompt
             min_rating: Minimum rating threshold (default: MIN_RATING)
-            max_results: Number of top results to return (default: 1)
 
         Returns:
             Dictionary containing:

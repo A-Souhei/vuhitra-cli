@@ -274,8 +274,7 @@ def retrieve_similar():
 
     Expects JSON: {
         prompt: str,              # User's input prompt (required)
-        min_rating: int,          # Minimum rating threshold (optional, default: 3)
-        max_results: int          # Number of results (optional, default: 1)
+        min_rating: int           # Minimum rating threshold (optional, default: 3)
     }
 
     Returns: {
@@ -296,7 +295,6 @@ def retrieve_similar():
 
         prompt = data['prompt']
         min_rating = data.get('min_rating', 3)
-        max_results = data.get('max_results', 1)
 
         # Validate inputs
         if not isinstance(prompt, str) or len(prompt.strip()) == 0:
@@ -308,8 +306,7 @@ def retrieve_similar():
         # Retrieve best match
         result = retriever.retrieve_best_match(
             prompt=prompt,
-            min_rating=min_rating,
-            max_results=max_results
+            min_rating=min_rating
         )
 
         if not result:

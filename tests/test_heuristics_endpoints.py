@@ -394,27 +394,6 @@ class TestHeuristicsEndpoints:
             # Should return 500 or handle gracefully
             assert response.status_code in [500, 400]
 
-    def test_retrieve_similar_max_results_parameter(self, client, mock_retriever_success, mock_insights):
-        """Test max_results parameter in retrieve_similar"""
-        with patch('main.retriever') as mock_retriever, \
-             patch('main.insight_extractor') as mock_extractor:
-
-            mock_retriever.retrieve_best_match.return_value = mock_retriever_success
-            mock_extractor.extract_insights.return_value = mock_insights
-
-            response = client.post(
-                '/retrieve/similar',
-                data=json.dumps({
-                    'prompt': 'Test',
-                    'max_results': 3
-                }),
-                content_type='application/json'
-            )
-
-            assert response.status_code == 200
-            call_args = mock_retriever.retrieve_best_match.call_args
-            assert call_args[1]['max_results'] == 3
-
     def test_retrieve_similar_response_structure(self, client, mock_retriever_success, mock_insights):
         """Test that retrieve_similar response has correct structure"""
         with patch('main.retriever') as mock_retriever, \

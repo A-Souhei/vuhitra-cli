@@ -5,7 +5,7 @@ This module summarizes historical interactions into concise, actionable insights
 that can be injected into LLM context to improve response quality.
 """
 import logging
-from typing import Dict, List
+from typing import Dict, List, Any
 import spacy
 
 # Support both relative imports (for local tests) and absolute imports (for Docker)
@@ -68,7 +68,7 @@ class InsightExtractor:
             )
             self.nlp = None
 
-    def extract_insights(self, matched_heuristic: Dict) -> Dict[str, any]:
+    def extract_insights(self, matched_heuristic: Dict) -> Dict[str, Any]:
         """
         Extract insights from a matched heuristic.
 
@@ -376,7 +376,7 @@ class InsightExtractor:
 
         return "\n".join(lines)
 
-    def _create_fallback_insight(self, matched_heuristic: Dict) -> Dict[str, any]:
+    def _create_fallback_insight(self, matched_heuristic: Dict) -> Dict[str, Any]:
         """
         Create a basic insight when full NLP analysis is not available.
 

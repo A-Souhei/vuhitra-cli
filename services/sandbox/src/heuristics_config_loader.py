@@ -4,8 +4,11 @@ Heuristics Configuration Loader
 Loads and provides access to heuristics system configuration parameters.
 """
 import yaml
+import logging
 from pathlib import Path
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 class HeuristicsConfigLoader:
@@ -34,10 +37,10 @@ class HeuristicsConfigLoader:
                 config = yaml.safe_load(f)
             return config if config else {}
         except FileNotFoundError:
-            print(f"WARNING: Heuristics config file not found at {self.config_path}, using defaults")
+            logger.warning(f"Heuristics config file not found at {self.config_path}, using defaults")
             return self._get_defaults()
         except Exception as e:
-            print(f"WARNING: Failed to load heuristics config: {e}, using defaults")
+            logger.warning(f"Failed to load heuristics config: {e}, using defaults")
             return self._get_defaults()
 
     def _get_defaults(self) -> Dict[str, Any]:

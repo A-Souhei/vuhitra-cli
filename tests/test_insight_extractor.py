@@ -372,15 +372,18 @@ class TestInsightExtractor:
 
     def test_max_insight_length_constant(self):
         """Test that MAX_INSIGHT_LENGTH is properly defined"""
-        assert InsightExtractor.MAX_INSIGHT_LENGTH == 150
+        extractor = InsightExtractor()
+        assert extractor.MAX_INSIGHT_LENGTH == 150
 
     def test_top_entities_constant(self):
         """Test that TOP_ENTITIES is properly defined"""
-        assert InsightExtractor.TOP_ENTITIES == 5
+        extractor = InsightExtractor()
+        assert extractor.TOP_ENTITIES == 5
 
     def test_top_keywords_constant(self):
         """Test that TOP_KEYWORDS is properly defined"""
-        assert InsightExtractor.TOP_KEYWORDS == 10
+        extractor = InsightExtractor()
+        assert extractor.TOP_KEYWORDS == 10
 
     def test_empty_response_handling(self, extractor):
         """Test handling of empty response"""

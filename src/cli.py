@@ -31,15 +31,20 @@ def fetch_similar_heuristic(prompt):
         data = response.json()
 
         # Return the formatted insight if available and confidence is good
-        if (data.get('confidence_score', 0) > 0.5 and
+        # Higher threshold (0.75) to avoid irrelevant context injection
+        if (data.get('confidence_score', 0) > 0.75 and
             data.get('insights') and
             data['insights'].get('formatted_insight')):
             return data['insights']['formatted_insight']
 
         return None
     except Exception as e:
-        # Log error but don't fail the CLI
-        print(f"WARNING: Failed to fetch similar heuristic: {str(e)}", file=sys.stderr)
+        # Use error handler to log the exception
+        handle_exception(e, context={
+            'function': 'fetch_similar_heuristic',
+            'endpoint': endpoint if 'endpoint' in locals() else 'unknown',
+            'prompt_length': len(prompt)
+        })
         return None
 
 

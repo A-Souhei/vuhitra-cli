@@ -380,40 +380,69 @@ class HeuristicsRetriever:
         prompt_doc
     ) -> float:
         """
-        Calculate keyword overlap score between candidate and prompt.
+        Calculate weighted keyword overlap score between candidate and prompt.
+
+        Subject nouns (direct objects, subjects of sentences) get 5x weight.
+        Proper nouns (PROPN) get 4x weight.
+        Common nouns (NOUN) get 2x weight.
+        Verbs get 1x weight.
 
         Args:
             candidate_keywords: List of keywords from candidate
             prompt_doc: spaCy Doc object of the prompt
 
         Returns:
-            Overlap score (0-1)
+            Weighted overlap score (0-1)
         """
         if not candidate_keywords:
             return 0.0
 
-        # Extract keywords from prompt
-        prompt_keywords = [
-            token.lemma_.lower()
-            for token in prompt_doc
-            if not token.is_stop and not token.is_punct and len(token.text) >= 3
-            and token.pos_ in ['NOUN', 'PROPN', 'VERB']
-        ]
+        # Identify subject tokens (nsubj, dobj, pobj) - these are the main topics
+        subject_tokens = set()
+        for token in prompt_doc:
+            # Subject, direct object, or prepositional object
+            if token.dep_ in ['nsubj', 'nsubjpass', 'dobj', 'pobj', 'attr']:
+                subject_tokens.add(token.lemma_.lower())
 
-        if not prompt_keywords:
+        # Extract keywords from prompt with POS tags for weighting
+        prompt_keyword_weights = {}
+        for token in prompt_doc:
+            if not token.is_stop and not token.is_punct and len(token.text) >= 3:
+                lemma = token.lemma_.lower()
+
+                # Subject nouns get highest weight (5x)
+                if lemma in subject_tokens:
+                    prompt_keyword_weights[lemma] = 5.0
+                # Proper nouns get 4x weight
+                elif token.pos_ == 'PROPN':
+                    prompt_keyword_weights[lemma] = 4.0
+                # Common nouns get 2x weight
+                elif token.pos_ == 'NOUN':
+                    prompt_keyword_weights[lemma] = 2.0
+                # Verbs get 1x weight
+                elif token.pos_ == 'VERB':
+                    prompt_keyword_weights[lemma] = 1.0
+
+        if not prompt_keyword_weights:
             return 0.0
 
-        # Calculate Jaccard similarity
+        # Calculate weighted overlap
         candidate_set = set(candidate_keywords)
-        prompt_set = set(prompt_keywords)
+        prompt_set = set(prompt_keyword_weights.keys())
 
-        intersection = len(candidate_set & prompt_set)
-        union = len(candidate_set | prompt_set)
+        # Weighted intersection: sum weights of matching keywords
+        intersection = sum(
+            prompt_keyword_weights[kw]
+            for kw in candidate_set & prompt_set
+        )
 
-        if union == 0:
+        # Total possible weight: sum all prompt keyword weights
+        total_weight = sum(prompt_keyword_weights.values())
+
+        if total_weight == 0:
             return 0.0
 
-        return intersection / union
+        return min(1.0, intersection / total_weight)
 
     def health_check(self) -> Dict[str, bool]:
         """
@@ -425,5 +454,5 @@ class HeuristicsRetriever:
         return {
             'elasticsearch_connected': self.es is not None and self.es.ping(),
             'spacy_loaded': self.nlp is not None,
-            'index_exists': self.es.indices.exists(index=self.index_name) if self.es else False
+            'index_exists': bool(self.es.indices.exists(index=self.index_name)) if self.es else False
         }

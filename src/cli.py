@@ -21,6 +21,7 @@ def fetch_similar_heuristic(prompt):
         config = ConfigLoader()
         sandbox_url = config.get_sandbox_url()
         endpoint = f"{sandbox_url}/retrieve/similar"
+        confidence_threshold = config.get_sandbox_confidence_threshold()
 
         response = requests.post(
             endpoint,
@@ -31,8 +32,7 @@ def fetch_similar_heuristic(prompt):
         data = response.json()
 
         # Return the formatted insight if available and confidence is good
-        # Higher threshold (0.75) to avoid irrelevant context injection
-        if (data.get('confidence_score', 0) > 0.75 and
+        if (data.get('confidence_score', 0) > confidence_threshold and
             data.get('insights') and
             data['insights'].get('formatted_insight')):
             return data['insights']['formatted_insight']

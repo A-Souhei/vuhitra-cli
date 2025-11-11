@@ -11,12 +11,14 @@ import spacy
 # Support both relative imports (for local tests) and absolute imports (for Docker)
 try:
     from src.errors_handler.error_handler import get_error_handler
+    from heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
     # For tests running from the test directory
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     from src.errors_handler.error_handler import get_error_handler
+    from heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()
@@ -33,10 +35,6 @@ class InsightExtractor:
     - Relevant techniques
     """
 
-    MAX_INSIGHT_LENGTH = 150  # Maximum words in summary
-    TOP_ENTITIES = 5  # Number of key entities to extract
-    TOP_KEYWORDS = 10  # Number of key technical terms
-
     def __init__(self, nlp_model=None):
         """
         Initialize the insight extractor.
@@ -45,6 +43,13 @@ class InsightExtractor:
             nlp_model: Optional spaCy model (will load if not provided)
         """
         self.nlp = nlp_model
+
+        # Load configuration
+        self.config = HeuristicsConfigLoader()
+        self.MAX_INSIGHT_LENGTH = self.config.get_max_insight_length()
+        self.TOP_ENTITIES = self.config.get_top_entities()
+        self.TOP_KEYWORDS = self.config.get_top_keywords()
+
         if self.nlp is None:
             self._load_spacy_model()
 

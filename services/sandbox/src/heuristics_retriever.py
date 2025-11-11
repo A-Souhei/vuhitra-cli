@@ -7,6 +7,8 @@ This module implements a sophisticated retrieval system that combines:
 3. spaCy semantic similarity (Stage 3)
 4. Weighted scoring algorithm
 
+All weights and thresholds are configurable via heuristics_config.yaml.
+
 The goal is to find the most relevant historical interaction given a user prompt.
 """
 import logging
@@ -19,12 +21,14 @@ import numpy as np
 # Support both relative imports (for local tests) and absolute imports (for Docker)
 try:
     from src.errors_handler.error_handler import get_error_handler
+    from heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
     # For tests running from the test directory
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     from src.errors_handler.error_handler import get_error_handler
+    from heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()
@@ -38,17 +42,6 @@ class HeuristicsRetriever:
     using a combination of keyword matching, edit distance, and semantic similarity.
     """
 
-    # Scoring weights (must sum to 1.0)
-    SEMANTIC_WEIGHT = 0.50
-    LEVENSHTEIN_WEIGHT = 0.25
-    KEYWORD_WEIGHT = 0.15
-    RATING_WEIGHT = 0.10
-
-    # Filtering thresholds
-    MIN_RATING = 3  # Only consider ratings >= 3
-    MAX_STAGE1_CANDIDATES = 100  # Limit ES results for performance
-    MAX_STAGE2_CANDIDATES = 10  # Top candidates for semantic analysis
-
     def __init__(self, es_client: Elasticsearch, index_name: str = "llm_feedback"):
         """
         Initialize the retriever.
@@ -60,6 +53,26 @@ class HeuristicsRetriever:
         self.es = es_client
         self.index_name = index_name
         self.nlp = None
+
+        # Load configuration
+        self.config = HeuristicsConfigLoader()
+
+        # Load weights and thresholds from config
+        self.SEMANTIC_WEIGHT = self.config.get_semantic_weight()
+        self.LEVENSHTEIN_WEIGHT = self.config.get_levenshtein_weight()
+        self.KEYWORD_WEIGHT = self.config.get_keyword_weight()
+        self.RATING_WEIGHT = self.config.get_rating_weight()
+
+        self.MIN_RATING = self.config.get_min_rating()
+        self.MAX_STAGE1_CANDIDATES = self.config.get_max_stage1_candidates()
+        self.MAX_STAGE2_CANDIDATES = self.config.get_max_stage2_candidates()
+
+        # Keyword weights
+        self.SUBJECT_NOUN_WEIGHT = self.config.get_subject_noun_weight()
+        self.PROPER_NOUN_WEIGHT = self.config.get_proper_noun_weight()
+        self.COMMON_NOUN_WEIGHT = self.config.get_common_noun_weight()
+        self.VERB_WEIGHT = self.config.get_verb_weight()
+
         self._load_spacy_model()
 
     def _load_spacy_model(self):
@@ -335,9 +348,10 @@ class HeuristicsRetriever:
                 # Get other scores
                 levenshtein_score = candidate.get('levenshtein_score', 0.0)
 
-                # Calculate keyword overlap score
+                # Calculate keyword overlap score using both prompt and response keywords
                 keyword_score = self._calculate_keyword_overlap(
                     candidate.get('prompt_keywords', []),
+                    candidate.get('response_keywords', []),
                     prompt_doc
                 )
 
@@ -376,11 +390,15 @@ class HeuristicsRetriever:
 
     def _calculate_keyword_overlap(
         self,
-        candidate_keywords: List[str],
+        candidate_prompt_keywords: List[str],
+        candidate_response_keywords: List[str],
         prompt_doc
     ) -> float:
         """
         Calculate weighted keyword overlap score between candidate and prompt.
+
+        Uses both prompt_keywords and response_keywords from candidate to handle
+        cases where prompt_keywords might be empty.
 
         Subject nouns (direct objects, subjects of sentences) get 5x weight.
         Proper nouns (PROPN) get 4x weight.
@@ -388,12 +406,16 @@ class HeuristicsRetriever:
         Verbs get 1x weight.
 
         Args:
-            candidate_keywords: List of keywords from candidate
+            candidate_prompt_keywords: List of keywords from candidate's prompt
+            candidate_response_keywords: List of keywords from candidate's response
             prompt_doc: spaCy Doc object of the prompt
 
         Returns:
             Weighted overlap score (0-1)
         """
+        # Combine prompt and response keywords (response keywords get lower priority)
+        candidate_keywords = set(candidate_prompt_keywords) | set(candidate_response_keywords)
+
         if not candidate_keywords:
             return 0.0
 
@@ -410,18 +432,18 @@ class HeuristicsRetriever:
             if not token.is_stop and not token.is_punct and len(token.text) >= 3:
                 lemma = token.lemma_.lower()
 
-                # Subject nouns get highest weight (5x)
+                # Subject nouns get highest weight
                 if lemma in subject_tokens:
-                    prompt_keyword_weights[lemma] = 5.0
-                # Proper nouns get 4x weight
+                    prompt_keyword_weights[lemma] = self.SUBJECT_NOUN_WEIGHT
+                # Proper nouns
                 elif token.pos_ == 'PROPN':
-                    prompt_keyword_weights[lemma] = 4.0
-                # Common nouns get 2x weight
+                    prompt_keyword_weights[lemma] = self.PROPER_NOUN_WEIGHT
+                # Common nouns
                 elif token.pos_ == 'NOUN':
-                    prompt_keyword_weights[lemma] = 2.0
-                # Verbs get 1x weight
+                    prompt_keyword_weights[lemma] = self.COMMON_NOUN_WEIGHT
+                # Verbs
                 elif token.pos_ == 'VERB':
-                    prompt_keyword_weights[lemma] = 1.0
+                    prompt_keyword_weights[lemma] = self.VERB_WEIGHT
 
         if not prompt_keyword_weights:
             return 0.0

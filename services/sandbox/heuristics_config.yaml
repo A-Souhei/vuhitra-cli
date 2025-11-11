@@ -1,0 +1,32 @@
+# Heuristics Configuration
+# This file contains all configurable parameters for the heuristics retrieval system
+
+# Scoring weights (must sum to 1.0)
+scoring_weights:
+  semantic_weight: 0.50      # Semantic similarity using spaCy vectors
+  levenshtein_weight: 0.25   # Edit distance similarity
+  keyword_weight: 0.15       # Keyword overlap score
+  rating_weight: 0.10        # User rating influence
+
+# Keyword weighting by part-of-speech and dependency
+keyword_weights:
+  subject_noun: 5.0          # Subject tokens (nsubj, dobj, pobj, attr) - main topics
+  proper_noun: 4.0           # Proper nouns (PROPN) - names, technologies
+  common_noun: 2.0           # Common nouns (NOUN) - general concepts
+  verb: 1.0                  # Verbs - actions, questions
+
+# Filtering thresholds
+filtering:
+  min_rating: 3              # Minimum rating to consider (0-5)
+  max_stage1_candidates: 100 # Max results from Elasticsearch stage
+  max_stage2_candidates: 10  # Max candidates for semantic analysis
+
+# Confidence threshold for context injection
+confidence:
+  threshold: 0.75            # Only inject context if confidence > this value
+
+# Insight extraction settings
+insights:
+  max_insight_length: 150    # Maximum words in summary
+  top_entities: 5            # Number of key entities to extract
+  top_keywords: 10           # Number of key technical terms

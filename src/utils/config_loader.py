@@ -138,3 +138,6 @@ class ConfigLoader:
         host = self.get_sandbox_host()
         port = self.get_sandbox_port()
         return f"{protocol}://{host}:{port}"
+
+    def get_sandbox_confidence_threshold(self):
+        return self.get('sandbox', 'confidence_threshold', default=0.75)

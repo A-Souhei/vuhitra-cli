@@ -196,7 +196,7 @@ if confidence_score > CONFIDENCE_THRESHOLD:
     inject_context(formatted_insight)
 ```
 
-**Default Threshold**: 0.75 (75% confidence)
+**Default Threshold**: 0.75 (75% confidence) — configurable via `confidence.threshold` in `heuristics_config.yaml`
 
 This high threshold ensures only highly relevant context is injected, preventing confusion like injecting Python context when the user asks about Java.
 

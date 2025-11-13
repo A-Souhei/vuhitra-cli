@@ -45,6 +45,7 @@ WORKSPACE_DIR = Path("/app/WORKSPACE")
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+MAX_PROMPT_LENGTH = 5000  # Maximum prompt length to prevent memory exhaustion
 
 
 class SandboxException(Exception):
@@ -300,6 +301,10 @@ def retrieve_similar():
         if not isinstance(prompt, str) or len(prompt.strip()) == 0:
             return jsonify({"error": "Prompt must be a non-empty string"}), 400
 
+        # Validate prompt length to prevent memory exhaustion
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            return jsonify({"error": f"Prompt exceeds maximum length of {MAX_PROMPT_LENGTH} characters"}), 400
+
         if not isinstance(min_rating, int) or min_rating < 0 or min_rating > 5:
             return jsonify({"error": "min_rating must be an integer between 0 and 5"}), 400
 
@@ -365,8 +370,20 @@ def validate_response():
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
         prompt = data['prompt']
-        # Note: response and original_rating are validated but not currently used
-        # Future enhancement: compare response content with matched responses
+        response = data['response']
+        original_rating = data.get('original_rating')
+
+        # Validate prompt and response
+        if not isinstance(prompt, str) or len(prompt.strip()) == 0:
+            return jsonify({"error": "Prompt must be a non-empty string"}), 400
+
+        if not isinstance(response, str) or len(response.strip()) == 0:
+            return jsonify({"error": "Response must be a non-empty string"}), 400
+
+        # Validate original_rating if provided
+        if original_rating is not None:
+            if not isinstance(original_rating, int) or original_rating < 0 or original_rating > 5:
+                return jsonify({"error": "original_rating must be an integer between 0 and 5"}), 400
 
         # Find similar high-quality responses
         match_result = retriever.retrieve_best_match(

@@ -1,10 +1,16 @@
 import sys
+import logging
 import requests
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
 from src.utils.config_loader import ConfigLoader
 from src.utils.feedback_collector import FeedbackCollector
+
+# Maximum prompt length to prevent DoS through excessive payload sizes
+MAX_PROMPT_LENGTH = 10000
+
+logger = logging.getLogger(__name__)
 
 def initialize_error_handler():
     """Initialize the error handler with configuration."""
@@ -17,7 +23,13 @@ def initialize_error_handler():
 
 def fetch_similar_heuristic(prompt):
     """Fetch similar heuristic from sandbox to enhance LLM context."""
+    endpoint = None  # Initialize before try block
     try:
+        # Validate prompt length
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            logger.warning(f"Prompt length ({len(prompt)}) exceeds maximum ({MAX_PROMPT_LENGTH}), truncating")
+            prompt = prompt[:MAX_PROMPT_LENGTH]
+
         config = ConfigLoader()
         sandbox_url = config.get_sandbox_url()
         endpoint = f"{sandbox_url}/retrieve/similar"

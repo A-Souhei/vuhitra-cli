@@ -50,6 +50,9 @@ class InsightExtractor:
         self.TOP_ENTITIES = self.config.get_top_entities()
         self.TOP_KEYWORDS = self.config.get_top_keywords()
 
+        # Limit text length for NLP processing to improve performance
+        self.MAX_NLP_TEXT_LENGTH = 1000
+
         if self.nlp is None:
             self._load_spacy_model()
 
@@ -94,8 +97,12 @@ class InsightExtractor:
             is_code = matched_heuristic.get('is_code_response', False)
             code_purpose = matched_heuristic.get('code_purpose', '')
 
+            # Limit response text for performance (process only first ~1000 chars)
+            # This is sufficient for extracting key insights
+            response_text = response[:self.MAX_NLP_TEXT_LENGTH] if len(response) > self.MAX_NLP_TEXT_LENGTH else response
+
             # Process the response with spaCy
-            response_doc = self.nlp(response)
+            response_doc = self.nlp(response_text)
 
             # Extract key components
             key_techniques = self._extract_key_techniques(response_doc, is_code)
@@ -208,7 +215,7 @@ class InsightExtractor:
 
         # Also look for common technical terms (capitalized words)
         for token in doc:
-            if len(token.text) > 0 and token.text[0].isupper() and len(token.text) > 2 and not token.is_stop:
+            if len(token.text) > 2 and token.text[0].isupper() and not token.is_stop:
                 # Check if it's a potential library/framework/tool name
                 if token.pos_ in ['PROPN', 'NOUN']:
                     entities.append({
@@ -280,8 +287,11 @@ class InsightExtractor:
         Returns:
             Summary string
         """
+        # Limit text for performance - only need first sentence
+        response_text = response[:self.MAX_NLP_TEXT_LENGTH] if len(response) > self.MAX_NLP_TEXT_LENGTH else response
+
         # Extract first meaningful sentence from response
-        doc = self.nlp(response)
+        doc = self.nlp(response_text)
         sentences = list(doc.sents)
 
         first_sentence = ""

@@ -2,7 +2,7 @@
 Heuristics orchestration module.
 Coordinates NLP analysis and ElasticSearch storage.
 """
-from typing import Dict, List, Optional
+from typing import Dict
 import logging
 import threading
 from src.errors_handler.error_handler import get_error_handler
@@ -211,7 +211,8 @@ class Heuristics:
             # Build chain metadata
             metadata["parent_heuristic_id"] = parent_id
             metadata["chain_depth"] = new_depth
-            metadata["chain_ids"] = parent_chain_ids + [parent_id]
+            # Avoid duplicate IDs in chain (defensive programming)
+            metadata["chain_ids"] = parent_chain_ids + ([parent_id] if parent_id not in parent_chain_ids else [])
 
             logger.info(
                 f"Created chain link: parent={parent_id}, depth={new_depth}, "

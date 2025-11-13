@@ -10,7 +10,7 @@ Tests the ability to:
 import pytest
 import sys
 import os
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'sandbox'))
@@ -101,10 +101,11 @@ class TestChainMetadataBuilding:
     def test_chain_metadata_deep_chain(self, mock_get_by_id):
         """Test creating chain with multiple ancestors."""
         # Mock parent document with existing chain
+        # The parent "middle_id" has root_id as its ancestor
         mock_get_by_id.return_value = {
             "rating": 5,
-            "chain_depth": 2,
-            "chain_ids": ["root_id", "middle_id"]
+            "chain_depth": 1,
+            "chain_ids": ["root_id"]
         }
 
         heuristics = Heuristics()
@@ -119,8 +120,8 @@ class TestChainMetadataBuilding:
         metadata = heuristics._build_chain_metadata(feedback_data)
 
         assert metadata["parent_heuristic_id"] == "middle_id"
-        assert metadata["chain_depth"] == 3
-        assert metadata["chain_ids"] == ["root_id", "middle_id", "middle_id"]
+        assert metadata["chain_depth"] == 2
+        assert metadata["chain_ids"] == ["root_id", "middle_id"]
 
     @patch.object(ElasticSearchClient, 'get_by_id')
     def test_chain_depth_limit(self, mock_get_by_id):
@@ -234,7 +235,7 @@ class TestChainInsightExtraction:
             result = extractor.extract_chain_insights(heuristic, [])
 
             assert "summary" in result
-            assert result.get("has_chain") != True
+            assert not result.get("has_chain", False)
 
     def test_format_chain_with_anti_copying_instructions(self):
         """Test that chain formatting includes anti-copying instructions."""

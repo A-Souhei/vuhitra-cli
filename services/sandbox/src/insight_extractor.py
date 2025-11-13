@@ -501,8 +501,8 @@ Summary: High-quality response found (rated {rating}/5)
         lines.append("- The following shows how similar problems were solved previously")
         lines.append("- DO NOT simply copy these solutions")
         lines.append("- Use them as INSPIRATION to create an even better response")
-        lines.append(f"- Your goal is to MATCH or EXCEED the quality that received {primary_heuristic.get('rating', 0)}/5 rating")
-        lines.append("- ITERATE and IMPROVE on these approaches")
+        lines.append(f"- Your goal is to MATCH OR EXCEED the quality that received {primary_heuristic.get('rating', 0)}/5 rating")
+        lines.append("- ITERATE AND IMPROVE on these approaches")
         lines.append("")
 
         # Show chain evolution (oldest to newest)
@@ -533,7 +533,7 @@ Summary: High-quality response found (rated {rating}/5)
             entities = ", ".join([e['text'] for e in primary_insights['entities'][:3]])
             lines.append(f"  Technologies: {entities}")
 
-        if primary_insights['confidence_indicators']:
+        if primary_insights.get('confidence_indicators') and len(primary_insights['confidence_indicators']) > 0:
             lines.append(f"  Quality: {primary_insights['confidence_indicators'][0]}")
 
         lines.append("")

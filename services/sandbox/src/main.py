@@ -268,6 +268,13 @@ def analyze_feedback():
         if missing_fields:
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
+        # Validate optional contexted_heuristic_ids field
+        if 'contexted_heuristic_ids' in data:
+            if not isinstance(data['contexted_heuristic_ids'], list):
+                return jsonify({"error": "contexted_heuristic_ids must be a list"}), 400
+            if not all(isinstance(id, str) for id in data['contexted_heuristic_ids']):
+                return jsonify({"error": "contexted_heuristic_ids must contain only strings"}), 400
+
         result = heuristics.process_feedback(data)
         return jsonify(result), 202  # 202 Accepted (async processing)
 

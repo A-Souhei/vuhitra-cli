@@ -172,13 +172,19 @@ class ElasticSearchClient:
             # Get chain_ids if available
             chain_ids = current_doc.get("chain_ids", [])
 
-            # Retrieve all parent documents
-            for parent_id in chain_ids:
-                parent_doc = self.get_by_id(parent_id)
-                if parent_doc:
+            if not chain_ids:
+                return []
+
+            # Use mget for efficient bulk retrieval (avoids N+1 queries)
+            docs = [{"_id": parent_id, "_index": self.index_name} for parent_id in chain_ids]
+            mget_response = self.es.mget(body={"docs": docs})
+
+            # Build chain from mget results, maintaining order
+            for doc_result in mget_response["docs"]:
+                if doc_result.get("found"):
                     chain.append({
-                        "_id": parent_id,
-                        **parent_doc
+                        "_id": doc_result["_id"],
+                        **doc_result["_source"]
                     })
 
             return chain
@@ -204,18 +210,14 @@ class ElasticSearchClient:
 
         try:
             # Add new properties to existing index
-            new_properties = {
-                "properties": {
+            self.es.indices.put_mapping(
+                index=self.index_name,
+                properties={
                     "parent_heuristic_id": {"type": "keyword"},
                     "chain_depth": {"type": "integer"},
                     "chain_ids": {"type": "keyword"},
                     "contexted_heuristic_ids": {"type": "keyword"}
                 }
-            }
-
-            self.es.indices.put_mapping(
-                index=self.index_name,
-                body=new_properties
             )
             logger.info(f"Updated mapping for index: {self.index_name}")
             return True

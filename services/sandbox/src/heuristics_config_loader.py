@@ -70,6 +70,13 @@ class HeuristicsConfigLoader:
                 'max_insight_length': 150,
                 'top_entities': 5,
                 'top_keywords': 10
+            },
+            'chaining': {
+                'enabled': True,
+                'min_rating_for_chaining': 4,
+                'max_chain_depth': 5,
+                'include_chain_in_context': True,
+                'min_parent_rating': 4
             }
         }
 
@@ -158,3 +165,23 @@ class HeuristicsConfigLoader:
     def get_top_keywords(self) -> int:
         """Get number of top keywords to extract."""
         return self.get('insights', 'top_keywords', default=10)
+
+    def get_chaining_enabled(self) -> bool:
+        """Get whether heuristic chaining is enabled."""
+        return self.get('chaining', 'enabled', default=True)
+
+    def get_min_rating_for_chaining(self) -> int:
+        """Get minimum rating required to create a chain link."""
+        return self.get('chaining', 'min_rating_for_chaining', default=4)
+
+    def get_max_chain_depth(self) -> int:
+        """Get maximum allowed chain depth."""
+        return self.get('chaining', 'max_chain_depth', default=5)
+
+    def get_include_chain_in_context(self) -> bool:
+        """Get whether to include parent chain in context injection."""
+        return self.get('chaining', 'include_chain_in_context', default=True)
+
+    def get_min_parent_rating(self) -> int:
+        """Get minimum rating for parent heuristics in chain."""
+        return self.get('chaining', 'min_parent_rating', default=4)

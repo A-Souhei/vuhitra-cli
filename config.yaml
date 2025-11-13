@@ -57,6 +57,8 @@ sandbox:
   host: localhost
   port: 18001
   protocol: http
+  # Confidence threshold for heuristics context injection (0.0-1.0)
+  confidence_threshold: 0.75
 
 # ElasticSearch configuration
 elasticsearch:

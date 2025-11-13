@@ -1,10 +1,16 @@
 import sys
+import logging
 import requests
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
 from src.utils.config_loader import ConfigLoader
 from src.utils.feedback_collector import FeedbackCollector
+
+# Maximum prompt length to prevent DoS through excessive payload sizes
+MAX_PROMPT_LENGTH = 10000
+
+logger = logging.getLogger(__name__)
 
 def initialize_error_handler():
     """Initialize the error handler with configuration."""
@@ -15,13 +21,52 @@ def initialize_error_handler():
     except Exception as e:
         print(f"WARNING: Failed to initialize error handler: {str(e)}", file=sys.stderr)
 
+def fetch_similar_heuristic(prompt):
+    """Fetch similar heuristic from sandbox to enhance LLM context."""
+    endpoint = None  # Initialize before try block
+    try:
+        # Validate prompt length
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            logger.warning(f"Prompt length ({len(prompt)}) exceeds maximum ({MAX_PROMPT_LENGTH}), truncating")
+            prompt = prompt[:MAX_PROMPT_LENGTH]
+
+        config = ConfigLoader()
+        sandbox_url = config.get_sandbox_url()
+        endpoint = f"{sandbox_url}/retrieve/similar"
+        confidence_threshold = config.get_sandbox_confidence_threshold()
+
+        response = requests.post(
+            endpoint,
+            json={"prompt": prompt, "min_rating": 3},
+            timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Return the formatted insight if available and confidence is good
+        if (data.get('confidence_score', 0) > confidence_threshold and
+            data.get('insights') and
+            data['insights'].get('formatted_insight')):
+            return data['insights']['formatted_insight']
+
+        return None
+    except Exception as e:
+        # Use error handler to log the exception
+        handle_exception(e, context={
+            'function': 'fetch_similar_heuristic',
+            'endpoint': endpoint if 'endpoint' in locals() else 'unknown',
+            'prompt_length': len(prompt)
+        })
+        return None
+
+
 def send_feedback_to_sandbox(feedback_data):
     """Send feedback to sandbox for heuristics analysis."""
     try:
         config = ConfigLoader()
         sandbox_url = config.get_sandbox_url()
         endpoint = f"{sandbox_url}/analyze/feedback"
-        
+
         response = requests.post(endpoint, json=feedback_data, timeout=5)
         response.raise_for_status()
         return True
@@ -51,7 +96,15 @@ def interactive_mode(model):
             if prompt.lower() in ['exit', 'quit']:
                 break
             if prompt.strip():
-                response, execution_time_ms = generate(model, prompt)
+                # Fetch similar heuristic to enhance context
+                heuristic_context = fetch_similar_heuristic(prompt)
+
+                # Enhance prompt with heuristic context if available
+                enhanced_prompt = prompt
+                if heuristic_context:
+                    enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+
+                response, execution_time_ms = generate(model, enhanced_prompt)
                 print(response)
                 print()
 
@@ -61,7 +114,7 @@ def interactive_mode(model):
                 if feedback_data:
                     # Add execution time to feedback
                     feedback_data['execution_time_ms'] = execution_time_ms
-                    
+
                     # Send to sandbox for heuristics processing
                     send_feedback_to_sandbox(feedback_data)
 
@@ -77,7 +130,15 @@ def interactive_mode(model):
 
 def non_interactive_mode(model, prompt):
     try:
-        response, execution_time_ms = generate(model, prompt)
+        # Fetch similar heuristic to enhance context
+        heuristic_context = fetch_similar_heuristic(prompt)
+
+        # Enhance prompt with heuristic context if available
+        enhanced_prompt = prompt
+        if heuristic_context:
+            enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+
+        response, execution_time_ms = generate(model, enhanced_prompt)
         print(response)
     except Exception as e:
         handle_exception(e, context={

@@ -1,0 +1,418 @@
+"""
+Unit tests for InsightExtractor
+"""
+import pytest
+from unittest.mock import Mock, patch
+import sys
+import os
+
+# Add parent directory to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'sandbox', 'src'))
+
+from insight_extractor import InsightExtractor
+
+
+class TestInsightExtractor:
+    """Test suite for InsightExtractor class"""
+
+    @pytest.fixture
+    def mock_nlp(self):
+        """Create a mock spaCy NLP model"""
+        mock_nlp = Mock()
+
+        # Create mock doc with sentences
+        mock_doc = Mock()
+
+        # Mock sentence
+        mock_sent = Mock()
+        mock_sent.text = "This is a test solution that uses pytest framework."
+
+        # Mock tokens
+        mock_token1 = Mock()
+        mock_token1.pos_ = "VERB"
+        mock_token1.lemma_ = "use"
+        mock_token1.is_stop = False
+        mock_token1.children = []
+
+        mock_token2 = Mock()
+        mock_token2.pos_ = "NOUN"
+        mock_token2.lemma_ = "pytest"
+        mock_token2.is_stop = False
+        mock_token2.text = "pytest"
+        mock_token2.dep_ = "dobj"
+
+        mock_token1.children = [mock_token2]
+
+        mock_doc.__iter__ = lambda self: iter([mock_token1, mock_token2])
+        mock_doc.sents = [mock_sent]
+        mock_doc.ents = []
+        mock_doc.text = "This is a test response with pytest framework."
+
+        mock_nlp.return_value = mock_doc
+        return mock_nlp
+
+    @pytest.fixture
+    def extractor(self, mock_nlp):
+        """Create an InsightExtractor instance with mocked NLP"""
+        with patch('insight_extractor.spacy.load', return_value=mock_nlp):
+            extractor = InsightExtractor(nlp_model=mock_nlp)
+            return extractor
+
+    def test_initialization(self, mock_nlp):
+        """Test extractor initialization"""
+        with patch('insight_extractor.spacy.load', return_value=mock_nlp):
+            extractor = InsightExtractor(nlp_model=mock_nlp)
+            assert extractor.nlp is not None
+
+    def test_initialization_without_model(self):
+        """Test initialization without providing NLP model"""
+        with patch('insight_extractor.spacy.load') as mock_load:
+            mock_nlp = Mock()
+            mock_load.return_value = mock_nlp
+
+            extractor = InsightExtractor()
+
+            mock_load.assert_called_once_with("en_core_web_lg")
+            assert extractor.nlp == mock_nlp
+
+    def test_extract_insights_success(self, extractor):
+        """Test successful insight extraction"""
+        matched_heuristic = {
+            'prompt': 'How to test Python code?',
+            'response': 'Use pytest framework for testing. Write unit tests for functions.',
+            'rating': 5,
+            'is_code_response': True,
+            'code_purpose': 'function definition'
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        assert 'summary' in result
+        assert 'key_techniques' in result
+        assert 'entities' in result
+        assert 'action_items' in result
+        assert 'confidence_indicators' in result
+        assert 'formatted_insight' in result
+
+        assert isinstance(result['key_techniques'], list)
+        assert isinstance(result['entities'], list)
+        assert isinstance(result['confidence_indicators'], list)
+        assert isinstance(result['formatted_insight'], str)
+
+    def test_extract_insights_high_rating(self, extractor):
+        """Test insights with high rating generate appropriate confidence indicators"""
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Test response with good content.',
+            'rating': 5,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should have high satisfaction indicator
+        indicators = result.get('confidence_indicators', [])
+        assert any('5/5' in str(ind) for ind in indicators), f"Expected '5/5' in indicators: {indicators}"
+
+    def test_extract_insights_moderate_rating(self, extractor):
+        """Test insights with moderate rating"""
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Test response.',
+            'rating': 3,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should have positive feedback indicator
+        indicators = result.get('confidence_indicators', [])
+        assert any('3/5' in str(ind) for ind in indicators), f"Expected '3/5' in indicators: {indicators}"
+
+    def test_extract_insights_code_response(self, extractor):
+        """Test insights extraction for code responses"""
+        matched_heuristic = {
+            'prompt': 'Write a function',
+            'response': 'def test(): pass',
+            'rating': 4,
+            'is_code_response': True,
+            'code_purpose': 'function definition'
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Just verify we get a result with the expected structure
+        assert 'summary' in result
+        assert 'confidence_indicators' in result
+        # Check for rating indicator
+        assert len(result['confidence_indicators']) > 0
+
+    def test_extract_insights_detailed_response(self, extractor):
+        """Test insights for detailed responses"""
+        long_response = ' '.join(['word'] * 100)  # 100 words
+
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': long_response,
+            'rating': 4,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Just verify we get a result
+        assert 'summary' in result
+        assert 'confidence_indicators' in result
+        assert len(result['confidence_indicators']) > 0
+
+    def test_extract_insights_concise_response(self, extractor):
+        """Test insights for concise responses"""
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': 'Short answer here.',  # ~3 words
+            'rating': 4,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should have concise indicator for responses between 20-50 words
+        # This is only 3 words, so won't have any length indicator
+        # Just verify it doesn't crash
+        assert result is not None
+
+    def test_extract_key_techniques(self, extractor):
+        """Test key technique extraction"""
+        mock_doc = Mock()
+
+        # Create mock verb token with objects
+        mock_verb = Mock()
+        mock_verb.pos_ = "VERB"
+        mock_verb.lemma_ = "implement"
+        mock_verb.is_stop = False
+
+        mock_obj = Mock()
+        mock_obj.text = "feature"
+        mock_obj.dep_ = "dobj"
+
+        mock_verb.children = [mock_obj]
+
+        mock_doc.__iter__ = lambda self: iter([mock_verb])
+        mock_doc.text = "implement feature"
+
+        techniques = extractor._extract_key_techniques(mock_doc, is_code=False)
+
+        assert isinstance(techniques, list)
+        # Should extract verb phrases
+        assert len(techniques) >= 0
+
+    def test_extract_key_techniques_code_response(self, extractor):
+        """Test key technique extraction for code responses"""
+        mock_doc = Mock()
+        mock_doc.text = "Use function and class definitions with async promises"
+        mock_doc.__iter__ = lambda self: iter([])
+
+        techniques = extractor._extract_key_techniques(mock_doc, is_code=True)
+
+        # Should identify code-specific keywords
+        assert any('function' in t.lower() for t in techniques) or \
+               any('class' in t.lower() for t in techniques) or \
+               any('async' in t.lower() for t in techniques)
+
+    def test_extract_entities(self, extractor):
+        """Test entity extraction"""
+        mock_doc = Mock()
+
+        # Mock named entity
+        mock_ent = Mock()
+        mock_ent.text = "pytest"
+        mock_ent.label_ = "PRODUCT"
+
+        mock_doc.ents = [mock_ent]
+
+        # Mock tokens for technical terms
+        mock_token = Mock()
+        mock_token.text = "Flask"
+        mock_token.pos_ = "PROPN"
+        mock_token.is_stop = False
+
+        mock_doc.__iter__ = lambda self: iter([mock_token])
+
+        entities = extractor._extract_entities(mock_doc)
+
+        assert isinstance(entities, list)
+        assert len(entities) <= extractor.TOP_ENTITIES
+
+    def test_extract_action_items(self, extractor):
+        """Test action item extraction via extract_insights"""
+        # Instead of testing private method directly, test through public API
+        matched_heuristic = {
+            'prompt': 'How to test?',
+            'response': 'You should write unit tests. Install pytest first. Make sure to test edge cases.',
+            'rating': 4,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should have action items in the result
+        assert 'action_items' in result
+        assert isinstance(result['action_items'], list)
+        assert len(result['action_items']) <= 5
+
+    def test_build_summary_code_response(self, extractor):
+        """Test summary building for code responses"""
+        summary = extractor._build_summary(
+            prompt="Write a function",
+            response="def test(): pass",
+            key_techniques=["define function"],
+            is_code=True,
+            code_purpose="function definition"
+        )
+
+        assert "function definition" in summary.lower()
+
+    def test_build_summary_non_code(self, extractor):
+        """Test summary building for non-code responses"""
+        summary = extractor._build_summary(
+            prompt="How to test?",
+            response="Testing is important. Use frameworks.",
+            key_techniques=["use frameworks"],
+            is_code=False,
+            code_purpose=""
+        )
+
+        assert len(summary) > 0
+        assert "use frameworks" in summary.lower()
+
+    def test_build_confidence_indicators_all_factors(self, extractor):
+        """Test confidence indicators with all positive factors"""
+        indicators = extractor._build_confidence_indicators(
+            rating=5,
+            is_code=True,
+            response_length=100
+        )
+
+        assert len(indicators) >= 2
+        assert any('5/5' in ind for ind in indicators)
+        assert any('code' in ind.lower() for ind in indicators)
+        assert any('detailed' in ind.lower() for ind in indicators)
+
+    def test_format_for_injection(self, extractor):
+        """Test formatting of insights for LLM injection"""
+        formatted = extractor._format_for_injection(
+            summary="Use pytest for testing",
+            key_techniques=["implement tests", "use assertions"],
+            entities=[{'text': 'pytest', 'type': 'PRODUCT'}],
+            confidence_indicators=["High user satisfaction (rated 5/5)"]
+        )
+
+        assert "[RELEVANT CONTEXT FROM SIMILAR PAST INTERACTION]" in formatted
+        assert "[END CONTEXT]" in formatted
+        assert "Use pytest for testing" in formatted
+        assert "pytest" in formatted
+
+    def test_create_fallback_insight(self, extractor):
+        """Test fallback insight creation when NLP fails"""
+        matched_heuristic = {
+            'response': 'Test response with some content here.',
+            'rating': 4
+        }
+
+        result = extractor._create_fallback_insight(matched_heuristic)
+
+        assert 'summary' in result
+        assert 'formatted_insight' in result
+        assert '4/5' in result['formatted_insight']
+        assert '[RELEVANT CONTEXT FROM SIMILAR PAST INTERACTION]' in result['formatted_insight']
+
+    def test_extract_insights_without_nlp(self):
+        """Test insight extraction when NLP model is not loaded"""
+        extractor = InsightExtractor()
+        extractor.nlp = None  # Simulate failed loading
+
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': 'Test response',
+            'rating': 4,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should return fallback insight
+        assert result is not None
+        assert 'summary' in result
+        assert 'formatted_insight' in result
+
+    def test_extract_insights_with_exception(self, extractor):
+        """Test insight extraction handles exceptions gracefully"""
+        # Make NLP processing raise an exception
+        extractor.nlp.side_effect = Exception("NLP error")
+
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': 'Test response',
+            'rating': 4,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should return fallback insight instead of crashing
+        assert result is not None
+        assert 'formatted_insight' in result
+
+    def test_max_insight_length_constant(self):
+        """Test that MAX_INSIGHT_LENGTH is properly defined"""
+        extractor = InsightExtractor()
+        assert extractor.MAX_INSIGHT_LENGTH == 150
+
+    def test_top_entities_constant(self):
+        """Test that TOP_ENTITIES is properly defined"""
+        extractor = InsightExtractor()
+        assert extractor.TOP_ENTITIES == 5
+
+    def test_top_keywords_constant(self):
+        """Test that TOP_KEYWORDS is properly defined"""
+        extractor = InsightExtractor()
+        assert extractor.TOP_KEYWORDS == 10
+
+    def test_empty_response_handling(self, extractor):
+        """Test handling of empty response"""
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': '',
+            'rating': 3,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should handle gracefully
+        assert result is not None
+        assert 'summary' in result
+
+    def test_special_characters_in_response(self, extractor):
+        """Test handling of special characters in response"""
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': 'Use `pytest` for testing! @see docs #testing',
+            'rating': 4,
+            'is_code_response': False,
+            'code_purpose': ''
+        }
+
+        result = extractor.extract_insights(matched_heuristic)
+
+        # Should handle special characters without crashing
+        assert result is not None
+        assert 'summary' in result

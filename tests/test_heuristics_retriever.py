@@ -162,10 +162,10 @@ class TestHeuristicsRetriever:
         # Check scoring formula
         result = results[0]
         expected_final = (
-            HeuristicsRetriever.SEMANTIC_WEIGHT * result['semantic_score'] +
-            HeuristicsRetriever.LEVENSHTEIN_WEIGHT * result['levenshtein_score'] +
-            HeuristicsRetriever.KEYWORD_WEIGHT * result['keyword_score'] +
-            HeuristicsRetriever.RATING_WEIGHT * result['rating_score']
+            retriever.SEMANTIC_WEIGHT * result['semantic_score'] +
+            retriever.LEVENSHTEIN_WEIGHT * result['levenshtein_score'] +
+            retriever.KEYWORD_WEIGHT * result['keyword_score'] +
+            retriever.RATING_WEIGHT * result['rating_score']
         )
         assert abs(result['final_score'] - expected_final) < 0.001
 
@@ -179,6 +179,7 @@ class TestHeuristicsRetriever:
         mock_token1.is_punct = False
         mock_token1.text = "test"
         mock_token1.pos_ = "NOUN"
+        mock_token1.dep_ = "dobj"
 
         mock_token2 = Mock()
         mock_token2.lemma_ = "python"
@@ -186,12 +187,18 @@ class TestHeuristicsRetriever:
         mock_token2.is_punct = False
         mock_token2.text = "python"
         mock_token2.pos_ = "NOUN"
+        mock_token2.dep_ = "nsubj"
 
         mock_doc.__iter__ = lambda self: iter([mock_token1, mock_token2])
 
-        candidate_keywords = ['test', 'python', 'code']
+        candidate_prompt_keywords = ['test', 'python', 'code']
+        candidate_response_keywords = []
 
-        score = retriever._calculate_keyword_overlap(candidate_keywords, mock_doc)
+        score = retriever._calculate_keyword_overlap(
+            candidate_prompt_keywords,
+            candidate_response_keywords,
+            mock_doc
+        )
 
         # Should have 2 overlapping keywords (test, python) out of total 3 unique
         assert score > 0
@@ -278,13 +285,13 @@ class TestHeuristicsRetriever:
 
         assert len(candidates) == 0
 
-    def test_scoring_weights_sum_to_one(self):
+    def test_scoring_weights_sum_to_one(self, retriever):
         """Test that scoring weights sum to 1.0"""
         total_weight = (
-            HeuristicsRetriever.SEMANTIC_WEIGHT +
-            HeuristicsRetriever.LEVENSHTEIN_WEIGHT +
-            HeuristicsRetriever.KEYWORD_WEIGHT +
-            HeuristicsRetriever.RATING_WEIGHT
+            retriever.SEMANTIC_WEIGHT +
+            retriever.LEVENSHTEIN_WEIGHT +
+            retriever.KEYWORD_WEIGHT +
+            retriever.RATING_WEIGHT
         )
 
         assert abs(total_weight - 1.0) < 0.001

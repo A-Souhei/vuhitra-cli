@@ -342,7 +342,7 @@ def validate_response():
 
     Expects JSON: {
         prompt: str,              # User's input prompt (required)
-        response: str,            # LLM's generated response (required)
+        response: str,            # LLM's generated response (optional, for future use)
         original_rating: int      # Optional rating if available
     }
 
@@ -358,14 +358,14 @@ def validate_response():
         if not data:
             return jsonify({"error": "No JSON data provided"}), 400
 
-        required_fields = ['prompt', 'response']
+        required_fields = ['prompt']
         missing_fields = [f for f in required_fields if f not in data]
 
         if missing_fields:
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
         prompt = data['prompt']
-        # Note: response and original_rating are validated but not currently used
+        # Note: response and original_rating are optional and not currently used
         # Future enhancement: compare response content with matched responses
 
         # Find similar high-quality responses

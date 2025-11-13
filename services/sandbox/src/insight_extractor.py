@@ -243,7 +243,7 @@ class InsightExtractor:
             sent_text = sent.text.strip()
 
             # Check for imperative patterns
-            if len(sent_text) > 10:
+            if len(sent_text) > 10 and len(sent) > 0:
                 first_token = sent[0]
 
                 # Imperative sentences often start with verbs

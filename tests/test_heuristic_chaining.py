@@ -8,16 +8,11 @@ Tests the ability to:
 - Enforce chain depth limits
 """
 import pytest
-import sys
-import os
 from unittest.mock import Mock, patch
 
-# Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'sandbox'))
-
-from src.heuristics import Heuristics
-from src.elasticsearch_client import ElasticSearchClient
-from src.insight_extractor import InsightExtractor
+from services.sandbox.src.heuristics import Heuristics
+from services.sandbox.src.elasticsearch_client import ElasticSearchClient
+from services.sandbox.src.insight_extractor import InsightExtractor
 
 
 class TestChainMetadataBuilding:
@@ -170,7 +165,7 @@ class TestChainMetadataBuilding:
 class TestChainRetrieval:
     """Test chain retrieval in ElasticSearchClient."""
 
-    @patch('src.elasticsearch_client.Elasticsearch')
+    @patch('services.sandbox.src.elasticsearch_client.Elasticsearch')
     def test_get_chain_empty(self, mock_es):
         """Test retrieving chain for document with no parents."""
         es_client = ElasticSearchClient()
@@ -185,7 +180,7 @@ class TestChainRetrieval:
             chain = es_client.get_chain("doc_id")
             assert chain == []
 
-    @patch('src.elasticsearch_client.Elasticsearch')
+    @patch('services.sandbox.src.elasticsearch_client.Elasticsearch')
     def test_get_chain_with_parents(self, mock_es):
         """Test retrieving full chain."""
         es_client = ElasticSearchClient()
@@ -287,7 +282,7 @@ class TestChainInsightExtraction:
 class TestChainEndToEnd:
     """End-to-end tests for heuristic chaining."""
 
-    @patch('src.elasticsearch_client.Elasticsearch')
+    @patch('services.sandbox.src.elasticsearch_client.Elasticsearch')
     def test_full_chain_workflow(self, mock_es):
         """Test complete workflow: store -> retrieve -> chain."""
         # This would be an integration test

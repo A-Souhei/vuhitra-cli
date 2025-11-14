@@ -181,8 +181,14 @@ class TestChainRetrieval:
             assert chain == []
 
     @patch('services.sandbox.src.elasticsearch_client.Elasticsearch')
-    def test_get_chain_with_parents(self, mock_es):
+    def test_get_chain_with_parents(self, mock_es_class):
         """Test retrieving full chain."""
+        # Setup mock ES instance
+        mock_es_instance = Mock()
+        mock_es_instance.ping.return_value = True
+        mock_es_instance.indices.exists.return_value = True
+        mock_es_class.return_value = mock_es_instance
+
         es_client = ElasticSearchClient()
 
         def mock_get(doc_id):
@@ -201,6 +207,28 @@ class TestChainRetrieval:
                 }
             }
             return docs.get(doc_id)
+
+        # Mock mget response
+        mock_es_instance.mget.return_value = {
+            "docs": [
+                {
+                    "found": True,
+                    "_id": "root_id",
+                    "_source": {
+                        "rating": 4,
+                        "prompt": "root prompt"
+                    }
+                },
+                {
+                    "found": True,
+                    "_id": "parent_id",
+                    "_source": {
+                        "rating": 5,
+                        "prompt": "parent prompt"
+                    }
+                }
+            ]
+        }
 
         with patch.object(es_client, 'get_by_id', side_effect=mock_get):
             chain = es_client.get_chain("child_id")

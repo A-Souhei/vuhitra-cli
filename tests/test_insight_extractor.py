@@ -111,9 +111,10 @@ class TestInsightExtractor:
 
         result = extractor.extract_insights(matched_heuristic)
 
-        # Should have high satisfaction indicator
+        # Should have confidence indicator (but no ratings exposed)
         indicators = result.get('confidence_indicators', [])
-        assert any('5/5' in str(ind) for ind in indicators), f"Expected '5/5' in indicators: {indicators}"
+        assert len(indicators) > 0, "Should have confidence indicators"
+        assert all('rated' not in str(ind).lower() for ind in indicators), "Should not expose ratings"
 
     def test_extract_insights_moderate_rating(self, extractor):
         """Test insights with moderate rating"""
@@ -127,9 +128,10 @@ class TestInsightExtractor:
 
         result = extractor.extract_insights(matched_heuristic)
 
-        # Should have positive feedback indicator
+        # Should have confidence indicator (but no ratings exposed)
         indicators = result.get('confidence_indicators', [])
-        assert any('3/5' in str(ind) for ind in indicators), f"Expected '3/5' in indicators: {indicators}"
+        assert len(indicators) > 0, "Should have confidence indicators"
+        assert all('rated' not in str(ind).lower() for ind in indicators), "Should not expose ratings"
 
     def test_extract_insights_code_response(self, extractor):
         """Test insights extraction for code responses"""
@@ -299,9 +301,11 @@ class TestInsightExtractor:
         )
 
         assert len(indicators) >= 2
-        assert any('5/5' in ind for ind in indicators)
+        # Check for quality indicators without exposing ratings
         assert any('code' in ind.lower() for ind in indicators)
         assert any('detailed' in ind.lower() for ind in indicators)
+        # Ensure no ratings are exposed
+        assert all('5/5' not in ind for ind in indicators)
 
     def test_format_for_injection(self, extractor):
         """Test formatting of insights for LLM injection"""
@@ -309,13 +313,17 @@ class TestInsightExtractor:
             summary="Use pytest for testing",
             key_techniques=["implement tests", "use assertions"],
             entities=[{'text': 'pytest', 'type': 'PRODUCT'}],
-            confidence_indicators=["High user satisfaction (rated 5/5)"]
+            confidence_indicators=["Relevant match found"]
         )
 
-        assert "[RELEVANT CONTEXT FROM SIMILAR PAST INTERACTION]" in formatted
-        assert "[END CONTEXT]" in formatted
-        assert "Use pytest for testing" in formatted
+        # Check for new system-prompt style format (not conversational)
+        assert "# System Context: Relevant Technical Guidance" in formatted
+        assert "Recommended techniques:" in formatted
+        assert "implement tests" in formatted
         assert "pytest" in formatted
+        # Ensure no privacy-leaking information
+        assert "rated" not in formatted.lower()
+        assert "satisfaction" not in formatted.lower()
 
     def test_create_fallback_insight(self, extractor):
         """Test fallback insight creation when NLP fails"""
@@ -328,8 +336,11 @@ class TestInsightExtractor:
 
         assert 'summary' in result
         assert 'formatted_insight' in result
-        assert '4/5' in result['formatted_insight']
-        assert '[RELEVANT CONTEXT FROM SIMILAR PAST INTERACTION]' in result['formatted_insight']
+        # Check for new format (no ratings exposed)
+        assert "# System Context: Relevant Technical Guidance" in result['formatted_insight']
+        # Ensure no privacy-leaking information
+        assert '4/5' not in result['formatted_insight']
+        assert 'rated' not in result['formatted_insight'].lower()
 
     def test_extract_insights_without_nlp(self):
         """Test insight extraction when NLP model is not loaded"""

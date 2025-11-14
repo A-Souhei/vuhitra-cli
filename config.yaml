@@ -26,11 +26,25 @@ model:
     - qwen2.5-coder:7b
 
 # Ollama server configuration
+# Set 'use' to either 'local' or 'remote' to select which configuration to use
 ollama:
-  host: 192.168.31.23
-  protocol: http
-  port: 11434
-  api_path: /api/generate
+  # Which configuration to use: 'local' (docker-compose) or 'remote' (external server)
+  use: remote  # Using your existing remote server
+
+  # Local Ollama (docker-compose service)
+  # Start with: cd services && docker compose --profile ollama up -d
+  local:
+    host: localhost
+    protocol: http
+    port: 11434
+    api_path: /api/generate
+
+  # Remote Ollama (external/network server)
+  remote:
+    host: 192.168.31.23
+    protocol: http
+    port: 11434
+    api_path: /api/generate
 
 # Environment configuration
 environment:

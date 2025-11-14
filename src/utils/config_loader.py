@@ -78,17 +78,25 @@ class ConfigLoader:
                 return default
         return value
     
+    def _get_ollama_config_key(self):
+        """Get the active Ollama configuration key (local or remote)"""
+        return self.get('ollama', 'use', default='local')
+
     def get_ollama_host(self):
-        return self.get('ollama', 'host')
-    
+        config_key = self._get_ollama_config_key()
+        return self.get('ollama', config_key, 'host')
+
     def get_ollama_protocol(self):
-        return self.get('ollama', 'protocol', default='http')
-    
+        config_key = self._get_ollama_config_key()
+        return self.get('ollama', config_key, 'protocol', default='http')
+
     def get_ollama_port(self):
-        return self.get('ollama', 'port', default=11434)
-    
+        config_key = self._get_ollama_config_key()
+        return self.get('ollama', config_key, 'port', default=11434)
+
     def get_ollama_api_path(self):
-        return self.get('ollama', 'api_path', default='/api/generate')
+        config_key = self._get_ollama_config_key()
+        return self.get('ollama', config_key, 'api_path', default='/api/generate')
     
     def get_default_model(self):
         return self.get('model', 'default', default='llama3.1:8b')

@@ -16,7 +16,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better layer caching
+COPY services/transformer/requirements-base.txt .
 COPY services/transformer/requirements.txt .
+
+# Install base dependencies first (numpy with version constraint)
+# This layer is separate to avoid invalidating torch cache when numpy constraints change
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements-base.txt
 
 # Install heavy dependencies in order (with pip cache mount)
 # Install torch first (~800MB) - most stable, rarely changes

@@ -78,6 +78,17 @@ class HeuristicsConfigLoader:
                 'max_chain_depth': 5,
                 'include_chain_in_context': True,
                 'min_parent_rating': 4
+            },
+            'auto_iteration': {
+                'max_iterations': 10,
+                'negative_weight_increment': 0.1,
+                'store_failed_attempts': True
+            },
+            'auto_pruning': {
+                'enabled': True,
+                'similarity_threshold': 0.85,
+                'min_rating_difference': 1,
+                'batch_size': 100
             }
         }
 
@@ -190,3 +201,33 @@ class HeuristicsConfigLoader:
     def get_min_parent_rating(self) -> int:
         """Get minimum rating for parent heuristics in chain."""
         return self.get('chaining', 'min_parent_rating', default=4)
+
+    # Auto-iteration configuration
+    def get_max_auto_iterations(self) -> int:
+        """Get maximum number of auto-retry attempts for rating=0 responses."""
+        return self.get('auto_iteration', 'max_iterations', default=10)
+
+    def get_negative_weight_increment(self) -> float:
+        """Get increment to negative heuristic weight per iteration."""
+        return self.get('auto_iteration', 'negative_weight_increment', default=0.1)
+
+    def get_store_failed_attempts(self) -> bool:
+        """Get whether to store metadata for failed iteration attempts."""
+        return self.get('auto_iteration', 'store_failed_attempts', default=True)
+
+    # Auto-pruning configuration
+    def get_auto_pruning_enabled(self) -> bool:
+        """Get whether automatic pruning is enabled."""
+        return self.get('auto_pruning', 'enabled', default=True)
+
+    def get_pruning_similarity_threshold(self) -> float:
+        """Get similarity threshold for identifying duplicate/similar heuristics."""
+        return self.get('auto_pruning', 'similarity_threshold', default=0.85)
+
+    def get_pruning_min_rating_difference(self) -> int:
+        """Get minimum rating difference to consider one heuristic 'better'."""
+        return self.get('auto_pruning', 'min_rating_difference', default=1)
+
+    def get_pruning_batch_size(self) -> int:
+        """Get number of heuristics to check per pruning batch."""
+        return self.get('auto_pruning', 'batch_size', default=100)

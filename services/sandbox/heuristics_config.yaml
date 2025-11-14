@@ -39,3 +39,16 @@ chaining:
   max_chain_depth: 5               # Maximum chain depth to prevent infinite chains
   include_chain_in_context: true   # Include parent chain in context injection
   min_parent_rating: 4             # Minimum rating for parent heuristics in chain
+
+# Auto-iteration settings (for rating=0 responses)
+auto_iteration:
+  max_iterations: 5                # Maximum number of auto-retry attempts for rating=0 responses
+  negative_weight_increment: 0.1   # Increment to negative heuristic weight per iteration
+  store_failed_attempts: true      # Store metadata for failed iteration attempts (for debugging)
+
+# Auto-pruning settings (cleanup unretrievable heuristics)
+auto_pruning:
+  enabled: true                    # Enable automatic pruning of unretrievable heuristics
+  similarity_threshold: 0.85       # Similarity threshold for identifying duplicate/similar heuristics
+  min_rating_difference: 1         # Minimum rating difference to consider one heuristic "better"
+  batch_size: 100                  # Number of heuristics to check per pruning batch

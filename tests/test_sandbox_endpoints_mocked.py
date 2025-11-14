@@ -3,7 +3,7 @@ Mocked tests for sandbox endpoints without requiring actual container.
 These tests use mocks to simulate container responses for CI/CD efficiency.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import io
 import sys
 import os

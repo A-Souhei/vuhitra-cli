@@ -261,36 +261,45 @@ class TestChainInsightExtraction:
             assert not result.get("has_chain", False)
 
     def test_format_chain_with_anti_copying_instructions(self):
-        """Test that chain formatting includes anti-copying instructions."""
+        """Test that chain formatting includes anti-copying instructions via public API."""
         mock_nlp = Mock()
         extractor = InsightExtractor(nlp_model=mock_nlp)
 
         primary_heuristic = {
             "rating": 5,
-            "prompt": "test prompt"
+            "prompt": "test prompt",
+            "response": "test response"
         }
 
-        primary_insights = {
-            "summary": "Current solution",
-            "key_techniques": ["technique1", "technique2"],
-            "entities": [{"text": "Python"}],
-            "confidence_indicators": ["High quality"]
-        }
-
-        chain_insights = [
+        chain = [
             {
                 "rating": 4,
-                "summary": "First iteration",
-                "key_techniques": ["old_technique"],
-                "entities": [{"text": "Java"}]
+                "prompt": "parent prompt",
+                "response": "parent response"
             }
         ]
 
-        formatted = extractor._format_chain_for_injection(
-            primary_heuristic,
-            primary_insights,
-            chain_insights
-        )
+        # Mock extract_insights to return controlled data
+        def mock_extract_insights(heuristic):
+            if heuristic.get("rating") == 5:
+                return {
+                    "summary": "Current solution",
+                    "key_techniques": ["technique1", "technique2"],
+                    "entities": [{"text": "Python"}],
+                    "confidence_indicators": ["High quality"]
+                }
+            else:
+                return {
+                    "summary": "First iteration",
+                    "key_techniques": ["old_technique"],
+                    "entities": [{"text": "Java"}],
+                    "confidence_indicators": []
+                }
+
+        with patch.object(extractor, 'extract_insights', side_effect=mock_extract_insights):
+            result = extractor.extract_chain_insights(primary_heuristic, chain)
+
+        formatted = result.get("formatted_insight", "")
 
         # Check for anti-copying instructions
         assert "DO NOT simply copy" in formatted

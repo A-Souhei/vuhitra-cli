@@ -200,7 +200,7 @@ class Heuristics:
             parent_doc = self.es_client.get_by_id(parent_id)
 
             if not parent_doc:
-                logger.error(
+                logger.warning(
                     f"Failed to retrieve parent heuristic {parent_id}. "
                     "This may be due to a retrieval error or the parent not existing. "
                     "Creating as root heuristic instead."
@@ -222,8 +222,16 @@ class Heuristics:
             # Build chain metadata
             metadata["parent_heuristic_id"] = parent_id
             metadata["chain_depth"] = new_depth
-            # Avoid duplicate IDs in chain (defensive programming)
-            metadata["chain_ids"] = parent_chain_ids + ([parent_id] if parent_id not in parent_chain_ids else [])
+
+            # Detect and handle circular references
+            if parent_id in parent_chain_ids:
+                logger.warning(
+                    f"Circular reference detected: parent {parent_id} already exists in chain. "
+                    f"Skipping duplicate to prevent infinite loop. Chain: {parent_chain_ids}"
+                )
+                metadata["chain_ids"] = parent_chain_ids
+            else:
+                metadata["chain_ids"] = parent_chain_ids + [parent_id]
 
             logger.info(
                 f"Created chain link: parent={parent_id}, depth={new_depth}, "

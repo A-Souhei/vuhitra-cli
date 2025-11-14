@@ -3,7 +3,7 @@ Mocked tests for Redis operations without requiring actual container.
 These tests use mocks to simulate Redis responses for CI/CD efficiency.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 
 class TestSandboxRedisMocked:
@@ -209,15 +209,14 @@ class TestSandboxRedisMocked:
         with pytest.raises(redis.AuthenticationError):
             mock_client.ping()
 
-    def test_config_loader_integration(self):
+    @patch('src.utils.config_loader.ConfigLoader.get_redis_password')
+    def test_config_loader_integration(self, mock_get_password):
         """Test that ConfigLoader can load Redis password (mocked)."""
-        with patch('src.utils.config_loader.ConfigLoader') as MockConfigLoader:
-            mock_loader = MockConfigLoader.return_value
-            mock_loader.get_redis_password.return_value = "test_password"
+        mock_get_password.return_value = "test_password"
 
-            from src.utils.config_loader import ConfigLoader
-            config_loader = ConfigLoader()
-            password = config_loader.get_redis_password()
+        from src.utils.config_loader import ConfigLoader
+        config_loader = ConfigLoader()
+        password = config_loader.get_redis_password()
 
-            assert password == "test_password"
-            mock_loader.get_redis_password.assert_called_once()
+        assert password == "test_password"
+        mock_get_password.assert_called_once()

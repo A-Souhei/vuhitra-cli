@@ -272,6 +272,10 @@ def analyze_feedback():
         if 'contexted_heuristic_ids' in data:
             if not isinstance(data['contexted_heuristic_ids'], list):
                 return jsonify({"error": "contexted_heuristic_ids must be a list"}), 400
+            if len(data['contexted_heuristic_ids']) == 0:
+                return jsonify({"error": "contexted_heuristic_ids cannot be empty"}), 400
+            if len(data['contexted_heuristic_ids']) > 100:
+                return jsonify({"error": "contexted_heuristic_ids cannot exceed 100 items"}), 400
             if not all(isinstance(id, str) for id in data['contexted_heuristic_ids']):
                 return jsonify({"error": "contexted_heuristic_ids must contain only strings"}), 400
 

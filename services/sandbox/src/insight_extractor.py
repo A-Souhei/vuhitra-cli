@@ -839,7 +839,7 @@ Please provide a comprehensive response addressing the user's specific question.
         lines = []
         lines.append("# SYSTEM DIRECTIVE - MULTIPLE ANTI-PATTERN ALERTS")
         lines.append("")
-        lines.append(f"CRITICAL: This question has been attempted {len(chain_anti_patterns) + 1} times with FAILURES.")
+        lines.append(f"CRITICAL: This question has been attempted {len(chain_anti_patterns) + 1} times with failures.")
         lines.append("ALL previous incorrect answers are shown below. Do NOT repeat ANY of these mistakes.")
         lines.append("")
 

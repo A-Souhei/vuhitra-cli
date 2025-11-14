@@ -224,11 +224,16 @@ def interactive_mode(model, verbose=False):
             # Timing for overall request
             request_start = time.time()
 
-            # Load auto-iteration config
+            # Load auto-iteration config with safe defaults
             config = ConfigLoader()
-            max_iterations = config.get_auto_iteration_max_iterations()
-            timeout_seconds = config.get_auto_iteration_timeout()
-            negative_weight_increment = config.get_auto_iteration_negative_weight_increment()
+            max_iterations_config = config.get_auto_iteration_max_iterations()
+            max_iterations = max_iterations_config if isinstance(max_iterations_config, int) else 5
+            
+            timeout_config = config.get_auto_iteration_timeout()
+            timeout_seconds = timeout_config if isinstance(timeout_config, int) else 3
+            
+            increment_config = config.get_auto_iteration_negative_weight_increment()
+            negative_weight_increment = increment_config if isinstance(increment_config, (int, float)) else 0.1
 
             # Auto-iteration loop
             iteration_number = 0

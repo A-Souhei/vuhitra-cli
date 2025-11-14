@@ -361,7 +361,7 @@ class InsightExtractor:
         confidence_indicators: List[str]
     ) -> str:
         """
-        Format insights as injectable LLM context.
+        Format insights as injectable LLM context using system-prompt style.
 
         Args:
             summary: Solution summary
@@ -372,21 +372,27 @@ class InsightExtractor:
         Returns:
             Formatted string ready for LLM context injection
         """
-        lines = ["[RELEVANT CONTEXT FROM SIMILAR PAST INTERACTION]"]
-        lines.append(f"Summary: {summary}")
+        lines = []
+        lines.append("# System Context: Relevant Technical Guidance")
+        lines.append("")
+        lines.append("Based on analysis of similar technical questions, consider the following approach:")
+        lines.append("")
 
+        # Add techniques as recommendations (not as direct quotes)
         if key_techniques:
-            techniques_str = ", ".join(key_techniques[:3])
-            lines.append(f"Approach: {techniques_str}")
+            lines.append("Recommended techniques:")
+            for tech in key_techniques[:3]:
+                lines.append(f"  - {tech}")
+            lines.append("")
 
+        # Add entities as relevant technologies
         if entities:
             entity_names = [e['text'] for e in entities[:3]]
-            lines.append(f"Related tools/technologies: {', '.join(entity_names)}")
+            lines.append(f"Relevant technologies to consider: {', '.join(entity_names)}")
+            lines.append("")
 
-        if confidence_indicators:
-            lines.append(f"Quality: {confidence_indicators[0]}")
-
-        lines.append("[END CONTEXT]")
+        lines.append("Please provide a comprehensive response that addresses the user's specific question.")
+        lines.append("---")
 
         return "\n".join(lines)
 
@@ -406,16 +412,18 @@ class InsightExtractor:
         # Simple extraction without NLP
         summary = response[:200] + "..." if len(response) > 200 else response
 
-        formatted = f"""[RELEVANT CONTEXT FROM SIMILAR PAST INTERACTION]
-Summary: High-quality response found (rated {rating}/5)
-[END CONTEXT]"""
+        formatted = """# System Context: Relevant Technical Guidance
+
+Based on analysis of similar questions, relevant context has been identified.
+Please provide a comprehensive response addressing the user's specific question.
+---"""
 
         return {
             'summary': summary,
             'key_techniques': [],
             'entities': [],
             'action_items': [],
-            'confidence_indicators': [f"Rated {rating}/5"],
+            'confidence_indicators': ["Relevant match found"],
             'formatted_insight': formatted
         }
 
@@ -494,7 +502,7 @@ Summary: High-quality response found (rated {rating}/5)
         chain_insights: List[Dict]
     ) -> str:
         """
-        Format chain insights with anti-copying instructions.
+        Format chain insights as system guidance without revealing feedback system.
 
         Args:
             primary_heuristic: The primary matched heuristic
@@ -502,52 +510,55 @@ Summary: High-quality response found (rated {rating}/5)
             chain_insights: List of insights from parent heuristics
 
         Returns:
-            Formatted string with chain context and iteration instructions
+            Formatted string with chain context as system-level guidance
         """
         lines = []
-        lines.append("[HEURISTIC CHAIN: EVOLUTION OF SUCCESSFUL SOLUTIONS]")
+        lines.append("# System Context: Progressive Technical Solutions")
         lines.append("")
-        lines.append("IMPORTANT INSTRUCTIONS:")
-        lines.append("- The following shows how similar problems were solved previously")
-        lines.append("- DO NOT simply copy these solutions")
-        lines.append("- Use them as INSPIRATION to create an even better response")
-        lines.append(f"- Your goal is to MATCH or EXCEED the quality that received {primary_heuristic.get('rating', 0)}/5 rating")
-        lines.append("- ITERATE and IMPROVE on these approaches")
+        lines.append("Multiple approaches have been analyzed for similar questions.")
+        lines.append("Use these insights to inform your response:")
         lines.append("")
 
-        # Show chain evolution (oldest to newest)
-        if chain_insights:
-            lines.append(f"--- Solution Evolution (Chain of {len(chain_insights) + 1} iterations) ---")
+        # Collect all unique techniques and technologies from chain
+        all_techniques = []
+        all_entities = []
+
+        # Add from chain
+        for insight in chain_insights:
+            all_techniques.extend(insight.get('key_techniques', []))
+            all_entities.extend([e['text'] for e in insight.get('entities', [])])
+
+        # Add from primary
+        all_techniques.extend(primary_insights.get('key_techniques', []))
+        all_entities.extend([e['text'] for e in primary_insights.get('entities', [])])
+
+        # Remove duplicates while preserving order
+        seen_techniques = set()
+        unique_techniques = []
+        for tech in all_techniques:
+            if tech not in seen_techniques:
+                seen_techniques.add(tech)
+                unique_techniques.append(tech)
+
+        seen_entities = set()
+        unique_entities = []
+        for entity in all_entities:
+            if entity not in seen_entities:
+                seen_entities.add(entity)
+                unique_entities.append(entity)
+
+        # Format as recommendations
+        if unique_techniques:
+            lines.append("Recommended approaches (ordered by relevance):")
+            for i, tech in enumerate(unique_techniques[:5], 1):
+                lines.append(f"  {i}. {tech}")
             lines.append("")
 
-            for idx, insight in enumerate(chain_insights, 1):
-                lines.append(f"Iteration {idx} (Rated {insight['rating']}/5):")
-                lines.append(f"  Summary: {insight['summary']}")
-                if insight['key_techniques']:
-                    techniques = ", ".join(insight['key_techniques'][:3])
-                    lines.append(f"  Approach: {techniques}")
-                if insight['entities']:
-                    entities = ", ".join([e['text'] for e in insight['entities'][:3]])
-                    lines.append(f"  Technologies: {entities}")
-                lines.append("")
+        if unique_entities:
+            lines.append(f"Relevant technologies: {', '.join(unique_entities[:5])}")
+            lines.append("")
 
-        # Show current best solution
-        lines.append(f"Current Best Solution (Rated {primary_heuristic.get('rating', 0)}/5):")
-        lines.append(f"  Summary: {primary_insights['summary']}")
-
-        if primary_insights['key_techniques']:
-            techniques = ", ".join(primary_insights['key_techniques'][:3])
-            lines.append(f"  Approach: {techniques}")
-
-        if primary_insights['entities']:
-            entities = ", ".join([e['text'] for e in primary_insights['entities'][:3]])
-            lines.append(f"  Technologies: {entities}")
-
-        if primary_insights.get('confidence_indicators') and len(primary_insights['confidence_indicators']) > 0:
-            lines.append(f"  Quality: {primary_insights['confidence_indicators'][0]}")
-
-        lines.append("")
-        lines.append("YOUR TASK: Build upon these solutions to create an even better response.")
-        lines.append("[END HEURISTIC CHAIN]")
+        lines.append("Please provide a detailed, comprehensive response addressing the user's specific question.")
+        lines.append("---")
 
         return "\n".join(lines)

@@ -88,9 +88,9 @@ def print_context_verbose(heuristic_data: dict):
     if not _verbose_mode or not heuristic_data:
         return
 
-    console.print("\n[bold magenta]{'═' * 80}[/bold magenta]")
+    console.print("\n[bold magenta]" + "═" * 80 + "[/bold magenta]")
     console.print("[bold magenta]📚 HEURISTIC CONTEXT RETRIEVAL[/bold magenta]")
-    console.print("[bold magenta]{'═' * 80}[/bold magenta]\n")
+    console.print("[bold magenta]" + "═" * 80 + "[/bold magenta]\n")
 
     # Create a tree for hierarchical display
     tree = Tree("🎯 [bold]Matched Heuristic[/bold]")
@@ -149,9 +149,9 @@ def print_context_content_verbose(context: str):
     if not _verbose_mode or not context:
         return
 
-    console.print("\n[bold blue]{'─' * 80}[/bold blue]")
+    console.print("\n[bold blue]" + "─" * 80 + "[/bold blue]")
     console.print("[bold blue]📄 CONTEXT USED TO ENHANCE PROMPT[/bold blue]")
-    console.print("[bold blue]{'─' * 80}[/bold blue]\n")
+    console.print("[bold blue]" + "─" * 80 + "[/bold blue]\n")
 
     # Display context in a thin-bordered panel
     console.print(Panel(
@@ -168,9 +168,9 @@ def print_elasticsearch_verbose(operation: str, data: dict):
     if not _verbose_mode:
         return
 
-    console.print("\n[bold yellow]{'═' * 80}[/bold yellow]")
+    console.print("\n[bold yellow]" + "═" * 80 + "[/bold yellow]")
     console.print(f"[bold yellow]🗄️  ELASTICSEARCH: {operation.upper()}[/bold yellow]")
-    console.print("[bold yellow]{'═' * 80}[/bold yellow]\n")
+    console.print("[bold yellow]" + "═" * 80 + "[/bold yellow]\n")
 
     # Create table for data
     table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
@@ -198,9 +198,9 @@ def print_nlp_analysis_verbose(analysis: dict):
     if not _verbose_mode:
         return
 
-    console.print("\n[bold green]{'═' * 80}[/bold green]")
+    console.print("\n[bold green]" + "═" * 80 + "[/bold green]")
     console.print("[bold green]🧠 NLP ANALYSIS[/bold green]")
-    console.print("[bold green]{'═' * 80}[/bold green]\n")
+    console.print("[bold green]" + "═" * 80 + "[/bold green]\n")
 
     # Sentiment analysis
     console.print("[bold cyan]Sentiment Analysis:[/bold cyan]")

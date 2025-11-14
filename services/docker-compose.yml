@@ -165,6 +165,66 @@ services:
     networks:
       - vuhitra-network
 
+  # Ollama service - Optional LLM inference server
+  # Start with: docker compose --profile ollama up -d
+  # Uses lightweight model (tinyllama) that works on both CPU and GPU
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vuhitra-ollama
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"    # Ollama API port
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - vuhitra-network
+    # Optional: GPU support (uncomment if NVIDIA GPU available)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Ollama model initialization - pulls tinyllama on first start
+  # This is a one-time setup container
+  ollama-setup:
+    image: ollama/ollama:latest
+    container_name: vuhitra-ollama-setup
+    profiles:
+      - ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Waiting for Ollama service to be ready...' &&
+      sleep 5 &&
+      echo 'Pulling tinyllama model (lightweight, ~1GB, CPU-friendly)...' &&
+      ollama pull tinyllama &&
+      echo 'Model pulled successfully!' &&
+      echo 'Testing model...' &&
+      ollama run tinyllama 'Hello' &&
+      echo 'Ollama setup complete!'
+      "
+    networks:
+      - vuhitra-network
+    restart: "no"
+
 volumes:
   redis_data:
     driver: local
@@ -175,6 +235,8 @@ volumes:
   elasticsearch_data:
     driver: local
   elasticsearch_logs:
+    driver: local
+  ollama_data:
     driver: local
 
 networks:

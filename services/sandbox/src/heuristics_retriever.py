@@ -17,17 +17,21 @@ from elasticsearch import Elasticsearch
 from rapidfuzz import fuzz
 import spacy
 
-# Support both relative imports (for local tests) and absolute imports (for Docker)
+# Support both relative imports (for Docker) and absolute imports (for tests)
 try:
-    from src.errors_handler.error_handler import get_error_handler
     from heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
-    # For tests running from the test directory
+    # For tests running from project root
+    from services.sandbox.src.heuristics_config_loader import HeuristicsConfigLoader
+
+try:
+    from src.errors_handler.error_handler import get_error_handler
+except ImportError:
+    # For tests running from project root
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     from src.errors_handler.error_handler import get_error_handler
-    from heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()

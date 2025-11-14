@@ -7,15 +7,22 @@ import logging
 import threading
 from src.errors_handler.error_handler import get_error_handler
 
-# Support both relative imports (for local tests) and absolute imports (for Docker)
+# Support both relative imports (for Docker) and absolute imports (for tests)
 try:
     from .nlp_analyzer import NLPAnalyzer
     from .elasticsearch_client import ElasticSearchClient
     from .heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
-    from nlp_analyzer import NLPAnalyzer
-    from elasticsearch_client import ElasticSearchClient
-    from heuristics_config_loader import HeuristicsConfigLoader
+    try:
+        # For Docker container without package structure
+        from nlp_analyzer import NLPAnalyzer
+        from elasticsearch_client import ElasticSearchClient
+        from heuristics_config_loader import HeuristicsConfigLoader
+    except ImportError:
+        # For tests running from project root
+        from services.sandbox.src.nlp_analyzer import NLPAnalyzer
+        from services.sandbox.src.elasticsearch_client import ElasticSearchClient
+        from services.sandbox.src.heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()

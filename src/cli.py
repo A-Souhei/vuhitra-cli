@@ -278,8 +278,11 @@ def interactive_mode(model, verbose=False):
                     feedback_data['execution_time_ms'] = execution_time_ms
 
                     # Add auto-iteration metadata
+                    # Mark as is_auto_iteration if: we're in an iteration > 0, OR this is a rating=0
+                    # that could potentially be retried (not at max iterations yet)
+                    could_retry = (rating == 0 and iteration_number + 1 < max_iterations)
                     feedback_data['iteration_number'] = iteration_number
-                    feedback_data['is_auto_iteration'] = (iteration_number > 0)
+                    feedback_data['is_auto_iteration'] = (iteration_number > 0 or could_retry)
                     feedback_data['negative_weight_boost'] = negative_weight_boost
 
                     # Add heuristic context metadata if available
@@ -301,7 +304,14 @@ def interactive_mode(model, verbose=False):
                         console.print()
 
                     # Send to sandbox for heuristics processing
-                    send_feedback_to_sandbox(feedback_data, verbose=verbose)
+                    # Force synchronous processing during auto-iteration to ensure
+                    # the heuristic is stored before the next retry
+                    force_sync = (iteration_number > 0 or rating == 0)  # Sync for iterations and potential retries
+
+                    if verbose and could_retry:
+                        print_info("📝 Storing failed attempt as negative heuristic for next iteration...")
+
+                    send_feedback_to_sandbox(feedback_data, verbose=(verbose or force_sync))
 
                     # Check if we should auto-iterate (rating == 0)
                     if rating == 0:

@@ -105,6 +105,7 @@ transformer:
     compact_prompt: /api/compact-prompt
     compact_heuristics: /api/compact-heuristics
     create_matrix: /api/create-matrix-context
+    analyze_sentiment: /api/analyze-sentiment
     fix_typos: /api/fix-typos
 
 # Context Compacter configuration

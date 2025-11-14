@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.code_recognizer import CodeRecognizer
 from src.context_compacter import ContextCompacter
+from src.sentiment_analyzer import SentimentAnalyzer
 
 
 # Initialize Sentry (optional)
@@ -40,6 +41,7 @@ CORS(app)
 # Initialize services (lazy loading)
 code_recognizer = None
 context_compacter = None
+sentiment_analyzer = None
 
 
 def get_code_recognizer():
@@ -59,6 +61,16 @@ def get_context_compacter():
         context_compacter = ContextCompacter()
         print("Context Compacter initialized successfully")
     return context_compacter
+
+
+def get_sentiment_analyzer():
+    """Get or initialize sentiment analyzer (lazy loading)."""
+    global sentiment_analyzer
+    if sentiment_analyzer is None:
+        print("Initializing Sentiment Analyzer (loading transformer model)...")
+        sentiment_analyzer = SentimentAnalyzer()
+        print("Sentiment Analyzer initialized successfully")
+    return sentiment_analyzer
 
 
 @app.route('/health', methods=['GET'])
@@ -343,6 +355,69 @@ def create_matrix_context():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/analyze-sentiment', methods=['POST'])
+def analyze_sentiment():
+    """
+    Analyze sentiment using transformer model.
+
+    Request body:
+    {
+        "text": "string - the text to analyze",
+        "texts": ["list (optional) - multiple texts for batch analysis"]
+    }
+
+    Response (single text):
+    {
+        "label": "POSITIVE" or "NEGATIVE",
+        "score": 0.95,
+        "compound": 0.95  # VADER-compatible score (-1 to 1)
+    }
+
+    Response (batch):
+    {
+        "results": [
+            {"label": "POSITIVE", "score": 0.95, "compound": 0.95},
+            ...
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        # Check for batch or single text
+        if 'texts' in data:
+            # Batch analysis
+            texts = data['texts']
+            if not isinstance(texts, list):
+                return jsonify({'error': 'Field "texts" must be a list'}), 400
+
+            analyzer = get_sentiment_analyzer()
+            results = analyzer.analyze_batch(texts)
+
+            return jsonify({'results': results})
+
+        elif 'text' in data:
+            # Single text analysis
+            text = data['text']
+
+            analyzer = get_sentiment_analyzer()
+            result = analyzer.analyze(text)
+
+            return jsonify(result)
+
+        else:
+            return jsonify({'error': 'Missing required field: text or texts'}), 400
+
+    except Exception as e:
+        print(f"Error in analyze_sentiment: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/fix-typos', methods=['POST'])
 def fix_typos():
     """
@@ -393,6 +468,7 @@ if __name__ == '__main__':
     print("  POST /api/compact-prompt - Compact verbose prompts")
     print("  POST /api/compact-heuristics - Compact heuristics text")
     print("  POST /api/create-matrix-context - Create matrix-style context (MAIN)")
+    print("  POST /api/analyze-sentiment - Analyze sentiment with transformer model")
     print("  POST /api/fix-typos - Fix typos and grammar")
     print()
 

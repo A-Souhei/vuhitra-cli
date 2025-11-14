@@ -52,3 +52,10 @@ auto_pruning:
   similarity_threshold: 0.85       # Similarity threshold for identifying duplicate/similar heuristics
   min_rating_difference: 1         # Minimum rating difference to consider one heuristic "better"
   batch_size: 100                  # Number of heuristics to check per pruning batch
+
+# Sentiment analysis settings
+sentiment_analysis:
+  use_transformer: true            # Use transformer-based sentiment (true) or VADER (false)
+  transformer_url: "http://transformer:5050"  # Transformer service URL (use container name in Docker)
+  timeout_seconds: 5               # Timeout for transformer service calls
+  fallback_to_vader: true          # Fallback to VADER if transformer service unavailable

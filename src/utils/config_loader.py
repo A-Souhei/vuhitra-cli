@@ -100,17 +100,17 @@ class ConfigLoader:
     
     def get_default_model(self):
         """Get default model based on the active Ollama configuration (local/remote)"""
-        config_key = self._get_ollama_config_key()
+        config_key = self._get_ollama_mode()
         # Try to get model.default.local or model.default.remote
         default_model = self.get('model', 'default', config_key)
-        
+
         # Fallback: if model.default is a string (old config format)
         if default_model is None:
             default_model = self.get('model', 'default')
             # If still None or it's a dict without the key, use tinyllama as ultimate fallback
             if default_model is None or isinstance(default_model, dict):
                 default_model = 'tinyllama'
-        
+
         return default_model
     
     def get_available_models(self):

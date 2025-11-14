@@ -301,19 +301,20 @@ class TestChainInsightExtraction:
 
         formatted = result.get("formatted_insight", "")
 
-        # Check for anti-copying instructions
-        assert "DO NOT simply copy" in formatted
-        assert "INSPIRATION" in formatted or "inspiration" in formatted.lower()
-        assert "IMPROVE" in formatted or "improve" in formatted.lower()
-        assert "MATCH or EXCEED" in formatted
+        # Check for new system-prompt style format (no conversational instructions)
+        assert "# System Context: Progressive Technical Solutions" in formatted
+        assert "Multiple approaches have been analyzed" in formatted
+        assert "Recommended approaches" in formatted
 
-        # Check for chain evolution
-        assert "Iteration 1" in formatted
-        assert "Current Best Solution" in formatted
+        # Ensure no privacy-leaking information
+        assert "DO NOT simply copy" not in formatted
+        assert "rated" not in formatted.lower()
+        assert "5/5" not in formatted
+        assert "4/5" not in formatted
+        assert "Iteration 1" not in formatted
 
-        # Check for rating display
-        assert "5/5" in formatted
-        assert "4/5" in formatted
+        # Check for techniques and technologies (the actual useful info)
+        assert "old_technique" in formatted or "technique1" in formatted
 
 
 class TestChainEndToEnd:

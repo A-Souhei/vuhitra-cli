@@ -1,39 +1,6 @@
 # syntax=docker/dockerfile:1.4
 
 # Use Ubuntu as base OS
-FROM ubuntu:24.04 AS r-packages
-
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install R and build dependencies
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    r-base r-base-dev gcc g++ gfortran \
-    libcurl4-openssl-dev libssl-dev libxml2-dev \
-    libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
-    libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install R packages with caching
-RUN --mount=type=cache,target=/tmp/downloaded_packages,sharing=shared \
-    --mount=type=cache,target=/tmp/R-compile,sharing=shared \
-    mkdir -p /usr/local/lib/R/site-library && \
-    Rscript -e "options(repos = list(CRAN = 'https://cloud.r-project.org')); \
-    dir.create('/tmp/downloaded_packages', showWarnings = FALSE, recursive = TRUE); \
-    dir.create('/tmp/R-compile', showWarnings = FALSE, recursive = TRUE); \
-    Sys.setenv(R_COMPILE_PKGS = '1'); \
-    Sys.setenv(TMPDIR = '/tmp/R-compile'); \
-    install.packages(c( \
-      'data.table', 'lubridate', 'zoo', \
-      'car', 'MASS', 'lmtest', 'sandwich', 'psych', 'boot', \
-      'tm', 'textclean', 'stringr', 'tidytext', 'quanteda', \
-      'dplyr', 'ggplot2', 'tidyr', 'readr', 'purrr', 'tibble', 'forcats' \
-    ), destdir = '/tmp/downloaded_packages', Ncpus = 4)"
-
-# Final stage
 FROM ubuntu:24.04
 
 # Set working directory
@@ -50,15 +17,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3.12-dev python3-pip curl r-base \
-    libcurl4-openssl-dev libssl-dev libxml2-dev \
-    libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
-    libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev && \
+    python3.12 python3.12-venv python3.12-dev python3-pip curl && \
     rm -rf /var/lib/apt/lists/*
-
-# Copy R packages from the build stage
-COPY --from=r-packages /usr/local/lib/R/site-library /usr/local/lib/R/site-library
-COPY --from=r-packages /usr/lib/R/site-library /usr/lib/R/site-library
 
 # Set python3.12 as default python
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \

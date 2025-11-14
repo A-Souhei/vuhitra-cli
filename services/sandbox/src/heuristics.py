@@ -50,23 +50,128 @@ class Heuristics:
         self.min_rating_for_chaining = self.config.get_min_rating_for_chaining()
         self.max_chain_depth = self.config.get_max_chain_depth()
 
-    def process_feedback(self, feedback_data: Dict) -> Dict[str, str]:
+    def process_feedback(self, feedback_data: Dict, verbose: bool = False) -> Dict[str, str]:
         """
         Process feedback data: analyze and store in ElasticSearch.
-        Background thread handles the actual processing.
-        
+        Background thread handles the actual processing unless verbose is True.
+
         Args:
             feedback_data: Dict containing prompt, response, rating, timestamp, execution_time_ms
-            
+            verbose: If True, process synchronously and return detailed analysis
+
         Returns:
-            Dict with status and message
+            Dict with status and message (and analysis data if verbose)
         """
-        # Start background processing
-        thread = threading.Thread(target=self._analyze_and_store, args=(feedback_data,))
-        thread.daemon = True
-        thread.start()
-        
-        return {"status": "acknowledged", "message": "Feedback received and processing"}
+        if verbose:
+            # Process synchronously and return analysis results
+            return self._analyze_and_store_sync(feedback_data)
+        else:
+            # Start background processing (original behavior)
+            thread = threading.Thread(target=self._analyze_and_store, args=(feedback_data,))
+            thread.daemon = True
+            thread.start()
+
+            return {"status": "acknowledged", "message": "Feedback received and processing"}
+
+    def _analyze_and_store_sync(self, feedback_data: Dict) -> Dict:
+        """
+        Perform NLP analysis and store in ElasticSearch synchronously.
+        Returns detailed analysis results for verbose mode.
+
+        Args:
+            feedback_data: Feedback data to process
+
+        Returns:
+            Dict with status, analysis results, and Elasticsearch document
+        """
+        current_step = "initialization"
+        try:
+            prompt = feedback_data.get("prompt", "")
+            response = feedback_data.get("response", "")
+
+            # Analyze prompt
+            current_step = "prompt_sentiment_analysis"
+            prompt_sentiment = self.nlp_analyzer.analyze_sentiment(prompt)
+
+            current_step = "prompt_keyword_extraction"
+            prompt_keywords = self.nlp_analyzer.extract_keywords(prompt)
+
+            current_step = "prompt_word_count"
+            prompt_word_count = self.nlp_analyzer.count_words(prompt)
+
+            # Analyze response
+            current_step = "response_sentiment_analysis"
+            response_sentiment = self.nlp_analyzer.analyze_sentiment(response)
+
+            current_step = "response_keyword_extraction"
+            response_keywords = self.nlp_analyzer.extract_keywords(response)
+
+            current_step = "code_detection"
+            is_code, code_purpose = self.nlp_analyzer.detect_code(response)
+
+            current_step = "response_word_count"
+            response_word_count = self.nlp_analyzer.count_words(response)
+
+            # Build complete data structure
+            current_step = "building_data_structure"
+            complete_data = {
+                "prompt": prompt,
+                "prompt_keywords": prompt_keywords,
+                "prompt_sentiment_vader": prompt_sentiment["vader_score"],
+                "prompt_sentiment_spacy": prompt_sentiment["spacy_score"],
+                "prompt_word_count": prompt_word_count,
+                "response": response,
+                "response_keywords": response_keywords,
+                "response_sentiment_vader": response_sentiment["vader_score"],
+                "response_sentiment_spacy": response_sentiment["spacy_score"],
+                "is_code_response": is_code,
+                "code_purpose": code_purpose,
+                "response_word_count": response_word_count,
+                "rating": feedback_data.get("rating"),
+                "timestamp": feedback_data.get("timestamp"),
+                "execution_time_ms": feedback_data.get("execution_time_ms", 0)
+            }
+
+            # Add chain metadata if chaining is enabled
+            current_step = "building_chain_metadata"
+            chain_metadata = self._build_chain_metadata(feedback_data)
+            complete_data.update(chain_metadata)
+
+            # Store in ElasticSearch
+            current_step = "storing_to_elasticsearch"
+            success = self.es_client.save_feedback(complete_data)
+
+            # Return detailed results
+            return {
+                "status": "processed",
+                "message": "Feedback processed and stored successfully" if success else "Feedback processed but storage failed",
+                "success": success,
+                "nlp_analysis": {
+                    "sentiment_vader": prompt_sentiment["vader_score"],
+                    "keywords": prompt_keywords,
+                    "word_count": prompt_word_count,
+                    "is_code": is_code,
+                    "code_purpose": code_purpose
+                },
+                "elasticsearch_doc": complete_data
+            }
+
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "process_feedback_sync",
+                    "step": current_step,
+                    "has_prompt": bool(feedback_data.get("prompt")),
+                    "has_response": bool(feedback_data.get("response")),
+                    "rating": feedback_data.get("rating")
+                }
+            )
+            return {
+                "status": "error",
+                "message": f"Failed to process feedback at step: {current_step}",
+                "error": str(e)
+            }
 
     def _analyze_and_store(self, feedback_data: Dict):
         """

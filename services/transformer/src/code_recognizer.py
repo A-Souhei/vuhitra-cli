@@ -18,8 +18,8 @@ class CodeRecognizer:
         self.code_patterns = [
             # Code blocks (markdown, triple backticks)
             r'```[\s\S]*?```',
-            # Indented code blocks (4+ spaces)
-            r'^([ ]{4,}|\t+).*$',
+            # Indented code blocks (8+ spaces or tab+4 spaces to avoid false positives)
+            r'^([ ]{8,}|\t[ ]{4,}).*$',
             # Common programming keywords
             r'\b(def|class|import|from|function|const|let|var|public|private|protected|static|void|int|string|bool|return|if|else|for|while|switch|case)\b',
             # Common operators and syntax
@@ -93,7 +93,7 @@ class CodeRecognizer:
         for pattern in self.code_patterns:
             if re.search(pattern, text, re.MULTILINE):
                 matches += 1
-                if matches >= 3:  # Threshold for confidence
+                if matches >= 4:  # Threshold for confidence (increased to reduce false positives)
                     return True
 
         # Check for language-specific indicators

@@ -6,7 +6,8 @@ Provides predictable, deterministic compaction to minimize hallucinations.
 """
 
 import re
-from typing import Dict, List, Optional
+import numpy as np
+from typing import Dict, List, Optional, Any
 from keybert import KeyBERT
 from sentence_transformers import SentenceTransformer
 
@@ -149,11 +150,15 @@ class ContextCompacter:
                 # Compare with all kept sentences
                 is_unique = True
                 for j in keep_indices:
-                    # Calculate cosine similarity
-                    similarity = embeddings[i] @ embeddings[j] / (
-                        (embeddings[i] @ embeddings[i]) ** 0.5 *
-                        (embeddings[j] @ embeddings[j]) ** 0.5
-                    )
+                    # Calculate cosine similarity using numpy for numerical stability
+                    norm_i = np.linalg.norm(embeddings[i])
+                    norm_j = np.linalg.norm(embeddings[j])
+
+                    # Avoid division by zero
+                    if norm_i == 0 or norm_j == 0:
+                        similarity = 0.0
+                    else:
+                        similarity = embeddings[i] @ embeddings[j] / (norm_i * norm_j)
 
                     if similarity >= self.redundancy_threshold:
                         is_unique = False
@@ -167,7 +172,7 @@ class ContextCompacter:
             print(f"Error removing redundancy: {e}")
             return sentences
 
-    def compact_text(self, text: str, max_sentences: Optional[int] = None) -> Dict[str, any]:
+    def compact_text(self, text: str, max_sentences: Optional[int] = None) -> Dict[str, Any]:
         """
         Compact text by extracting key information.
 
@@ -236,18 +241,19 @@ class ContextCompacter:
             'sentence_count_after': len(compacted_sentences)
         }
 
-    def compact_prompt(self, prompt: str) -> Dict[str, any]:
+    def compact_prompt(self, prompt: str, threshold: int = 500) -> Dict[str, Any]:
         """
         Compact a user prompt if it's too verbose.
 
         Args:
             prompt: The user's prompt
+            threshold: Character count threshold for compaction (default: 500)
 
         Returns:
             Dictionary with compaction results
         """
-        # Only compact if prompt is very long (> 500 chars)
-        if len(prompt) < 500:
+        # Only compact if prompt exceeds threshold
+        if len(prompt) < threshold:
             return {
                 'original_prompt': prompt,
                 'compacted_prompt': prompt,
@@ -265,7 +271,7 @@ class ContextCompacter:
             'compression_ratio': result['compression_ratio']
         }
 
-    def compact_heuristics(self, heuristics_text: str) -> Dict[str, any]:
+    def compact_heuristics(self, heuristics_text: str) -> Dict[str, Any]:
         """
         Compact heuristics/context from the sandbox service.
 
@@ -297,7 +303,7 @@ class ContextCompacter:
         heuristics: str = "",
         context: str = "",
         code_blocks: List[Dict] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Create a matrix-style context with all components.
 

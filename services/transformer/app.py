@@ -38,6 +38,10 @@ if sentry_dsn:
 app = Flask(__name__)
 CORS(app)
 
+# Input validation constants
+MAX_TEXT_LENGTH = 100000  # 100KB of text
+MIN_TEXT_LENGTH = 1
+
 # Initialize services (lazy loading)
 code_recognizer = None
 context_compacter = None
@@ -71,6 +75,30 @@ def get_sentiment_analyzer():
         sentiment_analyzer = SentimentAnalyzer()
         print("Sentiment Analyzer initialized successfully")
     return sentiment_analyzer
+
+
+def validate_text_input(text: str, field_name: str = "text") -> tuple:
+    """
+    Validate text input for size and emptiness.
+
+    Args:
+        text: The text to validate
+        field_name: Name of the field (for error messages)
+
+    Returns:
+        Tuple of (is_valid: bool, error_message: str or None)
+    """
+    if not text or not isinstance(text, str):
+        return False, f"Field '{field_name}' must be a non-empty string"
+
+    text_stripped = text.strip()
+    if len(text_stripped) < MIN_TEXT_LENGTH:
+        return False, f"Field '{field_name}' is empty or too short"
+
+    if len(text) > MAX_TEXT_LENGTH:
+        return False, f"Field '{field_name}' exceeds maximum length of {MAX_TEXT_LENGTH} characters"
+
+    return True, None
 
 
 @app.route('/health', methods=['GET'])
@@ -107,6 +135,12 @@ def recognize_code():
             return jsonify({'error': 'Missing required field: text'}), 400
 
         text = data['text']
+
+        # Validate input
+        is_valid, error_msg = validate_text_input(text, 'text')
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+
         recognizer = get_code_recognizer()
 
         # Separate code and text
@@ -148,6 +182,12 @@ def extract_keywords():
             return jsonify({'error': 'Missing required field: text'}), 400
 
         text = data['text']
+
+        # Validate input
+        is_valid, error_msg = validate_text_input(text, 'text')
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+
         top_n = data.get('top_n', 10)
 
         compacter = get_context_compacter()
@@ -191,6 +231,12 @@ def compact_text():
             return jsonify({'error': 'Missing required field: text'}), 400
 
         text = data['text']
+
+        # Validate input
+        is_valid, error_msg = validate_text_input(text, 'text')
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+
         max_sentences = data.get('max_sentences', None)
 
         compacter = get_context_compacter()
@@ -210,7 +256,8 @@ def compact_prompt():
 
     Request body:
     {
-        "prompt": "string - the user's prompt"
+        "prompt": "string - the user's prompt",
+        "threshold": number (optional) - character count threshold (default: 500)
     }
 
     Response:
@@ -229,8 +276,15 @@ def compact_prompt():
 
         prompt = data['prompt']
 
+        # Validate input
+        is_valid, error_msg = validate_text_input(prompt, 'prompt')
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+
+        threshold = data.get('threshold', 500)
+
         compacter = get_context_compacter()
-        result = compacter.compact_prompt(prompt)
+        result = compacter.compact_prompt(prompt, threshold=threshold)
 
         return jsonify(result)
 
@@ -263,6 +317,12 @@ def compact_heuristics():
             return jsonify({'error': 'Missing required field: heuristics'}), 400
 
         heuristics = data['heuristics']
+
+        # Validate input (allow empty heuristics as it's optional context)
+        if heuristics and isinstance(heuristics, str):
+            is_valid, error_msg = validate_text_input(heuristics, 'heuristics')
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
 
         compacter = get_context_compacter()
         result = compacter.compact_heuristics(heuristics)
@@ -321,9 +381,31 @@ def create_matrix_context():
             return jsonify({'error': 'Missing required field: prompt'}), 400
 
         prompt = data['prompt']
+
+        # Validate prompt (required)
+        is_valid, error_msg = validate_text_input(prompt, 'prompt')
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+
         heuristics = data.get('heuristics', '')
         context = data.get('context', '')
         raw_text = data.get('raw_text', '')
+
+        # Validate optional fields if provided
+        if heuristics:
+            is_valid, error_msg = validate_text_input(heuristics, 'heuristics')
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
+
+        if context:
+            is_valid, error_msg = validate_text_input(context, 'context')
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
+
+        if raw_text:
+            is_valid, error_msg = validate_text_input(raw_text, 'raw_text')
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
 
         # Step 1: Recognize and extract code from any raw text
         code_blocks = []
@@ -394,6 +476,15 @@ def analyze_sentiment():
             if not isinstance(texts, list):
                 return jsonify({'error': 'Field "texts" must be a list'}), 400
 
+            if len(texts) == 0:
+                return jsonify({'error': 'Field "texts" cannot be empty'}), 400
+
+            # Validate each text in the batch
+            for i, text in enumerate(texts):
+                is_valid, error_msg = validate_text_input(text, f'texts[{i}]')
+                if not is_valid:
+                    return jsonify({'error': error_msg}), 400
+
             analyzer = get_sentiment_analyzer()
             results = analyzer.analyze_batch(texts)
 
@@ -402,6 +493,11 @@ def analyze_sentiment():
         elif 'text' in data:
             # Single text analysis
             text = data['text']
+
+            # Validate input
+            is_valid, error_msg = validate_text_input(text, 'text')
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
 
             analyzer = get_sentiment_analyzer()
             result = analyzer.analyze(text)
@@ -441,6 +537,11 @@ def fix_typos():
             return jsonify({'error': 'Missing required field: text'}), 400
 
         text = data['text']
+
+        # Validate input
+        is_valid, error_msg = validate_text_input(text, 'text')
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
 
         compacter = get_context_compacter()
         fixed_text = compacter.fix_typos_and_grammar(text)

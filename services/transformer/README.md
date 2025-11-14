@@ -180,7 +180,7 @@ POST /api/fix-typos
 Content-Type: application/json
 
 {
-  "text": "Text with typos and grammer issues..."
+  "text": "Text with typos and grammar issues..."
 }
 ```
 

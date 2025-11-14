@@ -8,6 +8,7 @@ for context compaction and text processing.
 import requests
 import time
 import logging
+import threading
 from typing import Dict, Optional, Any
 from src.utils.config_loader import ConfigLoader
 from src.errors_handler import handle_exception
@@ -185,7 +186,11 @@ class TransformerClient:
             default='/api/compact-prompt'
         )
 
-        data = {'prompt': prompt}
+        # Pass threshold to API for consistency
+        data = {
+            'prompt': prompt,
+            'threshold': threshold
+        }
         return self._make_request(endpoint, data, verbose=verbose)
 
     def recognize_code(
@@ -249,13 +254,14 @@ class TransformerClient:
         return self._make_request(endpoint, data, verbose=verbose)
 
 
-# Singleton instance
+# Singleton instance with thread-safe initialization
 _transformer_client = None
+_transformer_client_lock = threading.Lock()
 
 
 def get_transformer_client(config_loader: Optional[ConfigLoader] = None) -> TransformerClient:
     """
-    Get the singleton transformer client instance.
+    Get the singleton transformer client instance (thread-safe).
 
     Args:
         config_loader: Optional ConfigLoader instance
@@ -264,6 +270,12 @@ def get_transformer_client(config_loader: Optional[ConfigLoader] = None) -> Tran
         TransformerClient instance
     """
     global _transformer_client
+
+    # Double-check locking pattern for thread safety
     if _transformer_client is None:
-        _transformer_client = TransformerClient(config_loader)
+        with _transformer_client_lock:
+            # Check again inside the lock to prevent race condition
+            if _transformer_client is None:
+                _transformer_client = TransformerClient(config_loader)
+
     return _transformer_client

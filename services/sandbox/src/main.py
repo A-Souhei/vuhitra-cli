@@ -253,7 +253,8 @@ def analyze_feedback():
         rating: int,                          # User rating 0-5 (required)
         timestamp: str,                       # ISO timestamp (required)
         execution_time_ms: int,               # Execution time (optional)
-        contexted_heuristic_ids: list[str]    # IDs of heuristics in context (optional, for chaining)
+        contexted_heuristic_ids: list[str],   # IDs of heuristics in context (optional, for chaining)
+        verbose: bool                         # Enable verbose debugging output (optional, default: False)
     }
     """
     try:
@@ -279,7 +280,10 @@ def analyze_feedback():
             if not all(isinstance(id, str) for id in data['contexted_heuristic_ids']):
                 return jsonify({"error": "contexted_heuristic_ids must contain only strings"}), 400
 
-        result = heuristics.process_feedback(data)
+        # Get verbose flag from request
+        verbose = data.pop('verbose', False)
+
+        result = heuristics.process_feedback(data, verbose=verbose)
         return jsonify(result), 202  # 202 Accepted (async processing)
 
     except Exception as e:
@@ -294,14 +298,16 @@ def retrieve_similar():
 
     Expects JSON: {
         prompt: str,              # User's input prompt (required)
-        min_rating: int           # Minimum rating threshold (optional, default: 3)
+        min_rating: int,          # Minimum rating threshold (optional, default: 3)
+        verbose: bool             # Enable verbose debugging output (optional, default: False)
     }
 
     Returns: {
         matched_heuristic: dict,  # The best matching document
         confidence_score: float,  # Overall confidence (0-1)
         insights: dict,           # Extracted insights
-        scoring_breakdown: dict   # Individual scores for each method
+        scoring_breakdown: dict,  # Individual scores for each method
+        chain: list               # Chain of parent heuristics (if verbose)
     }
     """
     try:
@@ -315,6 +321,7 @@ def retrieve_similar():
 
         prompt = data['prompt']
         min_rating = data.get('min_rating', 3)
+        verbose = data.get('verbose', False)
 
         # Validate inputs
         if not isinstance(prompt, str) or len(prompt.strip()) == 0:
@@ -351,14 +358,26 @@ def retrieve_similar():
         else:
             insights = insight_extractor.extract_insights(result['matched_heuristic'])
 
-        return jsonify({
+        response_data = {
             "matched_heuristic": result['matched_heuristic'],
             "confidence_score": result['confidence_score'],
             "insights": insights,
             "scoring_breakdown": result['scoring_breakdown'],
             "chain_length": len(chain),
             "has_chain": len(chain) > 0
-        }), 200
+        }
+
+        # Add verbose debugging information
+        if verbose:
+            response_data["chain"] = chain
+            response_data["retrieval_metadata"] = {
+                "total_candidates": result.get('total_candidates', 0),
+                "stage1_filtered": result.get('stage1_filtered', 0),
+                "stage2_filtered": result.get('stage2_filtered', 0),
+                "final_selected": 1 if result['matched_heuristic'] else 0
+            }
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         raise SandboxException("Failed to retrieve similar heuristic",

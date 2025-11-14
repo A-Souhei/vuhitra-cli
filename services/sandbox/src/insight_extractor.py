@@ -556,7 +556,8 @@ Please provide a comprehensive response addressing the user's specific question.
                 summary=summary,
                 anti_techniques=anti_techniques,
                 entities=entities,
-                warning_indicators=warning_indicators
+                warning_indicators=warning_indicators,
+                failed_response=response  # Include the actual failed response
             )
 
             return {
@@ -657,7 +658,8 @@ Please provide a comprehensive response addressing the user's specific question.
         summary: str,
         anti_techniques: List[str],
         entities: List[Dict],
-        warning_indicators: List[str]
+        warning_indicators: List[str],
+        failed_response: str = ""
     ) -> str:
         """
         Format negative insights as anti-pattern warnings for LLM context.
@@ -667,6 +669,7 @@ Please provide a comprehensive response addressing the user's specific question.
             anti_techniques: List of techniques to avoid
             entities: List of entities that were problematic
             warning_indicators: Warning indicators
+            failed_response: The actual failed response to show as example of what NOT to do
 
         Returns:
             Formatted string ready for LLM context injection as anti-pattern
@@ -678,6 +681,20 @@ Please provide a comprehensive response addressing the user's specific question.
         lines.append("")
         lines.append(f"⚠️  {summary}")
         lines.append("")
+
+        # Show the failed response as an example of what NOT to do
+        if failed_response:
+            # Truncate if too long
+            max_response_length = 300
+            truncated_response = failed_response[:max_response_length]
+            if len(failed_response) > max_response_length:
+                truncated_response += "..."
+
+            lines.append("Example of UNSUCCESSFUL response (DO NOT replicate this):")
+            lines.append("```")
+            lines.append(truncated_response)
+            lines.append("```")
+            lines.append("")
 
         # Add techniques as things to avoid
         if anti_techniques:
@@ -692,7 +709,9 @@ Please provide a comprehensive response addressing the user's specific question.
             lines.append(f"Technologies that had issues in this context: {', '.join(entity_names)}")
             lines.append("")
 
-        lines.append("Please provide an alternative approach that addresses the user's question more effectively.")
+        lines.append("Please provide a DIRECT, CORRECT answer to the user's question.")
+        lines.append("Do NOT provide instructions, meta-commentary, or alternative approaches.")
+        lines.append("Focus on giving the actual answer that would satisfy the user.")
         lines.append("---")
 
         return "\n".join(lines)

@@ -8,17 +8,21 @@ import logging
 from typing import Dict, List, Any
 import spacy
 
-# Support both relative imports (for local tests) and absolute imports (for Docker)
+# Support both relative imports (for Docker) and absolute imports (for tests)
 try:
-    from src.errors_handler.error_handler import get_error_handler
     from heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
-    # For tests running from the test directory
+    # For tests running from project root
+    from services.sandbox.src.heuristics_config_loader import HeuristicsConfigLoader
+
+try:
+    from src.errors_handler.error_handler import get_error_handler
+except ImportError:
+    # For tests running from project root
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     from src.errors_handler.error_handler import get_error_handler
-    from heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()
@@ -414,3 +418,136 @@ Summary: High-quality response found (rated {rating}/5)
             'confidence_indicators': [f"Rated {rating}/5"],
             'formatted_insight': formatted
         }
+
+    def extract_chain_insights(
+        self,
+        matched_heuristic: Dict,
+        chain: List[Dict]
+    ) -> Dict[str, Any]:
+        """
+        Extract insights from a matched heuristic and its parent chain.
+
+        This creates a rich context showing the evolution of solutions,
+        with explicit instructions to iterate and improve rather than copy.
+
+        Args:
+            matched_heuristic: The primary matched heuristic
+            chain: List of parent heuristics (ordered from root to immediate parent)
+
+        Returns:
+            Dict[str, Any]: If `chain` is non-empty, returns a dictionary containing all fields from
+            `extract_insights()` plus:
+                - chain_insights: List of parent insight summaries
+                - has_chain: Boolean indicating chain presence (True)
+                - formatted_insight: Chain-aware formatting (overwrites standard format)
+            If `chain` is empty or an exception occurs, returns the result of `extract_insights()`
+            (without the above extra fields).
+        """
+        if not chain:
+            # No chain, use standard insight extraction
+            return self.extract_insights(matched_heuristic)
+
+        try:
+            # Extract insights from the primary match
+            primary_insights = self.extract_insights(matched_heuristic)
+
+            # Extract insights from chain parents
+            chain_insights = []
+            for parent in chain:
+                parent_insight = self.extract_insights(parent)
+                chain_insights.append({
+                    'rating': parent.get('rating', 0),
+                    'summary': parent_insight.get('summary', ''),
+                    'key_techniques': parent_insight.get('key_techniques', []),
+                    'entities': parent_insight.get('entities', [])
+                })
+
+            # Format as chain context with anti-copying instructions
+            formatted_chain = self._format_chain_for_injection(
+                primary_heuristic=matched_heuristic,
+                primary_insights=primary_insights,
+                chain_insights=chain_insights
+            )
+
+            return {
+                **primary_insights,
+                'chain_insights': chain_insights,
+                'formatted_insight': formatted_chain,
+                'has_chain': True
+            }
+
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "extract_chain_insights",
+                    "chain_length": len(chain)
+                }
+            )
+            # Fallback to standard extraction
+            return self.extract_insights(matched_heuristic)
+
+    def _format_chain_for_injection(
+        self,
+        primary_heuristic: Dict,
+        primary_insights: Dict,
+        chain_insights: List[Dict]
+    ) -> str:
+        """
+        Format chain insights with anti-copying instructions.
+
+        Args:
+            primary_heuristic: The primary matched heuristic
+            primary_insights: Extracted insights from primary match
+            chain_insights: List of insights from parent heuristics
+
+        Returns:
+            Formatted string with chain context and iteration instructions
+        """
+        lines = []
+        lines.append("[HEURISTIC CHAIN: EVOLUTION OF SUCCESSFUL SOLUTIONS]")
+        lines.append("")
+        lines.append("IMPORTANT INSTRUCTIONS:")
+        lines.append("- The following shows how similar problems were solved previously")
+        lines.append("- DO NOT simply copy these solutions")
+        lines.append("- Use them as INSPIRATION to create an even better response")
+        lines.append(f"- Your goal is to MATCH or EXCEED the quality that received {primary_heuristic.get('rating', 0)}/5 rating")
+        lines.append("- ITERATE and IMPROVE on these approaches")
+        lines.append("")
+
+        # Show chain evolution (oldest to newest)
+        if chain_insights:
+            lines.append(f"--- Solution Evolution (Chain of {len(chain_insights) + 1} iterations) ---")
+            lines.append("")
+
+            for idx, insight in enumerate(chain_insights, 1):
+                lines.append(f"Iteration {idx} (Rated {insight['rating']}/5):")
+                lines.append(f"  Summary: {insight['summary']}")
+                if insight['key_techniques']:
+                    techniques = ", ".join(insight['key_techniques'][:3])
+                    lines.append(f"  Approach: {techniques}")
+                if insight['entities']:
+                    entities = ", ".join([e['text'] for e in insight['entities'][:3]])
+                    lines.append(f"  Technologies: {entities}")
+                lines.append("")
+
+        # Show current best solution
+        lines.append(f"Current Best Solution (Rated {primary_heuristic.get('rating', 0)}/5):")
+        lines.append(f"  Summary: {primary_insights['summary']}")
+
+        if primary_insights['key_techniques']:
+            techniques = ", ".join(primary_insights['key_techniques'][:3])
+            lines.append(f"  Approach: {techniques}")
+
+        if primary_insights['entities']:
+            entities = ", ".join([e['text'] for e in primary_insights['entities'][:3]])
+            lines.append(f"  Technologies: {entities}")
+
+        if primary_insights.get('confidence_indicators') and len(primary_insights['confidence_indicators']) > 0:
+            lines.append(f"  Quality: {primary_insights['confidence_indicators'][0]}")
+
+        lines.append("")
+        lines.append("YOUR TASK: Build upon these solutions to create an even better response.")
+        lines.append("[END HEURISTIC CHAIN]")
+
+        return "\n".join(lines)

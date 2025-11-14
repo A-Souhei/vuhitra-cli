@@ -22,9 +22,17 @@ def test_config():
             'traces_sample_rate': 1.0
         },
         'ollama': {
-            'host': 'localhost',
-            'port': 11434,
-            'protocol': 'http'
+            'use': 'local',
+            'local': {
+                'host': 'localhost',
+                'port': 11434,
+                'protocol': 'http'
+            },
+            'remote': {
+                'host': '192.168.31.23',
+                'port': 11434,
+                'protocol': 'http'
+            }
         }
     }
 
@@ -102,18 +110,58 @@ class TestConfigLoader:
         assert sentry_config['environment'] == 'development'
         assert sentry_config['traces_sample_rate'] == 1.0
     
-    def test_get_ollama_settings(self, temp_config_file):
-        """Test getting Ollama settings."""
+    def test_get_ollama_settings_local(self, temp_config_file):
+        """Test getting Ollama settings with local configuration."""
         loader = ConfigLoader(config_path=temp_config_file)
-        
+
         host = loader.get_ollama_host()
         assert host == 'localhost'
-        
+
         port = loader.get_ollama_port()
         assert port == 11434
-        
+
         protocol = loader.get_ollama_protocol()
         assert protocol == 'http'
+
+    def test_get_ollama_settings_remote(self):
+        """Test getting Ollama settings with remote configuration."""
+        remote_config = {
+            'ollama': {
+                'use': 'remote',
+                'local': {
+                    'host': 'localhost',
+                    'port': 11434,
+                    'protocol': 'http'
+                },
+                'remote': {
+                    'host': '192.168.31.23',
+                    'port': 11434,
+                    'protocol': 'http'
+                }
+            }
+        }
+
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w',
+            suffix='.yaml',
+            delete=False
+        )
+        yaml.dump(remote_config, temp_file)
+        temp_file.close()
+
+        try:
+            loader = ConfigLoader(config_path=temp_file.name)
+
+            host = loader.get_ollama_host()
+            assert host == '192.168.31.23'
+
+            port = loader.get_ollama_port()
+            assert port == 11434
+
+            protocol = loader.get_ollama_protocol()
+            assert protocol == 'http'
+        finally:
+            os.unlink(temp_file.name)
     
     def test_missing_config_file(self, capsys):
         """Test handling of missing configuration file."""

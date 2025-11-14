@@ -1,10 +1,10 @@
 name: Tests
 
 on:
-  push:
-    branches: [ master, main, develop ]
+  # Only run on pull requests (right before merge)
   pull_request:
     branches: [ master, main, develop ]
+  # Allow manual trigger if needed
   workflow_dispatch:
 
 jobs:
@@ -29,62 +29,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Create .env file
+    - name: Create .env file for config tests
       run: |
         cd services
         cp .env.example .env
         sed -i 's/REDIS_PASSWORD=.*/REDIS_PASSWORD=testpassword123/' .env
 
-    - name: Start sandbox container
-      run: |
-        cd services
-        docker compose up -d
-        echo "Waiting for container to be healthy..."
-        sleep 10
-        docker compose ps
-    
-    - name: Wait for services to be ready
-      run: |
-        export REDIS_PASSWORD=testpassword123
-        echo "Waiting for Redis to be ready..."
-        for i in {1..30}; do
-          if docker exec -e REDISCLI_AUTH="testpassword123" vuhitra-redis redis-cli ping > /dev/null 2>&1; then
-            echo "Redis is ready!"
-            break
-          fi
-          echo "Waiting for Redis... ($i/30)"
-          sleep 2
-        done
-        
-        echo "Waiting for Flask app to be ready..."
-        for i in {1..30}; do
-          if curl -f http://localhost:18001/health > /dev/null 2>&1; then
-            echo "Flask app is ready!"
-            break
-          fi
-          echo "Waiting for Flask app... ($i/30)"
-          sleep 2
-        done
-    
-    - name: Run tests
+    - name: Run non-container tests
       env:
         REDIS_PASSWORD: testpassword123
       run: |
         chmod +x run_tests.sh
+        # Run only non-container tests (mocked tests) to reduce Actions consumption
         ./run_tests.sh -v
-    
-    - name: Show container logs on failure
-      if: failure()
-      run: |
-        cd services
-        docker compose logs
-    
-    - name: Stop sandbox container
-      if: always()
-      run: |
-        cd services
-        export REDIS_PASSWORD=testpassword123
-        docker compose down -v
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4

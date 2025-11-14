@@ -74,7 +74,11 @@ class ElasticSearchClient:
                         "rating": {"type": "integer"},
                         "timestamp": {"type": "date"},
                         "processed_at": {"type": "date"},
-                        "execution_time_ms": {"type": "long"}
+                        "execution_time_ms": {"type": "long"},
+                        "parent_heuristic_id": {"type": "keyword"},
+                        "chain_depth": {"type": "integer"},
+                        "chain_ids": {"type": "keyword"},
+                        "contexted_heuristic_ids": {"type": "keyword"}
                     }
                 }
             }
@@ -115,3 +119,115 @@ class ElasticSearchClient:
     def is_connected(self) -> bool:
         """Check if connected to ElasticSearch."""
         return self.es is not None and self.es.ping()
+
+    def get_by_id(self, doc_id: str) -> Dict:
+        """
+        Retrieve a heuristic by its document ID.
+
+        Args:
+            doc_id: ElasticSearch document ID
+
+        Returns:
+            Dict: Document data if found
+            None: If document not found or error occurs
+        """
+        if not self.es:
+            logger.warning("ElasticSearch not connected")
+            return None
+
+        try:
+            result = self.es.get(index=self.index_name, id=doc_id)
+            return result["_source"] if result else None
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "get_by_id",
+                    "doc_id": doc_id,
+                    "index": self.index_name
+                }
+            )
+            return None
+
+    def get_chain(self, doc_id: str) -> list:
+        """
+        Retrieve the full chain of parent heuristics for a given document.
+
+        Args:
+            doc_id: ElasticSearch document ID
+
+        Returns:
+            list: List of parent heuristics ordered from root to immediate parent
+        """
+        if not self.es:
+            logger.warning("ElasticSearch not connected")
+            return []
+
+        try:
+            chain = []
+            current_doc = self.get_by_id(doc_id)
+
+            if not current_doc:
+                return []
+
+            # Get chain_ids if available
+            chain_ids = current_doc.get("chain_ids", [])
+
+            if not chain_ids:
+                return []
+
+            # Use mget for efficient bulk retrieval (avoids N+1 queries)
+            docs = [{"_id": parent_id, "_index": self.index_name} for parent_id in chain_ids]
+            mget_response = self.es.mget(body={"docs": docs})
+
+            # Build chain from mget results, maintaining order
+            for doc_result in mget_response["docs"]:
+                if doc_result.get("found"):
+                    chain.append({
+                        "_id": doc_result["_id"],
+                        **doc_result["_source"]
+                    })
+
+            return chain
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "get_chain",
+                    "doc_id": doc_id,
+                    "index": self.index_name
+                }
+            )
+            return []
+
+    def update_mapping(self):
+        """
+        Update the index mapping to add new fields (for existing indices).
+        This is safe to call multiple times and won't affect existing data.
+        """
+        if not self.es:
+            logger.warning("ElasticSearch not connected")
+            return False
+
+        try:
+            # Add new properties to existing index
+            self.es.indices.put_mapping(
+                index=self.index_name,
+                properties={
+                    "parent_heuristic_id": {"type": "keyword"},
+                    "chain_depth": {"type": "integer"},
+                    "chain_ids": {"type": "keyword"},
+                    "contexted_heuristic_ids": {"type": "keyword"}
+                }
+            )
+            logger.info(f"Updated mapping for index: {self.index_name}")
+            return True
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "update_mapping",
+                    "index": self.index_name
+                }
+            )
+            return False

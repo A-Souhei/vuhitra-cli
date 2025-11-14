@@ -30,3 +30,11 @@ insights:
   max_insight_length: 150    # Maximum words in summary
   top_entities: 5            # Number of key entities to extract
   top_keywords: 10           # Number of key technical terms
+
+# Heuristic chaining settings
+chaining:
+  enabled: true                    # Enable heuristic chaining feature
+  min_rating_for_chaining: 4       # Minimum rating to create a chain link (0-5 scale)
+  max_chain_depth: 5               # Maximum chain depth to prevent infinite chains
+  include_chain_in_context: true   # Include parent chain in context injection
+  min_parent_rating: 4             # Minimum rating for parent heuristics in chain

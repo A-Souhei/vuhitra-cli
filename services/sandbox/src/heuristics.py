@@ -7,13 +7,22 @@ import logging
 import threading
 from src.errors_handler.error_handler import get_error_handler
 
-# Support both relative imports (for local tests) and absolute imports (for Docker)
+# Support both relative imports (for Docker) and absolute imports (for tests)
 try:
     from .nlp_analyzer import NLPAnalyzer
     from .elasticsearch_client import ElasticSearchClient
+    from .heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
-    from nlp_analyzer import NLPAnalyzer
-    from elasticsearch_client import ElasticSearchClient
+    try:
+        # For Docker container without package structure
+        from nlp_analyzer import NLPAnalyzer
+        from elasticsearch_client import ElasticSearchClient
+        from heuristics_config_loader import HeuristicsConfigLoader
+    except ImportError:
+        # For tests running from project root
+        from services.sandbox.src.nlp_analyzer import NLPAnalyzer
+        from services.sandbox.src.elasticsearch_client import ElasticSearchClient
+        from services.sandbox.src.heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()
@@ -22,11 +31,11 @@ error_handler = get_error_handler()
 class Heuristics:
     """Main heuristics orchestration class."""
 
-    def __init__(self, es_host: str = "localhost", es_port: int = 9200, 
+    def __init__(self, es_host: str = "localhost", es_port: int = 9200,
                  es_index: str = "llm_feedback"):
         """
         Initialize heuristics service.
-        
+
         Args:
             es_host: ElasticSearch host
             es_port: ElasticSearch port
@@ -34,6 +43,12 @@ class Heuristics:
         """
         self.nlp_analyzer = NLPAnalyzer()
         self.es_client = ElasticSearchClient(es_host, es_port, es_index)
+        self.config = HeuristicsConfigLoader()
+
+        # Load chaining configuration
+        self.chaining_enabled = self.config.get_chaining_enabled()
+        self.min_rating_for_chaining = self.config.get_min_rating_for_chaining()
+        self.max_chain_depth = self.config.get_max_chain_depth()
 
     def process_feedback(self, feedback_data: Dict) -> Dict[str, str]:
         """
@@ -109,6 +124,11 @@ class Heuristics:
                 "execution_time_ms": feedback_data.get("execution_time_ms", 0)
             }
 
+            # Add chain metadata if chaining is enabled
+            current_step = "building_chain_metadata"
+            chain_metadata = self._build_chain_metadata(feedback_data)
+            complete_data.update(chain_metadata)
+
             # Store in ElasticSearch
             current_step = "storing_to_elasticsearch"
             success = self.es_client.save_feedback(complete_data)
@@ -130,10 +150,117 @@ class Heuristics:
                 }
             )
 
+    def _build_chain_metadata(self, feedback_data: Dict) -> Dict:
+        """
+        Build chain metadata for the feedback.
+
+        Creates parent-child relationships when:
+        - Chaining is enabled
+        - Rating meets minimum threshold
+        - Contexted heuristics were used
+        - Chain depth limit not exceeded
+
+        Args:
+            feedback_data: Feedback data containing rating and contexted_heuristic_ids
+
+        Returns:
+            Dict with chain metadata fields
+        """
+        metadata = {
+            "parent_heuristic_id": None,
+            "chain_depth": 0,
+            "chain_ids": [],
+            "contexted_heuristic_ids": []
+        }
+
+        try:
+            if not self.chaining_enabled:
+                return metadata
+
+            rating = feedback_data.get("rating", 0)
+            contexted_heuristic_ids = feedback_data.get("contexted_heuristic_ids", [])
+
+            # Store which heuristics were in context
+            metadata["contexted_heuristic_ids"] = contexted_heuristic_ids
+
+            # Only create chain link if rating is high enough
+            if rating < self.min_rating_for_chaining:
+                logger.debug(f"Rating {rating} below threshold {self.min_rating_for_chaining}, not creating chain")
+                return metadata
+
+            # If no contexted heuristics, this is a root heuristic
+            if not contexted_heuristic_ids:
+                logger.debug("No contexted heuristics, creating root heuristic")
+                return metadata
+
+            # Use the first (primary) contexted heuristic as parent
+            parent_id = contexted_heuristic_ids[0]
+
+            # Retrieve parent to get its chain information
+            parent_doc = self.es_client.get_by_id(parent_id)
+
+            if not parent_doc:
+                logger.warning(
+                    f"Failed to retrieve parent heuristic {parent_id}. "
+                    "This may be due to a retrieval error or the parent not existing. "
+                    "Creating as root heuristic instead."
+                )
+                return metadata
+
+            parent_chain_depth = parent_doc.get("chain_depth", 0)
+            parent_chain_ids = parent_doc.get("chain_ids", [])
+
+            # Check chain depth limit
+            new_depth = parent_chain_depth + 1
+            if new_depth > self.max_chain_depth:
+                logger.warning(
+                    f"Chain depth limit reached ({self.max_chain_depth}), "
+                    f"not creating chain link"
+                )
+                return metadata
+
+            # Build chain metadata
+            metadata["parent_heuristic_id"] = parent_id
+            metadata["chain_depth"] = new_depth
+
+            # Detect and handle circular references
+            if parent_id in parent_chain_ids:
+                logger.warning(
+                    f"Circular reference detected: parent {parent_id} already exists in chain. "
+                    f"Skipping duplicate to prevent infinite loop. Chain: {parent_chain_ids}"
+                )
+                metadata["chain_ids"] = parent_chain_ids
+            else:
+                metadata["chain_ids"] = parent_chain_ids + [parent_id]
+
+            logger.info(
+                f"Created chain link: parent={parent_id}, depth={new_depth}, "
+                f"chain_length={len(metadata['chain_ids'])}"
+            )
+
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "build_chain_metadata",
+                    "rating": feedback_data.get("rating"),
+                    "has_contexted_ids": bool(feedback_data.get("contexted_heuristic_ids"))
+                }
+            )
+            # Return default metadata on error
+            return {
+                "parent_heuristic_id": None,
+                "chain_depth": 0,
+                "chain_ids": [],
+                "contexted_heuristic_ids": feedback_data.get("contexted_heuristic_ids", [])
+            }
+
+        return metadata
+
     def health_check(self) -> Dict[str, bool]:
         """
         Check health of heuristics components.
-        
+
         Returns:
             Dict with component health status
         """

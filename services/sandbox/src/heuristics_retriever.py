@@ -17,17 +17,21 @@ from elasticsearch import Elasticsearch
 from rapidfuzz import fuzz
 import spacy
 
-# Support both relative imports (for local tests) and absolute imports (for Docker)
+# Support both relative imports (for Docker) and absolute imports (for tests)
 try:
-    from src.errors_handler.error_handler import get_error_handler
     from heuristics_config_loader import HeuristicsConfigLoader
 except ImportError:
-    # For tests running from the test directory
+    # For tests running from project root
+    from services.sandbox.src.heuristics_config_loader import HeuristicsConfigLoader
+
+try:
+    from src.errors_handler.error_handler import get_error_handler
+except ImportError:
+    # For tests running from project root
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     from src.errors_handler.error_handler import get_error_handler
-    from heuristics_config_loader import HeuristicsConfigLoader
 
 logger = logging.getLogger(__name__)
 error_handler = get_error_handler()
@@ -41,16 +45,18 @@ class HeuristicsRetriever:
     using a combination of keyword matching, edit distance, and semantic similarity.
     """
 
-    def __init__(self, es_client: Elasticsearch, index_name: str = "llm_feedback"):
+    def __init__(self, es_client: Elasticsearch, index_name: str = "llm_feedback", es_client_wrapper=None):
         """
         Initialize the retriever.
 
         Args:
             es_client: Elasticsearch client instance
             index_name: Name of the index to query
+            es_client_wrapper: Optional ElasticSearchClient wrapper for advanced operations
         """
         self.es = es_client
         self.index_name = index_name
+        self.es_client_wrapper = es_client_wrapper
         self.nlp = None
 
         # Load configuration
@@ -71,6 +77,11 @@ class HeuristicsRetriever:
         self.PROPER_NOUN_WEIGHT = self.config.get_proper_noun_weight()
         self.COMMON_NOUN_WEIGHT = self.config.get_common_noun_weight()
         self.VERB_WEIGHT = self.config.get_verb_weight()
+
+        # Chain configuration
+        self.CHAINING_ENABLED = self.config.get_chaining_enabled()
+        self.INCLUDE_CHAIN_IN_CONTEXT = self.config.get_include_chain_in_context()
+        self.MIN_PARENT_RATING = self.config.get_min_parent_rating()
 
         self._load_spacy_model()
 
@@ -159,8 +170,23 @@ class HeuristicsRetriever:
                     'levenshtein_similarity': best_match['levenshtein_score'],
                     'keyword_overlap': best_match['keyword_score'],
                     'rating_normalized': best_match['rating_score']
-                }
+                },
+                'chain': []
             }
+
+            # Retrieve chain if enabled
+            if self.CHAINING_ENABLED and self.INCLUDE_CHAIN_IN_CONTEXT and self.es_client_wrapper:
+                doc_id = best_match['document'].get('_id')
+                if doc_id:
+                    chain = self.es_client_wrapper.get_chain(doc_id)
+                    # Filter chain by minimum parent rating if configured
+                    if self.MIN_PARENT_RATING > 0:
+                        chain = [
+                            c for c in chain
+                            if c.get('rating', 0) >= self.MIN_PARENT_RATING
+                        ]
+                    result['chain'] = chain
+                    logger.info(f"Retrieved chain with {len(chain)} parent heuristics")
 
             logger.info(
                 f"Best match found with confidence {result['confidence_score']:.3f} "

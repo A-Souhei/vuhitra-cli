@@ -13,10 +13,16 @@ cli:
 
 # Model configuration
 model:
-  # Default model to use
-  default: llama3.1:8b
+  # Default models per environment
+  # When using local Ollama, tinyllama is used (lightweight, CPU-friendly)
+  # When using remote Ollama, llama3.1:8b is used (more powerful, requires better hardware)
+  default:
+    local: tinyllama
+    remote: llama3.1:8b
+  
   # Available models list
   available:
+    - tinyllama              # Lightweight model (~1GB, CPU-friendly, included in docker-compose)
     - llama3.1:8b
     - qwen3-vl:8b
     - qwen3:latest
@@ -29,11 +35,28 @@ model:
     - qwen2.5-coder:7b
 
 # Ollama server configuration
+# Set 'use' to either 'local' or 'remote' to select which configuration to use
 ollama:
-  host: localhost
-  protocol: http
-  port: 11434
-  api_path: /api/generate
+  # Which configuration to use: 'local' (docker-compose) or 'remote' (external server)
+  use: local
+
+  # Local Ollama (docker-compose service)
+  # Start with: cd services && docker compose --profile ollama up -d
+  # Default model: tinyllama (lightweight, ~1GB, CPU-friendly)
+  local:
+    host: localhost
+    protocol: http
+    port: 11434
+    api_path: /api/generate
+
+  # Remote Ollama (external/network server)
+  # Configure your remote Ollama server details here
+  # Default model: llama3.1:8b (more powerful, requires GPU or powerful CPU)
+  remote:
+    host: 192.168.31.23
+    protocol: http
+    port: 11434
+    api_path: /api/generate
 
 # Environment configuration
 environment:
@@ -56,10 +79,13 @@ sentry:
   attach_stacktrace: true
 
 # Sandbox service configuration
+# Port 18001 is the docker-compose mapped port (internal: 8000)
 sandbox:
   host: localhost
-  port: 8000
+  port: 18001
   protocol: http
+  # Confidence threshold for heuristics context injection (0.0-1.0)
+  confidence_threshold: 0.75
 
 # ElasticSearch configuration
 elasticsearch:

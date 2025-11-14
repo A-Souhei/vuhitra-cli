@@ -36,7 +36,8 @@ es_client_instance = ElasticSearchClient(
 # Initialize retriever and insight extractor
 retriever = HeuristicsRetriever(
     es_client=es_client_instance.es,
-    index_name=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback')
+    index_name=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback'),
+    es_client_wrapper=es_client_instance
 )
 insight_extractor = InsightExtractor(nlp_model=retriever.nlp)
 
@@ -246,7 +247,14 @@ def list_files():
 def analyze_feedback():
     """
     Analyze and store LLM feedback with heuristics.
-    Expects JSON: {prompt, response, rating, timestamp, execution_time_ms}
+    Expects JSON: {
+        prompt: str,                          # User prompt (required)
+        response: str,                        # LLM response (required)
+        rating: int,                          # User rating 0-5 (required)
+        timestamp: str,                       # ISO timestamp (required)
+        execution_time_ms: int,               # Execution time (optional)
+        contexted_heuristic_ids: list[str]    # IDs of heuristics in context (optional, for chaining)
+    }
     """
     try:
         data = request.get_json()
@@ -259,6 +267,17 @@ def analyze_feedback():
 
         if missing_fields:
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+
+        # Validate optional contexted_heuristic_ids field
+        if 'contexted_heuristic_ids' in data:
+            if not isinstance(data['contexted_heuristic_ids'], list):
+                return jsonify({"error": "contexted_heuristic_ids must be a list"}), 400
+            if len(data['contexted_heuristic_ids']) == 0:
+                return jsonify({"error": "contexted_heuristic_ids cannot be empty"}), 400
+            if len(data['contexted_heuristic_ids']) > 100:
+                return jsonify({"error": "contexted_heuristic_ids cannot exceed 100 items"}), 400
+            if not all(isinstance(id, str) for id in data['contexted_heuristic_ids']):
+                return jsonify({"error": "contexted_heuristic_ids must contain only strings"}), 400
 
         result = heuristics.process_feedback(data)
         return jsonify(result), 202  # 202 Accepted (async processing)
@@ -322,14 +341,23 @@ def retrieve_similar():
                 "insights": None
             }), 200
 
-        # Extract insights from the matched heuristic
-        insights = insight_extractor.extract_insights(result['matched_heuristic'])
+        # Extract insights from the matched heuristic and its chain
+        chain = result.get('chain', [])
+        if chain:
+            insights = insight_extractor.extract_chain_insights(
+                matched_heuristic=result['matched_heuristic'],
+                chain=chain
+            )
+        else:
+            insights = insight_extractor.extract_insights(result['matched_heuristic'])
 
         return jsonify({
             "matched_heuristic": result['matched_heuristic'],
             "confidence_score": result['confidence_score'],
             "insights": insights,
-            "scoring_breakdown": result['scoring_breakdown']
+            "scoring_breakdown": result['scoring_breakdown'],
+            "chain_length": len(chain),
+            "has_chain": len(chain) > 0
         }), 200
 
     except Exception as e:

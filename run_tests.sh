@@ -1,143 +1,118 @@
 #!/bin/bash
-
-# Test runner script for vuhitra-cli
-# Runs all tests in the tests/ directory using pytest
+#
+# Test runner script for CI/CD - runs only non-container tests
+# This script excludes tests that require Docker containers to be running,
+# reducing GitHub Actions consumption.
+#
+# Usage:
+#   ./run_tests.sh                    # Run all non-container tests
+#   ./run_tests.sh --with-containers  # Run all tests including container tests
+#   ./run_tests.sh --coverage         # Run with coverage report
+#
 
 set -e  # Exit on error
 
-# Colors for output
+# Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
-
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Running vuhitra-cli Tests${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-
-# Check if pytest is installed
-if ! command -v pytest &> /dev/null; then
-    echo -e "${RED}Error: pytest is not installed${NC}"
-    echo -e "${YELLOW}Install it with: pip install pytest pytest-mock${NC}"
-    exit 1
-fi
-
-# Parse command line arguments
-VERBOSE=""
-COVERAGE=""
-PATTERN=""
-SPECIFIC_TEST=""
+# Parse arguments
+WITH_CONTAINERS=false
+WITH_COVERAGE=false
+VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -v|--verbose)
-            VERBOSE="-v"
+        --with-containers)
+            WITH_CONTAINERS=true
             shift
             ;;
-        -vv|--very-verbose)
-            VERBOSE="-vv -s"
+        --coverage)
+            WITH_COVERAGE=true
             shift
             ;;
-        -c|--coverage)
-            COVERAGE="--cov=src --cov-report=term-missing"
+        --verbose|-v)
+            VERBOSE=true
             shift
-            ;;
-        --html-coverage)
-            COVERAGE="--cov=src --cov-report=html"
-            shift
-            ;;
-        -k|--pattern)
-            PATTERN="-k $2"
-            shift 2
-            ;;
-        -t|--test)
-            SPECIFIC_TEST="$2"
-            shift 2
-            ;;
-        -h|--help)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  -v, --verbose          Run with verbose output"
-            echo "  -vv, --very-verbose    Run with very verbose output and show prints"
-            echo "  -c, --coverage         Run with coverage report"
-            echo "  --html-coverage        Generate HTML coverage report"
-            echo "  -k, --pattern PATTERN  Run tests matching pattern"
-            echo "  -t, --test FILE        Run specific test file"
-            echo "  -h, --help             Show this help message"
-            echo ""
-            echo "Examples:"
-            echo "  $0                           # Run all tests"
-            echo "  $0 -v                        # Run with verbose output"
-            echo "  $0 -c                        # Run with coverage"
-            echo "  $0 -k sentry                 # Run tests matching 'sentry'"
-            echo "  $0 -t test_error_handler.py  # Run specific test file"
-            exit 0
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Use -h or --help for usage information"
+            echo "Usage: $0 [--with-containers] [--coverage] [--verbose]"
             exit 1
             ;;
     esac
 done
 
-# Build pytest command
-PYTEST_CMD="pytest tests/"
-
-if [ -n "$SPECIFIC_TEST" ]; then
-    PYTEST_CMD="pytest tests/$SPECIFIC_TEST"
-fi
-
-if [ -n "$VERBOSE" ]; then
-    PYTEST_CMD="$PYTEST_CMD $VERBOSE"
-fi
-
-if [ -n "$COVERAGE" ]; then
-    # Check if pytest-cov is installed
-    if ! python -c "import pytest_cov" &> /dev/null; then
-        echo -e "${YELLOW}Warning: pytest-cov is not installed${NC}"
-        echo -e "${YELLOW}Install it with: pip install pytest-cov${NC}"
-        echo ""
-    else
-        PYTEST_CMD="$PYTEST_CMD $COVERAGE"
-    fi
-fi
-
-if [ -n "$PATTERN" ]; then
-    PYTEST_CMD="$PYTEST_CMD $PATTERN"
-fi
-
-# Run tests
-echo -e "${BLUE}Running command:${NC} $PYTEST_CMD"
+echo -e "${GREEN}=== Vuhitra CLI Test Runner ===${NC}"
 echo ""
 
-if $PYTEST_CMD; then
+# Check if pytest is installed
+if ! command -v pytest &> /dev/null; then
+    echo -e "${RED}Error: pytest is not installed${NC}"
+    echo "Please install with: pip install pytest pytest-cov"
+    exit 1
+fi
+
+# Determine which tests to run
+if [ "$WITH_CONTAINERS" = true ]; then
+    echo -e "${YELLOW}Running ALL tests (including container tests)${NC}"
+    IGNORE_OPTS=""
+    TEST_PATTERN="tests/"
+else
+    echo -e "${YELLOW}Running NON-CONTAINER tests only${NC}"
+    echo "  - Excluding: test_sandbox_endpoints.py (requires sandbox container)"
+    echo "  - Excluding: test_sandbox_redis.py (requires Redis container)"
+    echo "  - Including: test_sandbox_endpoints_mocked.py (mocked version)"
+    echo "  - Including: test_sandbox_redis_mocked.py (mocked version)"
+    IGNORE_OPTS="--ignore=tests/test_sandbox_endpoints.py --ignore=tests/test_sandbox_redis.py"
+    TEST_PATTERN="tests/"
+fi
+
+echo ""
+
+# Build pytest command
+PYTEST_CMD="pytest"
+
+# Add ignore options
+if [ -n "$IGNORE_OPTS" ]; then
+    PYTEST_CMD="$PYTEST_CMD $IGNORE_OPTS"
+fi
+
+# Add verbosity
+if [ "$VERBOSE" = true ]; then
+    PYTEST_CMD="$PYTEST_CMD -v"
+else
+    PYTEST_CMD="$PYTEST_CMD -q"
+fi
+
+# Add coverage options
+if [ "$WITH_COVERAGE" = true ]; then
+    echo -e "${YELLOW}Generating coverage report${NC}"
+    PYTEST_CMD="$PYTEST_CMD --cov=src --cov=services/sandbox/src --cov-report=term-missing --cov-report=html"
+fi
+
+# Add test pattern
+PYTEST_CMD="$PYTEST_CMD $TEST_PATTERN"
+
+# Show command
+echo -e "${GREEN}Running:${NC} $PYTEST_CMD"
+echo ""
+
+# Run tests
+if eval $PYTEST_CMD; then
     echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}  ✓ All tests passed!${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    
-    # If HTML coverage was generated, show instructions
-    if [[ $COVERAGE == *"html"* ]]; then
+    echo -e "${GREEN}✓ All tests passed!${NC}"
+
+    if [ "$WITH_COVERAGE" = true ]; then
         echo ""
-        echo -e "${YELLOW}HTML coverage report generated in: htmlcov/index.html${NC}"
-        echo -e "${YELLOW}View it with:${NC}"
-        echo "  xdg-open htmlcov/index.html  # Linux"
-        echo "  open htmlcov/index.html      # macOS"
+        echo -e "${GREEN}Coverage report generated in htmlcov/index.html${NC}"
     fi
-    
+
     exit 0
 else
     echo ""
-    echo -e "${RED}========================================${NC}"
-    echo -e "${RED}  ✗ Tests failed!${NC}"
-    echo -e "${RED}========================================${NC}"
+    echo -e "${RED}✗ Tests failed!${NC}"
     exit 1
 fi

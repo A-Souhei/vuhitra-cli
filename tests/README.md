@@ -1,162 +1,158 @@
-# Tests
+# Vuhitra CLI Test Suite
 
-This directory contains test files for the vuhitra-cli project using pytest.
+This directory contains the test suite for the Vuhitra CLI project, organized to minimize CI/CD resource consumption.
 
-## Quick Start
+## Test Organization
 
-### Run tests using the test runner script:
-```bash
-# From project root
-./run_tests.sh
+### Non-Container Tests (Mocked)
+These tests use mocks and do NOT require Docker containers. They run in CI/CD:
 
-# With verbose output
-./run_tests.sh -v
+- `test_config_loader.py` - Configuration loading tests
+- `test_error_handler.py` - Error handling tests
+- `test_feedback_collector.py` - Feedback collection tests
+- `test_heuristics.py` - Heuristics system tests
+- `test_heuristics_retriever.py` - Heuristics retrieval tests
+- `test_heuristic_chaining.py` - Heuristic chaining feature tests
+- `test_insight_extractor.py` - Insight extraction tests
+- `test_nlp_analyzer.py` - NLP analysis tests
+- `test_elasticsearch_client.py` - ElasticSearch client tests (unit tests with mocks)
+- **`test_sandbox_endpoints_mocked.py`** - Mocked sandbox endpoint tests
+- **`test_sandbox_redis_mocked.py`** - Mocked Redis operation tests
 
-# With coverage report
-./run_tests.sh -c
+### Container Tests (Integration)
+These tests require Docker containers and are SKIPPED in CI/CD to reduce resource consumption:
 
-# Show help
-./run_tests.sh --help
-```
+- `test_sandbox_endpoints.py` - Actual sandbox container endpoint tests
+- `test_sandbox_redis.py` - Actual Redis container operation tests
+- `test_heuristics_endpoints.py` - Flask integration tests (currently skipped)
 
 ## Running Tests
 
-### Using the test runner (recommended):
+### Using the Test Runner Script
+
+The `run_tests.sh` script provides a convenient way to run tests:
+
 ```bash
-./run_tests.sh              # Run all tests
-./run_tests.sh -v           # Verbose output
-./run_tests.sh -vv          # Very verbose with print statements
-./run_tests.sh -c           # With coverage report
-./run_tests.sh --html-coverage  # Generate HTML coverage
-./run_tests.sh -k "sentry"  # Run tests matching pattern
-./run_tests.sh -t test_error_handler.py  # Run specific file
+# Run non-container tests only (default for CI/CD)
+./run_tests.sh
+
+# Run with verbose output
+./run_tests.sh --verbose
+
+# Run with coverage report
+./run_tests.sh --coverage
+
+# Run ALL tests including container tests (requires containers running)
+./run_tests.sh --with-containers
+
+# Combine options
+./run_tests.sh --with-containers --coverage --verbose
 ```
 
-### Using pytest directly:
-```bash
-pytest
-```
+### Using pytest directly
 
-### Run specific test file:
 ```bash
-pytest tests/test_error_handler.py
+# Run all non-container tests
+pytest --ignore=tests/test_sandbox_endpoints.py --ignore=tests/test_sandbox_redis.py
+
+# Run a specific test file
 pytest tests/test_config_loader.py
+
+# Run with coverage
+pytest --cov=src --cov=services/sandbox/src --cov-report=html
+
+# Run only container tests (requires containers)
+pytest tests/test_sandbox_endpoints.py tests/test_sandbox_redis.py
 ```
 
-### Run with verbose output:
+## Container Setup for Integration Tests
+
+If you want to run the actual container tests locally:
+
 ```bash
-pytest -v
+# Start containers
+cd services
+docker compose up -d
+
+# Wait for services to be ready
+sleep 10
+
+# Run container tests
+pytest tests/test_sandbox_endpoints.py tests/test_sandbox_redis.py
+
+# Stop containers
+docker compose down -v
 ```
 
-### Run with detailed output and show print statements:
-```bash
-pytest -vv -s
+## CI/CD Strategy
+
+GitHub Actions workflow runs only non-container tests to minimize:
+- Build time
+- Resource consumption
+- GitHub Actions minutes usage
+
+Mocked tests (`*_mocked.py`) provide equivalent coverage without needing containers.
+
+## Adding New Tests
+
+### For non-container functionality
+Create a standard test file in `tests/`:
+
+```python
+import pytest
+
+class TestMyFeature:
+    def test_something(self):
+        assert True
 ```
 
-### Run a specific test:
-```bash
-pytest tests/test_error_handler.py::TestErrorHandler::test_singleton_pattern
+### For container-dependent functionality
+1. Create the actual container test: `test_feature.py`
+2. Create the mocked version: `test_feature_mocked.py`
+3. The mocked version will run in CI/CD, the actual version runs locally
+
+Example:
+```python
+# test_feature_mocked.py
+from unittest.mock import Mock, patch
+
+class TestFeatureMocked:
+    @pytest.fixture
+    def mock_client(self):
+        return Mock()
+    
+    def test_something(self, mock_client):
+        mock_client.do_something.return_value = "success"
+        assert mock_client.do_something() == "success"
 ```
-
-### Run tests matching a pattern:
-```bash
-pytest -k "sentry"
-```
-
-### Run with coverage:
-```bash
-pytest --cov=src --cov-report=html
-```
-
-## Test Files
-
-### test_error_handler.py
-Tests for the error handling system including:
-- Singleton pattern
-- DEV/PROD mode behavior
-- Exception handling with context
-- Message capture
-- Breadcrumb functionality
-- Sentry integration (mocked, skipped if sentry-sdk not installed)
-- Convenience functions
-
-### test_config_loader.py
-Tests for the configuration loader including:
-- Loading YAML config files
-- Nested value retrieval
-- Default values
-- Error handling for missing/invalid files
-- Environment and Sentry configuration
 
 ## Test Coverage
 
-To run tests with coverage:
+Generate coverage reports:
+
 ```bash
-pip install pytest-cov
-pytest --cov=src --cov-report=term-missing
-pytest --cov=src --cov-report=html  # Generate HTML report
+./run_tests.sh --coverage
+# Open htmlcov/index.html in browser
 ```
 
-View HTML coverage report:
+## Troubleshooting
+
+### Tests fail with import errors
+Make sure you've installed dependencies:
 ```bash
-open htmlcov/index.html  # macOS
-xdg-open htmlcov/index.html  # Linux
+pip install -r requirements.txt
 ```
 
-## Writing New Tests
-
-When adding new tests:
-1. Create test file in this directory: `test_<module>.py`
-2. Import pytest
-3. Create test class or functions
-4. Use pytest fixtures for setup/teardown
-5. Use assert statements for validation
-
-Example with functions:
-```python
-import pytest
-
-def test_example():
-    result = some_function()
-    assert result == expected_value
-```
-
-Example with classes:
-```python
-import pytest
-
-class TestExample:
-    def test_method(self):
-        result = some_function()
-        assert result == expected_value
-    
-    @pytest.fixture
-    def setup_data(self):
-        return {"key": "value"}
-    
-    def test_with_fixture(self, setup_data):
-        assert setup_data["key"] == "value"
-```
-
-## Pytest Features Used
-
-- **Fixtures**: Reusable setup/teardown code (e.g., `@pytest.fixture`)
-- **Parametrization**: Run tests with different inputs
-- **Markers**: Skip tests conditionally (e.g., `@pytest.mark.skipif`)
-- **Capsys**: Capture stdout/stderr output
-- **Monkeypatch**: Mock environment variables and attributes
-- **Mocking**: Using unittest.mock with pytest
-
-## Dependencies
-
-Tests require:
-- `pytest` (>=8.0.0)
-- `pytest-mock` (>=3.12.0)
-- `pytest-cov` (optional, for coverage)
-- `sentry-sdk` (optional, for Sentry tests)
-
-Install test dependencies:
+### Container tests fail
+Ensure containers are running:
 ```bash
-pip install pytest pytest-mock pytest-cov
+cd services
+docker compose ps
 ```
 
+### Redis authentication errors
+Check your `.env` file has the correct `REDIS_PASSWORD`:
+```bash
+cd services
+cat .env | grep REDIS_PASSWORD
+```

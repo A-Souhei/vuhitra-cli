@@ -112,7 +112,7 @@ transformer:
 # Controls how context is compacted before being sent to the LLM
 context_compacter:
   # Enable/disable context compaction (default: true)
-  enabled: true
+  enabled: false  # Disabled - transformer service not running
   # Compact prompts if they exceed this character count (0 = always compact)
   prompt_compact_threshold: 500
   # Maximum sentences to keep in compacted text

@@ -1,6 +1,7 @@
 import shutil
 import sys
 import os
+import logging
 from pathlib import Path
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
@@ -12,6 +13,10 @@ from heuristics import Heuristics
 from heuristics_retriever import HeuristicsRetriever
 from insight_extractor import InsightExtractor
 from elasticsearch_client import ElasticSearchClient
+
+# Configure logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 

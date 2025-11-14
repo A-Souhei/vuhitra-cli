@@ -580,7 +580,7 @@ class TestInsightExtractor:
         result = extractor.extract_negative_insights(matched_heuristic)
 
         # Should indicate code didn't work
-        assert any("Code example did not work" in indicator for indicator in result['warning_indicators'])
+        assert any("Code example did not work as expected" in indicator for indicator in result['warning_indicators'])
 
     def test_negative_insights_fallback(self):
         """Test fallback negative insight when NLP is not available"""

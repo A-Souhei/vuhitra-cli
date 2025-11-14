@@ -17,7 +17,7 @@ keyword_weights:
 
 # Filtering thresholds
 filtering:
-  min_rating: 3              # Minimum rating threshold (inclusive, 0-5 scale) - only ratings >= 3 are considered
+  min_rating: 4              # Minimum rating threshold (inclusive, 0-5 scale) - only ratings >= 4 are considered
   max_rating_negative: 2     # Maximum rating for negative heuristics (inclusive, 0-5 scale) - only ratings <= 2 are considered as anti-patterns
   max_stage1_candidates: 100 # Max results from Elasticsearch stage
   max_stage2_candidates: 10  # Max candidates for semantic analysis

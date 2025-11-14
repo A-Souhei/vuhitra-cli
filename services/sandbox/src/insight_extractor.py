@@ -600,10 +600,6 @@ Please provide a comprehensive response addressing the user's specific question.
         # Limit text for performance
         response_text = response[:self.MAX_NLP_TEXT_LENGTH] if len(response) > self.MAX_NLP_TEXT_LENGTH else response
 
-        # Extract first meaningful sentence from response
-        doc = self.nlp(response_text)
-        sentences = list(doc.sents)
-
         summary_parts = []
 
         # Indicate this was an unsuccessful approach
@@ -711,8 +707,6 @@ Please provide a comprehensive response addressing the user's specific question.
         Returns:
             Basic negative insight dictionary
         """
-        rating = matched_heuristic.get('rating', 0)
-
         formatted = """# System Context: Anti-Pattern Warning
 
 Based on analysis of similar questions, certain approaches should be avoided.

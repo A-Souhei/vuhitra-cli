@@ -59,7 +59,7 @@ class HeuristicsConfigLoader:
                 'verb': 1.0
             },
             'filtering': {
-                'min_rating': 3,
+                'min_rating': 4,
                 'max_rating_negative': 2,
                 'max_stage1_candidates': 100,
                 'max_stage2_candidates': 10
@@ -141,7 +141,7 @@ class HeuristicsConfigLoader:
 
     def get_min_rating(self) -> int:
         """Get minimum rating threshold."""
-        return self.get('filtering', 'min_rating', default=3)
+        return self.get('filtering', 'min_rating', default=4)
 
     def get_max_rating_negative(self) -> int:
         """Get maximum rating threshold for negative heuristics (anti-patterns)."""

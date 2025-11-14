@@ -228,6 +228,7 @@ class HeuristicsRetriever:
                 - confidence_score: Overall confidence (0-1)
                 - scoring_breakdown: Individual scores for each method
                 - is_negative: True to indicate this is a negative heuristic
+                - chain: Empty list (negative heuristics don't include chains)
             Returns None if no suitable match found
         """
         if not self.es or not self.nlp:

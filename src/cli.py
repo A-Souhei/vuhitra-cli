@@ -50,12 +50,12 @@ def fetch_similar_heuristic(prompt, verbose=False):
                 "endpoint": endpoint,
                 "prompt_length": len(prompt),
                 "confidence_threshold": confidence_threshold,
-                "min_rating": 3
+                "min_rating": 4
             })
 
         response = requests.post(
             endpoint,
-            json={"prompt": prompt, "min_rating": 3, "verbose": verbose},
+            json={"prompt": prompt, "min_rating": 4, "verbose": verbose},
             timeout=5
         )
         response.raise_for_status()

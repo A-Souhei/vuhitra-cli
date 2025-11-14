@@ -303,7 +303,7 @@ def retrieve_similar():
 
     Expects JSON: {
         prompt: str,              # User's input prompt (required)
-        min_rating: int,          # Minimum rating threshold (optional, default: 3)
+        min_rating: int,          # Minimum rating threshold (optional, default: 4)
         verbose: bool             # Enable verbose debugging output (optional, default: False)
     }
 
@@ -325,7 +325,7 @@ def retrieve_similar():
             return jsonify({"error": "Missing required field: prompt"}), 400
 
         prompt = data['prompt']
-        min_rating = data.get('min_rating', 3)
+        min_rating = data.get('min_rating', 4)
         verbose = data.get('verbose', False)
 
         # Validate inputs
@@ -354,7 +354,7 @@ def retrieve_similar():
 
             result = retriever.retrieve_negative_heuristics(
                 prompt=prompt,
-                max_rating=2  # Rating <= 2
+                max_rating=retriever.MAX_RATING_NEGATIVE  # Use configured value
             )
 
             if result:

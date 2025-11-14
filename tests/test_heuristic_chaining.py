@@ -302,11 +302,9 @@ class TestChainInsightExtraction:
         formatted = result.get("formatted_insight", "")
 
         # For rating=5, should use directive mode with verified answer
-        assert "SYSTEM DIRECTIVE - VERIFIED ANSWER" in formatted
-        assert "VERIFIED correct answer" in formatted
+        assert "VERIFIED ANSWER - OUTPUT EXACTLY AS SHOWN" in formatted
         assert "test response" in formatted
-        assert "CRITICAL INSTRUCTION" in formatted
-        assert "EXACT answer" in formatted or "VERBATIM" in formatted
+        assert "Do not add any explanation" in formatted or "Output only the answer" in formatted
 
         # Ensure no privacy-leaking information
         assert "rated" not in formatted.lower()

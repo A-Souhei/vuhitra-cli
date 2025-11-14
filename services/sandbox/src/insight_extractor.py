@@ -392,19 +392,11 @@ class InsightExtractor:
 
         # For perfect matches (5-star + high confidence), use directive approach
         if is_perfect_match and matched_response:
-            lines.append("SYSTEM DIRECTIVE - VERIFIED ANSWER")
+            lines.append("VERIFIED ANSWER - OUTPUT EXACTLY AS SHOWN:")
             lines.append("")
-            lines.append("This exact question has a VERIFIED correct answer:")
-            lines.append("")
-            lines.append("```")
             lines.append(matched_response)
-            lines.append("```")
             lines.append("")
-            lines.append("CRITICAL INSTRUCTION:")
-            lines.append("- Provide the EXACT answer shown above")
-            lines.append("- Do NOT elaborate, explain, or add extra information")
-            lines.append("- Do NOT rephrase or reword the answer")
-            lines.append("- Copy the verified answer VERBATIM")
+            lines.append("[Do not add any explanation or commentary. Output only the answer above.]")
             lines.append("---")
             return "\n".join(lines)
 
@@ -942,19 +934,11 @@ Provide a factually correct answer to the user's question.
 
         # For perfect matches, use simplified directive approach
         if is_perfect_match and primary_response:
-            lines.append("SYSTEM DIRECTIVE - VERIFIED ANSWER")
+            lines.append("VERIFIED ANSWER - OUTPUT EXACTLY AS SHOWN:")
             lines.append("")
-            lines.append("This exact question has a VERIFIED correct answer:")
-            lines.append("")
-            lines.append("```")
             lines.append(primary_response)
-            lines.append("```")
             lines.append("")
-            lines.append("CRITICAL INSTRUCTION:")
-            lines.append("- Provide the EXACT answer shown above")
-            lines.append("- Do NOT elaborate, explain, or add extra information")
-            lines.append("- Do NOT rephrase or reword the answer")
-            lines.append("- Copy the verified answer VERBATIM")
+            lines.append("[Do not add any explanation or commentary. Output only the answer above.]")
             lines.append("---")
             return "\n".join(lines)
 

@@ -198,14 +198,12 @@ services:
     #           capabilities: [gpu]
 
   # Ollama model initialization - pulls tinyllama on first start
-  # This is a one-time setup container
+  # This is a one-time setup container that uses curl to interact with the Ollama API
   ollama-setup:
-    image: ollama/ollama:latest
+    image: curlimages/curl:latest
     container_name: vuhitra-ollama-setup
     profiles:
       - ollama
-    volumes:
-      - ollama_data:/root/.ollama
     depends_on:
       ollama:
         condition: service_healthy
@@ -215,10 +213,14 @@ services:
       echo 'Waiting for Ollama service to be ready...' &&
       sleep 5 &&
       echo 'Pulling tinyllama model (lightweight, ~1GB, CPU-friendly)...' &&
-      ollama pull tinyllama &&
-      echo 'Model pulled successfully!' &&
-      echo 'Testing model...' &&
-      ollama run tinyllama 'Hello' &&
+      curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"tinyllama\"}' &&
+      echo '' &&
+      echo 'Model pull request sent successfully!' &&
+      echo 'Waiting for model to finish downloading...' &&
+      sleep 30 &&
+      echo 'Testing model with a simple prompt...' &&
+      curl -X POST http://ollama:11434/api/generate -d '{\"model\":\"tinyllama\",\"prompt\":\"Say hello\",\"stream\":false}' &&
+      echo '' &&
       echo 'Ollama setup complete!'
       "
     networks:

@@ -128,7 +128,8 @@ class ElasticSearchClient:
             doc_id: ElasticSearch document ID
 
         Returns:
-            Dict: Document data or None if not found
+            Dict: Document data if found
+            None: If document not found or error occurs
         """
         if not self.es:
             logger.warning("ElasticSearch not connected")

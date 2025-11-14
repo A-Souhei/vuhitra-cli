@@ -176,7 +176,7 @@ class HeuristicsRetriever:
                 if doc_id:
                     chain = self.es_client_wrapper.get_chain(doc_id)
                     # Filter chain by minimum parent rating if configured
-                    if self.MIN_PARENT_RATING:
+                    if self.MIN_PARENT_RATING > 0:
                         chain = [
                             c for c in chain
                             if c.get('rating', 0) >= self.MIN_PARENT_RATING

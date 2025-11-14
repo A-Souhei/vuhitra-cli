@@ -193,7 +193,11 @@ class Heuristics:
             parent_doc = self.es_client.get_by_id(parent_id)
 
             if not parent_doc:
-                logger.warning(f"Parent heuristic {parent_id} not found, creating root heuristic")
+                logger.error(
+                    f"Failed to retrieve parent heuristic {parent_id}. "
+                    "This may be due to a retrieval error or the parent not existing. "
+                    "Creating as root heuristic instead."
+                )
                 return metadata
 
             parent_chain_depth = parent_doc.get("chain_depth", 0)

@@ -431,7 +431,13 @@ Summary: High-quality response found (rated {rating}/5)
             chain: List of parent heuristics (ordered from root to immediate parent)
 
         Returns:
-            Dictionary containing chain insights and formatted context
+            Dict[str, Any]: If `chain` is non-empty, returns a dictionary containing all fields from
+            `extract_insights()` plus:
+                - chain_insights: List of parent insight summaries
+                - has_chain: Boolean indicating chain presence (True)
+                - formatted_insight: Chain-aware formatting (overwrites standard format)
+            If `chain` is empty or an exception occurs, returns the result of `extract_insights()`
+            (without the above extra fields).
         """
         if not chain:
             # No chain, use standard insight extraction
@@ -501,8 +507,8 @@ Summary: High-quality response found (rated {rating}/5)
         lines.append("- The following shows how similar problems were solved previously")
         lines.append("- DO NOT simply copy these solutions")
         lines.append("- Use them as INSPIRATION to create an even better response")
-        lines.append(f"- Your goal is to MATCH OR EXCEED the quality that received {primary_heuristic.get('rating', 0)}/5 rating")
-        lines.append("- ITERATE AND IMPROVE on these approaches")
+        lines.append(f"- Your goal is to MATCH or EXCEED the quality that received {primary_heuristic.get('rating', 0)}/5 rating")
+        lines.append("- ITERATE and IMPROVE on these approaches")
         lines.append("")
 
         # Show chain evolution (oldest to newest)

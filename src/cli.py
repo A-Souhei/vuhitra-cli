@@ -343,7 +343,62 @@ def interactive_mode(model, verbose=False):
                         else:
                             # Max iterations exceeded
                             console.print(f"\n[red]❌ Max iterations ({max_iterations}) exceeded[/red]")
-                            console.print("\n[bold]Options:[/bold]")
+                            console.print("\n[bold yellow]💡 Help us learn![/bold yellow]")
+                            console.print("Would you like to provide the correct response? This will help improve future answers.")
+
+                            try:
+                                provide_response = input("\nProvide correct response? (y/N): ").strip().lower()
+
+                                if provide_response == 'y':
+                                    console.print("\n[bold]Please enter the correct response (or what you think is correct):[/bold]")
+                                    console.print("[dim]Press Enter twice when done (empty line to finish)[/dim]\n")
+
+                                    # Collect multi-line response
+                                    correct_response_lines = []
+                                    while True:
+                                        try:
+                                            line = input()
+                                            if line == "" and correct_response_lines:  # Empty line and we have content
+                                                break
+                                            correct_response_lines.append(line)
+                                        except (EOFError, KeyboardInterrupt):
+                                            break
+
+                                    correct_response = "\n".join(correct_response_lines).strip()
+
+                                    if correct_response:
+                                        # Store this as a high-quality heuristic
+                                        correct_feedback_data = {
+                                            'prompt': prompt,
+                                            'response': correct_response,
+                                            'rating': 5,  # Mark as highest quality
+                                            'timestamp': feedback_data.get('timestamp') if feedback_data else time.strftime('%Y-%m-%dT%H:%M:%S'),
+                                            'execution_time_ms': 0,  # User-provided
+                                            'iteration_number': max_iterations,
+                                            'is_auto_iteration': False,  # This is the final correct answer
+                                            'negative_weight_boost': 0.0,
+                                            'user_provided_correction': True  # Flag to identify user corrections
+                                        }
+
+                                        # Add heuristic context if available
+                                        if heuristic_data and heuristic_data.get('matched_heuristic'):
+                                            correct_feedback_data['parent_heuristic_id'] = heuristic_data['matched_heuristic'].get('_id')
+                                            correct_feedback_data['contexted_heuristic_ids'] = [heuristic_data['matched_heuristic'].get('_id')]
+
+                                        if verbose:
+                                            console.print()
+                                            print_info("📝 Storing user-provided correct response as high-quality heuristic...")
+
+                                        send_feedback_to_sandbox(correct_feedback_data, verbose=verbose)
+                                        console.print("\n[green]✓ Thank you! Your response has been stored to improve future answers.[/green]")
+                                    else:
+                                        console.print("\n[yellow]No response provided, skipping.[/yellow]")
+
+                            except (EOFError, KeyboardInterrupt):
+                                pass
+
+                            # Now show the options menu
+                            console.print("\n[bold]What would you like to do next?[/bold]")
                             console.print("1) Rephrase your prompt")
                             console.print("2) Continue to next prompt")
                             console.print("3) Exit interactive mode")

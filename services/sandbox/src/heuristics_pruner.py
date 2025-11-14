@@ -219,9 +219,10 @@ class HeuristicsPruner:
         Identify heuristics that are unretrievable.
 
         Strategy:
-        - For each heuristic, check if higher-rated similar heuristics exist
+        - ONLY prune heuristics with rating=0 (completely failed responses)
+        - Check if higher-rated similar heuristics exist
         - If yes and rating difference >= MIN_RATING_DIFFERENCE, mark for pruning
-        - Skip heuristics with high ratings (>= 4) to preserve quality data
+        - Conservative approach: preserve all ratings >= 1
 
         Args:
             all_heuristics: List of all heuristics
@@ -241,8 +242,9 @@ class HeuristicsPruner:
                 h_keywords = set(heuristic.get('prompt_keywords', []) +
                                heuristic.get('response_keywords', []))
 
-                # Skip high-rated heuristics (preserve quality data)
-                if h_rating >= 4:
+                # ONLY prune rating=0 heuristics (completely failed responses)
+                # This is a conservative approach to preserve learning data
+                if h_rating != 0:
                     continue
 
                 # Skip if no keywords (can't determine similarity)
@@ -270,14 +272,14 @@ class HeuristicsPruner:
 
                     similarity = len(intersection) / len(union)
 
-                    # If similar AND other has significantly higher rating, mark for pruning
+                    # If similar AND other has higher rating (any rating >= 1), mark for pruning
+                    # Since we're only pruning rating=0, any better alternative means we should prune
                     if similarity >= self.SIMILARITY_THRESHOLD:
-                        rating_diff = other_rating - h_rating
-
-                        if rating_diff >= self.MIN_RATING_DIFFERENCE:
+                        # For rating=0 heuristics, any higher rating means it's better
+                        if other_rating >= self.MIN_RATING_DIFFERENCE:
                             if verbose:
                                 logger.info(
-                                    f"Marking {h_id} for pruning: rating={h_rating}, "
+                                    f"Marking {h_id} for pruning: rating={h_rating} (failed), "
                                     f"better alternative with rating={other_rating}, "
                                     f"similarity={similarity:.2f}"
                                 )

@@ -138,6 +138,7 @@ class Heuristics:
                 complete_data["iteration_number"] = feedback_data.get("iteration_number", 0)
                 complete_data["is_auto_iteration"] = feedback_data.get("is_auto_iteration", False)
                 complete_data["negative_weight_boost"] = feedback_data.get("negative_weight_boost", 0.0)
+                complete_data["user_provided_correction"] = feedback_data.get("user_provided_correction", False)
 
             # Add chain metadata if chaining is enabled
             current_step = "building_chain_metadata"
@@ -265,6 +266,7 @@ class Heuristics:
                 complete_data["iteration_number"] = feedback_data.get("iteration_number", 0)
                 complete_data["is_auto_iteration"] = feedback_data.get("is_auto_iteration", False)
                 complete_data["negative_weight_boost"] = feedback_data.get("negative_weight_boost", 0.0)
+                complete_data["user_provided_correction"] = feedback_data.get("user_provided_correction", False)
 
             # Add chain metadata if chaining is enabled
             current_step = "building_chain_metadata"

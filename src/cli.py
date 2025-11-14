@@ -15,6 +15,7 @@ from src.utils.ui_formatter import (
     print_success, print_info, print_debug, print_user_prompt, console
 )
 from src.utils.prompt_history import PromptHistoryManager
+from src.utils.transformer_client import get_transformer_client
 
 # Maximum prompt length to prevent DoS through excessive payload sizes
 MAX_PROMPT_LENGTH = 10000
@@ -112,6 +113,98 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
 
         if verbose:
             print_warning(f"Failed to fetch heuristic: {str(e)}")
+
+        return None, None
+
+
+def compact_context_with_transformer(prompt, heuristic_context=None, verbose=False):
+    """
+    Compact the context using the transformer service.
+
+    This function:
+    - Separates code from text
+    - Compacts text while preserving code
+    - Creates a matrix-style context for the LLM
+
+    Args:
+        prompt: The user's prompt
+        heuristic_context: Optional heuristic context from sandbox
+        verbose: Whether to print verbose output
+
+    Returns:
+        Tuple of (compacted_context_string, matrix_data)
+    """
+    start_time = time.time()
+
+    try:
+        config = ConfigLoader()
+        transformer_client = get_transformer_client(config)
+
+        # Check if compacter is enabled
+        if not transformer_client.is_enabled:
+            if verbose:
+                print_info("Context compacter is disabled")
+            return None, None
+
+        if verbose:
+            print_debug("Context Compaction Request", {
+                "prompt_length": len(prompt),
+                "has_heuristics": bool(heuristic_context),
+                "heuristics_length": len(heuristic_context) if heuristic_context else 0
+            })
+
+        # Call the transformer service to create matrix context
+        matrix = transformer_client.create_matrix_context(
+            prompt=prompt,
+            heuristics=heuristic_context or "",
+            context="",  # Additional context can be added here if needed
+            raw_text="",  # Can be used for code recognition
+            verbose=verbose
+        )
+
+        if not matrix:
+            # Service unavailable or disabled
+            if verbose:
+                print_warning("Transformer service unavailable, using original context")
+            return None, None
+
+        duration_ms = (time.time() - start_time) * 1000
+        print_timing_verbose("Context compaction", duration_ms)
+
+        # Get the formatted context for LLM
+        formatted_context = matrix.get('formatted_for_llm', '')
+
+        if verbose:
+            # Show compression statistics
+            original_prompt_len = len(matrix.get('prompt', {}).get('original', ''))
+            compacted_prompt_len = len(matrix.get('prompt', {}).get('compacted', ''))
+            compression_ratio = compacted_prompt_len / original_prompt_len if original_prompt_len > 0 else 1.0
+
+            stats = {
+                "original_prompt_length": original_prompt_len,
+                "compacted_prompt_length": compacted_prompt_len,
+                "compression_ratio": f"{compression_ratio:.2%}",
+                "has_code_blocks": bool(matrix.get('code_blocks')),
+                "code_block_count": len(matrix.get('code_blocks', []))
+            }
+
+            if matrix.get('prompt', {}).get('keywords'):
+                stats["keywords"] = [kw['keyword'] for kw in matrix['prompt']['keywords'][:5]]
+
+            print_debug("Context Compaction Result", stats)
+            print_success(f"✓ Context compacted successfully (ratio: {compression_ratio:.2%})")
+
+        return formatted_context, matrix
+
+    except Exception as e:
+        # Use error handler to log the exception
+        handle_exception(e, context={
+            'function': 'compact_context_with_transformer',
+            'prompt_length': len(prompt)
+        })
+
+        if verbose:
+            print_warning(f"Failed to compact context: {str(e)}")
 
         return None, None
 
@@ -248,13 +341,32 @@ def interactive_mode(model, verbose=False):
                     negative_weight_boost=negative_weight_boost
                 )
 
-                # Enhance prompt with heuristic context if available
+                # Compact context with transformer service if enabled
+                compacted_context, matrix_data = compact_context_with_transformer(
+                    prompt=prompt,
+                    heuristic_context=heuristic_context,
+                    verbose=verbose
+                )
+
+                # Use compacted context if available, otherwise use original heuristic context
                 enhanced_prompt = prompt
-                if heuristic_context:
+                if compacted_context:
+                    # Use the compacted matrix context
+                    enhanced_prompt = compacted_context
+
+                    if verbose:
+                        print_debug("Using Compacted Context", {
+                            "original_length": len(prompt),
+                            "compacted_length": len(compacted_context),
+                            "iteration": iteration_number,
+                            "negative_weight_boost": negative_weight_boost
+                        })
+                elif heuristic_context:
+                    # Fall back to original heuristic context if compaction unavailable
                     enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
 
                     if verbose:
-                        print_debug("Enhanced Prompt", {
+                        print_debug("Enhanced Prompt (No Compaction)", {
                             "original_length": len(prompt),
                             "enhanced_length": len(enhanced_prompt),
                             "context_added": len(heuristic_context),

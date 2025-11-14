@@ -392,14 +392,19 @@ class InsightExtractor:
 
         # For perfect matches (5-star + high confidence), use directive approach
         if is_perfect_match and matched_response:
-            lines.append("A highly accurate answer to this exact question has been verified:")
+            lines.append("SYSTEM DIRECTIVE - VERIFIED ANSWER")
+            lines.append("")
+            lines.append("This exact question has a VERIFIED correct answer:")
             lines.append("")
             lines.append("```")
             lines.append(matched_response)
             lines.append("```")
             lines.append("")
-            lines.append("DIRECTIVE: Use the above answer to respond to the user's question.")
-            lines.append("You may rephrase slightly for natural language flow, but preserve the exact meaning and factual content.")
+            lines.append("CRITICAL INSTRUCTION:")
+            lines.append("- Provide the EXACT answer shown above")
+            lines.append("- Do NOT elaborate, explain, or add extra information")
+            lines.append("- Do NOT rephrase or reword the answer")
+            lines.append("- Copy the verified answer VERBATIM")
             lines.append("---")
             return "\n".join(lines)
 
@@ -937,16 +942,19 @@ Provide a factually correct answer to the user's question.
 
         # For perfect matches, use simplified directive approach
         if is_perfect_match and primary_response:
-            lines.append("# System Context: Verified Solution")
+            lines.append("SYSTEM DIRECTIVE - VERIFIED ANSWER")
             lines.append("")
-            lines.append("A highly accurate answer to this exact question has been verified:")
+            lines.append("This exact question has a VERIFIED correct answer:")
             lines.append("")
             lines.append("```")
             lines.append(primary_response)
             lines.append("```")
             lines.append("")
-            lines.append("DIRECTIVE: Use the above answer to respond to the user's question.")
-            lines.append("You may rephrase slightly for natural language flow, but preserve the exact meaning and factual content.")
+            lines.append("CRITICAL INSTRUCTION:")
+            lines.append("- Provide the EXACT answer shown above")
+            lines.append("- Do NOT elaborate, explain, or add extra information")
+            lines.append("- Do NOT rephrase or reword the answer")
+            lines.append("- Copy the verified answer VERBATIM")
             lines.append("---")
             return "\n".join(lines)
 

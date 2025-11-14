@@ -132,10 +132,40 @@ class Heuristics:
                 "execution_time_ms": feedback_data.get("execution_time_ms", 0)
             }
 
+            # Add auto-iteration metadata if present
+            current_step = "adding_iteration_metadata"
+            if "iteration_number" in feedback_data:
+                complete_data["iteration_number"] = feedback_data.get("iteration_number", 0)
+                complete_data["is_auto_iteration"] = feedback_data.get("is_auto_iteration", False)
+                complete_data["negative_weight_boost"] = feedback_data.get("negative_weight_boost", 0.0)
+
             # Add chain metadata if chaining is enabled
             current_step = "building_chain_metadata"
             chain_metadata = self._build_chain_metadata(feedback_data)
             complete_data.update(chain_metadata)
+
+            # Check if we should skip storage for 0-rated final attempts
+            current_step = "checking_storage_eligibility"
+            rating = feedback_data.get("rating", 0)
+            is_auto_iteration = feedback_data.get("is_auto_iteration", False)
+
+            # Skip storage if rating=0 and this is NOT an auto-iteration attempt
+            # (we want to track failed attempts during auto-iteration for debugging)
+            if rating == 0 and not is_auto_iteration:
+                logger.info("Skipping storage for rating=0 final failed attempt (not storing 0-rated heuristics)")
+                return {
+                    "status": "skipped",
+                    "message": "Rating=0 heuristics are not stored (final failed attempt)",
+                    "success": False,
+                    "nlp_analysis": {
+                        "sentiment_vader": prompt_sentiment["vader_score"],
+                        "keywords": prompt_keywords,
+                        "word_count": prompt_word_count,
+                        "is_code": is_code,
+                        "code_purpose": code_purpose
+                    },
+                    "elasticsearch_doc": None
+                }
 
             # Store in ElasticSearch
             current_step = "storing_to_elasticsearch"
@@ -229,10 +259,28 @@ class Heuristics:
                 "execution_time_ms": feedback_data.get("execution_time_ms", 0)
             }
 
+            # Add auto-iteration metadata if present
+            current_step = "adding_iteration_metadata"
+            if "iteration_number" in feedback_data:
+                complete_data["iteration_number"] = feedback_data.get("iteration_number", 0)
+                complete_data["is_auto_iteration"] = feedback_data.get("is_auto_iteration", False)
+                complete_data["negative_weight_boost"] = feedback_data.get("negative_weight_boost", 0.0)
+
             # Add chain metadata if chaining is enabled
             current_step = "building_chain_metadata"
             chain_metadata = self._build_chain_metadata(feedback_data)
             complete_data.update(chain_metadata)
+
+            # Check if we should skip storage for 0-rated final attempts
+            current_step = "checking_storage_eligibility"
+            rating = feedback_data.get("rating", 0)
+            is_auto_iteration = feedback_data.get("is_auto_iteration", False)
+
+            # Skip storage if rating=0 and this is NOT an auto-iteration attempt
+            # (we want to track failed attempts during auto-iteration for debugging)
+            if rating == 0 and not is_auto_iteration:
+                logger.info("Skipping storage for rating=0 final failed attempt (not storing 0-rated heuristics)")
+                return  # Early return without storing
 
             # Store in ElasticSearch
             current_step = "storing_to_elasticsearch"

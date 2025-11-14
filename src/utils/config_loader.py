@@ -122,6 +122,10 @@ class ConfigLoader:
     def get_feedback_enabled(self):
         return self.get('cli', 'enable_feedback', default=False)
 
+    def get_auto_iteration_timeout(self):
+        """Get auto-iteration timeout in seconds (for rating=0 retry confirmation)"""
+        return self.get('cli', 'auto_iteration_timeout_seconds', default=3)
+
     def get_environment_mode(self):
         return self.get('environment', 'mode', default='DEV')
     

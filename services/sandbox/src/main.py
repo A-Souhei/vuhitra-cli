@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.errors_handler.error_handler import get_error_handler
 from heuristics import Heuristics
 from heuristics_retriever import HeuristicsRetriever
+from heuristics_pruner import HeuristicsPruner
 from insight_extractor import InsightExtractor
 from elasticsearch_client import ElasticSearchClient
+from heuristics_config_loader import HeuristicsConfigLoader
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -45,6 +47,15 @@ retriever = HeuristicsRetriever(
     es_client_wrapper=es_client_instance
 )
 insight_extractor = InsightExtractor(nlp_model=retriever.nlp)
+
+# Initialize heuristics pruner
+config_loader = HeuristicsConfigLoader()
+pruner = HeuristicsPruner(
+    es_client=es_client_instance.es,
+    index_name=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback'),
+    retriever=retriever,
+    config_loader=config_loader
+)
 
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
@@ -304,7 +315,8 @@ def retrieve_similar():
     Expects JSON: {
         prompt: str,              # User's input prompt (required)
         min_rating: int,          # Minimum rating threshold (optional, default: 4)
-        verbose: bool             # Enable verbose debugging output (optional, default: False)
+        verbose: bool,            # Enable verbose debugging output (optional, default: False)
+        negative_weight_boost: float  # Boost for negative heuristics (optional, default: 0.0, range: 0.0-1.0)
     }
 
     Returns: {
@@ -327,6 +339,7 @@ def retrieve_similar():
         prompt = data['prompt']
         min_rating = data.get('min_rating', 4)
         verbose = data.get('verbose', False)
+        negative_weight_boost = data.get('negative_weight_boost', 0.0)
 
         # Validate inputs
         if not isinstance(prompt, str) or len(prompt.strip()) == 0:
@@ -339,10 +352,17 @@ def retrieve_similar():
         if not isinstance(min_rating, int) or min_rating < 0 or min_rating > 5:
             return jsonify({"error": "min_rating must be an integer between 0 and 5"}), 400
 
+        if not isinstance(negative_weight_boost, (int, float)) or negative_weight_boost < 0.0 or negative_weight_boost > 1.0:
+            return jsonify({"error": "negative_weight_boost must be a number between 0.0 and 1.0"}), 400
+
+        if verbose and negative_weight_boost > 0:
+            logger.info(f"Auto-iteration mode: negative_weight_boost={negative_weight_boost:.2f}")
+
         # Retrieve best match - try positive heuristics first
         result = retriever.retrieve_best_match(
             prompt=prompt,
-            min_rating=min_rating
+            min_rating=min_rating,
+            negative_weight_boost=negative_weight_boost
         )
 
         is_negative = False
@@ -354,7 +374,8 @@ def retrieve_similar():
 
             result = retriever.retrieve_negative_heuristics(
                 prompt=prompt,
-                max_rating=retriever.MAX_RATING_NEGATIVE  # Use configured value
+                max_rating=retriever.MAX_RATING_NEGATIVE,  # Use configured value
+                negative_weight_boost=negative_weight_boost
             )
 
             if result:
@@ -507,6 +528,41 @@ def validate_response():
     except Exception as e:
         raise SandboxException("Failed to validate response",
                              operation="validate_response") from e
+
+
+@app.route('/admin/prune-heuristics', methods=['POST'])
+def prune_heuristics():
+    """
+    Manually trigger auto-pruning of unretrievable heuristics.
+
+    This endpoint removes heuristics that are no longer retrievable due to
+    the existence of higher-rated similar heuristics.
+
+    Expects JSON: {
+        verbose: bool  # Enable detailed logging (optional, default: False)
+    }
+
+    Returns: {
+        enabled: bool,          # Whether pruning is enabled
+        total_checked: int,     # Total heuristics examined
+        pruned_count: int,      # Number of heuristics removed
+        errors: int            # Number of errors encountered
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        verbose = data.get('verbose', False)
+
+        logger.info("Manual prune-heuristics request received")
+
+        # Run pruning
+        result = pruner.prune_unretrievable_heuristics(verbose=verbose)
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to prune heuristics",
+                             operation="prune_heuristics") from e
 
 
 if __name__ == '__main__':

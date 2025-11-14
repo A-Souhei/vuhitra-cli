@@ -7,6 +7,7 @@ from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
 from src.utils.config_loader import ConfigLoader
 from src.utils.feedback_collector import FeedbackCollector
+from src.utils.input_with_timeout import input_with_timeout
 from src.utils.ui_formatter import (
     set_verbose_mode, is_verbose, print_banner, print_response,
     print_context_verbose, print_context_content_verbose, print_elasticsearch_verbose,
@@ -29,7 +30,7 @@ def initialize_error_handler():
     except Exception as e:
         print(f"WARNING: Failed to initialize error handler: {str(e)}", file=sys.stderr)
 
-def fetch_similar_heuristic(prompt, verbose=False):
+def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
     """Fetch similar heuristic from sandbox to enhance LLM context."""
     endpoint = None  # Initialize before try block
     start_time = time.time()
@@ -46,16 +47,23 @@ def fetch_similar_heuristic(prompt, verbose=False):
         confidence_threshold = config.get_sandbox_confidence_threshold()
 
         if verbose:
-            print_debug("Heuristic Retrieval Request", {
+            debug_info = {
                 "endpoint": endpoint,
                 "prompt_length": len(prompt),
                 "confidence_threshold": confidence_threshold,
                 "min_rating": 4
-            })
+            }
+            if negative_weight_boost > 0:
+                debug_info["negative_weight_boost"] = negative_weight_boost
+            print_debug("Heuristic Retrieval Request", debug_info)
+
+        request_json = {"prompt": prompt, "min_rating": 4, "verbose": verbose}
+        if negative_weight_boost > 0:
+            request_json["negative_weight_boost"] = negative_weight_boost
 
         response = requests.post(
             endpoint,
-            json={"prompt": prompt, "min_rating": 4, "verbose": verbose},
+            json=request_json,
             timeout=5
         )
         response.raise_for_status()
@@ -216,59 +224,144 @@ def interactive_mode(model, verbose=False):
             # Timing for overall request
             request_start = time.time()
 
-            # Fetch similar heuristic to enhance context
-            heuristic_context, heuristic_data = fetch_similar_heuristic(prompt, verbose=verbose)
+            # Load auto-iteration config
+            config = ConfigLoader()
+            max_iterations = 10  # Default, could be loaded from heuristics_config via sandbox
+            timeout_seconds = config.get_auto_iteration_timeout()
+            negative_weight_increment = 0.1  # Default, could be loaded from config
 
-            # Enhance prompt with heuristic context if available
-            enhanced_prompt = prompt
-            if heuristic_context:
-                enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+            # Auto-iteration loop
+            iteration_number = 0
+            negative_weight_boost = 0.0
+            rating = None
+
+            while iteration_number < max_iterations:
+                # Fetch similar heuristic to enhance context (with boost if iterating)
+                heuristic_context, heuristic_data = fetch_similar_heuristic(
+                    prompt,
+                    verbose=verbose,
+                    negative_weight_boost=negative_weight_boost
+                )
+
+                # Enhance prompt with heuristic context if available
+                enhanced_prompt = prompt
+                if heuristic_context:
+                    enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+
+                    if verbose:
+                        print_debug("Enhanced Prompt", {
+                            "original_length": len(prompt),
+                            "enhanced_length": len(enhanced_prompt),
+                            "context_added": len(heuristic_context),
+                            "iteration": iteration_number,
+                            "negative_weight_boost": negative_weight_boost
+                        })
+
+                # Generate response
+                llm_start = time.time()
+                response, execution_time_ms = generate(model, enhanced_prompt)
+                llm_duration = (time.time() - llm_start) * 1000
 
                 if verbose:
-                    print_debug("Enhanced Prompt", {
-                        "original_length": len(prompt),
-                        "enhanced_length": len(enhanced_prompt),
-                        "context_added": len(heuristic_context)
-                    })
+                    print_timing_verbose("LLM generation", llm_duration)
 
-            # Generate response
-            llm_start = time.time()
-            response, execution_time_ms = generate(model, enhanced_prompt)
-            llm_duration = (time.time() - llm_start) * 1000
+                # Print response with markdown formatting
+                print_response(response)
 
-            if verbose:
-                print_timing_verbose("LLM generation", llm_duration)
+                # Collect feedback if enabled
+                feedback_data = feedback_collector.collect_feedback(prompt, response)
 
-            # Print response with markdown formatting
-            print_response(response)
+                if feedback_data:
+                    rating = feedback_data.get('rating')
 
-            # Collect feedback if enabled
-            feedback_data = feedback_collector.collect_feedback(prompt, response)
+                    # Add execution time and metadata to feedback
+                    feedback_data['execution_time_ms'] = execution_time_ms
 
-            if feedback_data:
-                # Add execution time and metadata to feedback
-                feedback_data['execution_time_ms'] = execution_time_ms
+                    # Add auto-iteration metadata
+                    feedback_data['iteration_number'] = iteration_number
+                    feedback_data['is_auto_iteration'] = (iteration_number > 0)
+                    feedback_data['negative_weight_boost'] = negative_weight_boost
 
-                # Add heuristic context metadata if available
-                if heuristic_data and heuristic_data.get('matched_heuristic'):
-                    feedback_data['parent_heuristic_id'] = heuristic_data['matched_heuristic'].get('_id')
+                    # Add heuristic context metadata if available
+                    if heuristic_data and heuristic_data.get('matched_heuristic'):
+                        feedback_data['parent_heuristic_id'] = heuristic_data['matched_heuristic'].get('_id')
 
-                    # Add chain information
-                    chain = heuristic_data.get('chain', [])
-                    if chain:
-                        feedback_data['chain_ids'] = [doc.get('_id') for doc in chain if doc.get('_id')]
-                        feedback_data['chain_depth'] = len(chain) + 1
+                        # Add chain information
+                        chain = heuristic_data.get('chain', [])
+                        if chain:
+                            feedback_data['chain_ids'] = [doc.get('_id') for doc in chain if doc.get('_id')]
+                            feedback_data['chain_depth'] = len(chain) + 1
+                        else:
+                            feedback_data['chain_depth'] = 1
+
+                        # Add contexted heuristic IDs
+                        feedback_data['contexted_heuristic_ids'] = [heuristic_data['matched_heuristic'].get('_id')]
+
+                    if verbose:
+                        console.print()
+
+                    # Send to sandbox for heuristics processing
+                    send_feedback_to_sandbox(feedback_data, verbose=verbose)
+
+                    # Check if we should auto-iterate (rating == 0)
+                    if rating == 0:
+                        if iteration_number + 1 < max_iterations:
+                            # Ask user if they want to retry with timeout
+                            console.print(f"\n[yellow]⚠️  Response out of context (attempt {iteration_number + 1}/{max_iterations})[/yellow]")
+
+                            retry_response = input_with_timeout(
+                                f"Retry with increased anti-pattern learning? (Y/n) [auto in {timeout_seconds}s]: ",
+                                timeout_seconds,
+                                'Y'
+                            )
+
+                            if retry_response.lower() == 'n':
+                                if verbose:
+                                    print_info("User declined auto-iteration, moving to next prompt")
+                                break  # Exit iteration loop
+
+                            # User agreed or timeout - continue iteration
+                            iteration_number += 1
+                            negative_weight_boost += negative_weight_increment
+                            negative_weight_boost = min(1.0, negative_weight_boost)  # Cap at 1.0
+
+                            if verbose:
+                                print_info(f"🔄 Retrying (iteration {iteration_number + 1}/{max_iterations}) with negative_weight_boost={negative_weight_boost:.2f}")
+
+                            continue  # Retry with increased boost
+
+                        else:
+                            # Max iterations exceeded
+                            console.print(f"\n[red]❌ Max iterations ({max_iterations}) exceeded[/red]")
+                            console.print("\n[bold]Options:[/bold]")
+                            console.print("1) Rephrase your prompt")
+                            console.print("2) Continue to next prompt")
+                            console.print("3) Exit interactive mode")
+
+                            try:
+                                choice = input("\nChoice (1/2/3): ").strip()
+
+                                if choice == '1':
+                                    # Let user rephrase - break iteration loop to get new prompt
+                                    break
+                                elif choice == '3':
+                                    # Exit interactive mode
+                                    console.print("\n[bold cyan]👋 Goodbye![/bold cyan]\n")
+                                    return
+                                # else: choice == '2' or any other - continue to next prompt
+                            except (EOFError, KeyboardInterrupt):
+                                pass
+
+                            break  # Exit iteration loop
                     else:
-                        feedback_data['chain_depth'] = 1
+                        # Rating > 0, success! Exit iteration loop
+                        if iteration_number > 0 and verbose:
+                            print_success(f"✓ Positive rating received after {iteration_number + 1} attempts")
+                        break
 
-                    # Add contexted heuristic IDs
-                    feedback_data['contexted_heuristic_ids'] = [heuristic_data['matched_heuristic'].get('_id')]
-
-                if verbose:
-                    console.print()
-
-                # Send to sandbox for heuristics processing
-                send_feedback_to_sandbox(feedback_data, verbose=verbose)
+                else:
+                    # No feedback collected (user skipped) - exit iteration loop
+                    break
 
             # Print total request timing
             total_duration = (time.time() - request_start) * 1000

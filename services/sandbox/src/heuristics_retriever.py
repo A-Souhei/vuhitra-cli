@@ -105,7 +105,8 @@ class HeuristicsRetriever:
     def retrieve_best_match(
         self,
         prompt: str,
-        min_rating: int = None
+        min_rating: int = None,
+        negative_weight_boost: float = 0.0
     ) -> Optional[Dict]:
         """
         Retrieve the best matching heuristic for the given prompt.
@@ -113,11 +114,13 @@ class HeuristicsRetriever:
         Args:
             prompt: User's input prompt
             min_rating: Minimum rating threshold (default: MIN_RATING)
+            negative_weight_boost: Boost factor for negative heuristics influence (0.0-1.0)
+                                  Higher values reduce positive heuristic confidence
 
         Returns:
             Dictionary containing:
                 - matched_heuristic: The best matching document
-                - confidence_score: Overall confidence (0-1)
+                - confidence_score: Overall confidence (0-1, adjusted by boost)
                 - scoring_breakdown: Individual scores for each method
             Returns None if no suitable match found
         """
@@ -163,14 +166,19 @@ class HeuristicsRetriever:
             # Return top result(s)
             best_match = final_scores[0]
 
+            # Apply negative weight boost to reduce positive heuristic confidence
+            # The higher the boost, the less confident we are in positive heuristics
+            adjusted_confidence = best_match['final_score'] * (1.0 - negative_weight_boost)
+
             result = {
                 'matched_heuristic': best_match['document'],
-                'confidence_score': best_match['final_score'],
+                'confidence_score': adjusted_confidence,
                 'scoring_breakdown': {
                     'semantic_similarity': best_match['semantic_score'],
                     'levenshtein_similarity': best_match['levenshtein_score'],
                     'keyword_overlap': best_match['keyword_score'],
-                    'rating_normalized': best_match['rating_score']
+                    'rating_normalized': best_match['rating_score'],
+                    'negative_weight_boost_applied': negative_weight_boost
                 },
                 'chain': []
             }
@@ -210,7 +218,8 @@ class HeuristicsRetriever:
     def retrieve_negative_heuristics(
         self,
         prompt: str,
-        max_rating: int = None
+        max_rating: int = None,
+        negative_weight_boost: float = 0.0
     ) -> Optional[Dict]:
         """
         Retrieve the best matching negative heuristic (anti-pattern) for the given prompt.
@@ -221,11 +230,13 @@ class HeuristicsRetriever:
         Args:
             prompt: User's input prompt
             max_rating: Maximum rating threshold (default: MAX_RATING_NEGATIVE)
+            negative_weight_boost: Boost factor for negative heuristics influence (0.0-1.0)
+                                  Higher values increase negative heuristic confidence
 
         Returns:
             Dictionary containing:
                 - matched_heuristic: The best matching negative document
-                - confidence_score: Overall confidence (0-1)
+                - confidence_score: Overall confidence (0-1, increased by boost)
                 - scoring_breakdown: Individual scores for each method
                 - is_negative: True to indicate this is a negative heuristic
                 - chain: Empty list (negative heuristics don't include chains)
@@ -273,14 +284,20 @@ class HeuristicsRetriever:
             # Return top result
             best_match = final_scores[0]
 
+            # Apply negative weight boost to increase negative heuristic confidence
+            # The higher the boost, the more confident we are in negative heuristics (anti-patterns)
+            # Cap at 1.0 to keep confidence in valid range
+            adjusted_confidence = min(1.0, best_match['final_score'] * (1.0 + negative_weight_boost))
+
             result = {
                 'matched_heuristic': best_match['document'],
-                'confidence_score': best_match['final_score'],
+                'confidence_score': adjusted_confidence,
                 'scoring_breakdown': {
                     'semantic_similarity': best_match['semantic_score'],
                     'levenshtein_similarity': best_match['levenshtein_score'],
                     'keyword_overlap': best_match['keyword_score'],
-                    'rating_normalized': best_match['rating_score']
+                    'rating_normalized': best_match['rating_score'],
+                    'negative_weight_boost_applied': negative_weight_boost
                 },
                 'is_negative': True,
                 'chain': []
@@ -291,7 +308,7 @@ class HeuristicsRetriever:
 
             logger.info(
                 f"Best negative match found with confidence {result['confidence_score']:.3f} "
-                f"(rating: {best_match['document']['rating']})"
+                f"(rating: {best_match['document']['rating']}, boost: {negative_weight_boost:.2f})"
             )
 
             return result

@@ -10,6 +10,8 @@ cli:
   # When enabled, users will be prompted to rate their satisfaction (0-5) after each response
   # 0=Disappointed, 1=Very dissatisfied, 2=Dissatisfied, 3=Neutral, 4=Satisfied, 5=Very satisfied
   enable_feedback: true
+  # Auto-iteration timeout (seconds) - when rating=0, wait this long for user confirmation before auto-retry
+  auto_iteration_timeout_seconds: 3
 
 # Model configuration
 model:

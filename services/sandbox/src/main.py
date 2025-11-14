@@ -1,6 +1,7 @@
 import shutil
 import sys
 import os
+import logging
 from pathlib import Path
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
@@ -12,6 +13,10 @@ from heuristics import Heuristics
 from heuristics_retriever import HeuristicsRetriever
 from insight_extractor import InsightExtractor
 from elasticsearch_client import ElasticSearchClient
+
+# Configure logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
@@ -298,7 +303,7 @@ def retrieve_similar():
 
     Expects JSON: {
         prompt: str,              # User's input prompt (required)
-        min_rating: int,          # Minimum rating threshold (optional, default: 3)
+        min_rating: int,          # Minimum rating threshold (optional, default: 4)
         verbose: bool             # Enable verbose debugging output (optional, default: False)
     }
 
@@ -320,7 +325,7 @@ def retrieve_similar():
             return jsonify({"error": "Missing required field: prompt"}), 400
 
         prompt = data['prompt']
-        min_rating = data.get('min_rating', 3)
+        min_rating = data.get('min_rating', 4)
         verbose = data.get('verbose', False)
 
         # Validate inputs
@@ -334,28 +339,51 @@ def retrieve_similar():
         if not isinstance(min_rating, int) or min_rating < 0 or min_rating > 5:
             return jsonify({"error": "min_rating must be an integer between 0 and 5"}), 400
 
-        # Retrieve best match
+        # Retrieve best match - try positive heuristics first
         result = retriever.retrieve_best_match(
             prompt=prompt,
             min_rating=min_rating
         )
 
+        is_negative = False
+
+        # If no positive match found, try negative heuristics (anti-patterns)
+        if not result:
+            if verbose:
+                logger.info("No positive heuristic found, trying negative heuristics (anti-patterns)")
+
+            result = retriever.retrieve_negative_heuristics(
+                prompt=prompt,
+                max_rating=retriever.MAX_RATING_NEGATIVE  # Use configured value
+            )
+
+            if result:
+                is_negative = True
+                if verbose:
+                    logger.info(f"Negative heuristic found with confidence {result.get('confidence_score', 0):.3f}")
+
         if not result:
             return jsonify({
-                "message": "No suitable match found",
+                "message": "No suitable match found (neither positive nor negative)",
                 "matched_heuristic": None,
                 "confidence_score": 0.0,
                 "insights": None
             }), 200
 
-        # Extract insights from the matched heuristic and its chain
+        # Extract insights based on whether it's positive or negative
         chain = result.get('chain', [])
-        if chain:
+
+        if is_negative or result.get('is_negative', False):
+            # Extract negative insights (anti-patterns)
+            insights = insight_extractor.extract_negative_insights(result['matched_heuristic'])
+        elif chain:
+            # Extract chain insights for positive heuristics
             insights = insight_extractor.extract_chain_insights(
                 matched_heuristic=result['matched_heuristic'],
                 chain=chain
             )
         else:
+            # Extract standard positive insights
             insights = insight_extractor.extract_insights(result['matched_heuristic'])
 
         response_data = {
@@ -364,7 +392,8 @@ def retrieve_similar():
             "insights": insights,
             "scoring_breakdown": result['scoring_breakdown'],
             "chain_length": len(chain),
-            "has_chain": len(chain) > 0
+            "has_chain": len(chain) > 0,
+            "is_negative": is_negative or result.get('is_negative', False)
         }
 
         # Add verbose debugging information

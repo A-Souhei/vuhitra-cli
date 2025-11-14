@@ -69,6 +69,7 @@ class HeuristicsRetriever:
         self.RATING_WEIGHT = self.config.get_rating_weight()
 
         self.MIN_RATING = self.config.get_min_rating()
+        self.MAX_RATING_NEGATIVE = self.config.get_max_rating_negative()
         self.MAX_STAGE1_CANDIDATES = self.config.get_max_stage1_candidates()
         self.MAX_STAGE2_CANDIDATES = self.config.get_max_stage2_candidates()
 
@@ -206,6 +207,106 @@ class HeuristicsRetriever:
             )
             return None
 
+    def retrieve_negative_heuristics(
+        self,
+        prompt: str,
+        max_rating: int = None
+    ) -> Optional[Dict]:
+        """
+        Retrieve the best matching negative heuristic (anti-pattern) for the given prompt.
+
+        This method searches for low-rated heuristics (rating <= max_rating) that represent
+        unsuccessful approaches or anti-patterns to avoid.
+
+        Args:
+            prompt: User's input prompt
+            max_rating: Maximum rating threshold (default: MAX_RATING_NEGATIVE)
+
+        Returns:
+            Dictionary containing:
+                - matched_heuristic: The best matching negative document
+                - confidence_score: Overall confidence (0-1)
+                - scoring_breakdown: Individual scores for each method
+                - is_negative: True to indicate this is a negative heuristic
+                - chain: Empty list (negative heuristics don't include chains)
+            Returns None if no suitable match found
+        """
+        if not self.es or not self.nlp:
+            logger.warning("Retriever not properly initialized")
+            return None
+
+        if max_rating is None:
+            max_rating = self.MAX_RATING_NEGATIVE
+
+        try:
+            # Stage 1: Keyword filtering with Elasticsearch for negative heuristics
+            candidates = self._stage1_keyword_filter_negative(prompt, max_rating)
+
+            if not candidates:
+                logger.info("No negative heuristic candidates found in Stage 1 (keyword filter)")
+                return None
+
+            logger.info(f"Stage 1 (Negative): Found {len(candidates)} candidates")
+
+            # Stage 2: Levenshtein distance scoring
+            scored_candidates = self._stage2_levenshtein_scoring(prompt, candidates)
+
+            # Take top N candidates for semantic analysis
+            top_candidates = sorted(
+                scored_candidates,
+                key=lambda x: x['levenshtein_score'],
+                reverse=True
+            )[:self.MAX_STAGE2_CANDIDATES]
+
+            logger.info(f"Stage 2 (Negative): Selected {len(top_candidates)} candidates for semantic analysis")
+
+            # Stage 3: Semantic similarity with spaCy
+            final_scores = self._stage3_semantic_similarity(prompt, top_candidates)
+
+            if not final_scores:
+                logger.info("No negative matches passed semantic similarity threshold")
+                return None
+
+            # Sort by final weighted score
+            final_scores.sort(key=lambda x: x['final_score'], reverse=True)
+
+            # Return top result
+            best_match = final_scores[0]
+
+            result = {
+                'matched_heuristic': best_match['document'],
+                'confidence_score': best_match['final_score'],
+                'scoring_breakdown': {
+                    'semantic_similarity': best_match['semantic_score'],
+                    'levenshtein_similarity': best_match['levenshtein_score'],
+                    'keyword_overlap': best_match['keyword_score'],
+                    'rating_normalized': best_match['rating_score']
+                },
+                'is_negative': True,
+                'chain': []
+            }
+
+            # Note: We don't retrieve chains for negative heuristics as we want to avoid
+            # presenting a lineage of poor solutions
+
+            logger.info(
+                f"Best negative match found with confidence {result['confidence_score']:.3f} "
+                f"(rating: {best_match['document']['rating']})"
+            )
+
+            return result
+
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "retrieve_negative_heuristics",
+                    "prompt_length": len(prompt),
+                    "max_rating": max_rating
+                }
+            )
+            return None
+
     def _stage1_keyword_filter(self, prompt: str, min_rating: int) -> List[Dict]:
         """
         Stage 1: Filter candidates using Elasticsearch keyword matching.
@@ -287,6 +388,93 @@ class HeuristicsRetriever:
                 context={
                     "operation": "stage1_keyword_filter",
                     "index": self.index_name
+                }
+            )
+            return []
+
+    def _stage1_keyword_filter_negative(self, prompt: str, max_rating: int) -> List[Dict]:
+        """
+        Stage 1: Filter negative heuristic candidates using Elasticsearch keyword matching.
+
+        Similar to _stage1_keyword_filter but filters for low ratings (rating <= max_rating)
+        to identify anti-patterns and unsuccessful approaches.
+
+        Args:
+            prompt: User's input prompt
+            max_rating: Maximum rating threshold (inclusive)
+
+        Returns:
+            List of candidate documents with low ratings
+        """
+        try:
+            # Extract keywords from prompt using spaCy
+            doc = self.nlp(prompt)
+            keywords = [
+                token.lemma_.lower()
+                for token in doc
+                if not token.is_stop and not token.is_punct and len(token.text) >= 3
+                and token.pos_ in ['NOUN', 'PROPN', 'VERB']
+            ]
+
+            # Build Elasticsearch query for negative heuristics
+            # We use a bool query with:
+            # - must: rating filter (rating <= max_rating)
+            # - should: text match on prompt + keyword terms boost
+            query = {
+                "bool": {
+                    "must": [
+                        {"range": {"rating": {"lte": max_rating}}}
+                    ],
+                    "should": [
+                        {
+                            "match": {
+                                "prompt": {
+                                    "query": prompt,
+                                    "boost": 2.0
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+
+            # Add keyword boosts if we extracted any
+            if keywords:
+                for keyword in keywords[:10]:  # Limit to top 10 keywords
+                    query["bool"]["should"].append({
+                        "term": {
+                            "prompt_keywords": {
+                                "value": keyword,
+                                "boost": 1.5
+                            }
+                        }
+                    })
+
+            # Execute search
+            response = self.es.search(
+                index=self.index_name,
+                query=query,
+                size=self.MAX_STAGE1_CANDIDATES,
+                _source=True
+            )
+
+            # Extract documents
+            candidates = []
+            for hit in response['hits']['hits']:
+                doc = hit['_source']
+                doc['_id'] = hit['_id']
+                doc['_score'] = hit['_score']
+                candidates.append(doc)
+
+            return candidates
+
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "stage1_keyword_filter_negative",
+                    "index": self.index_name,
+                    "max_rating": max_rating
                 }
             )
             return []

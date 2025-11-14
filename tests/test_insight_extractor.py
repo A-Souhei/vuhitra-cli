@@ -32,6 +32,7 @@ class TestInsightExtractor:
         mock_token1.pos_ = "VERB"
         mock_token1.lemma_ = "use"
         mock_token1.is_stop = False
+        mock_token1.text = "use"
         mock_token1.children = []
 
         mock_token2 = Mock()
@@ -427,3 +428,193 @@ class TestInsightExtractor:
         # Should handle special characters without crashing
         assert result is not None
         assert 'summary' in result
+
+    # Tests for negative insights extraction
+
+    @pytest.fixture
+    def mock_nlp_for_negative(self):
+        """Create a mock spaCy NLP model specifically for negative insights"""
+        mock_nlp = Mock()
+
+        def create_mock_doc(text):
+            """Factory function to create different mocks based on input"""
+            mock_doc = Mock()
+
+            # Mock sentence
+            mock_sent = Mock()
+            mock_sent.text = text[:100] if len(text) > 100 else text
+
+            # Mock tokens with proper attributes
+            mock_token1 = Mock()
+            mock_token1.pos_ = "VERB"
+            mock_token1.lemma_ = "use"
+            mock_token1.is_stop = False
+            mock_token1.text = "use"
+            mock_token1.children = []
+
+            mock_token2 = Mock()
+            mock_token2.pos_ = "NOUN"
+            mock_token2.lemma_ = "approach"
+            mock_token2.is_stop = False
+            mock_token2.text = "approach"
+            mock_token2.dep_ = "dobj"
+
+            mock_token1.children = [mock_token2]
+
+            mock_doc.__iter__ = lambda self: iter([mock_token1, mock_token2])
+            mock_doc.sents = [mock_sent]
+            mock_doc.ents = []
+            mock_doc.text = text
+
+            return mock_doc
+
+        mock_nlp.side_effect = create_mock_doc
+        return mock_nlp
+
+    def test_extract_negative_insights_success(self, mock_nlp_for_negative):
+        """Test successful negative insight extraction"""
+        extractor = InsightExtractor(nlp_model=mock_nlp_for_negative)
+
+        matched_heuristic = {
+            'prompt': 'How to test Python code?',
+            'response': 'Just use print statements for debugging. Don\'t write tests.',
+            'rating': 1,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert 'summary' in result
+        assert 'anti_techniques' in result
+        assert 'entities' in result
+        assert 'warning_indicators' in result
+        assert 'formatted_insight' in result
+        assert 'is_negative' in result
+
+        assert result['is_negative'] is True
+        assert isinstance(result['anti_techniques'], list)
+        assert isinstance(result['entities'], list)
+        assert isinstance(result['warning_indicators'], list)
+        assert isinstance(result['formatted_insight'], str)
+
+    def test_extract_negative_insights_rating_zero(self, mock_nlp_for_negative):
+        """Test negative insights with rating 0"""
+        extractor = InsightExtractor(nlp_model=mock_nlp_for_negative)
+
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Bad approach that failed',
+            'rating': 0,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert result['is_negative'] is True
+        assert "Failed approach" in result['summary'] or "completely unsuccessful" in result['summary']
+        assert len(result['warning_indicators']) > 0
+
+    def test_extract_negative_insights_rating_one(self, mock_nlp_for_negative):
+        """Test negative insights with rating 1"""
+        extractor = InsightExtractor(nlp_model=mock_nlp_for_negative)
+
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Poor quality solution',
+            'rating': 1,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert result['is_negative'] is True
+        assert "significant issues" in result['summary'] or "had significant" in result['summary']
+
+    def test_extract_negative_insights_rating_two(self, mock_nlp_for_negative):
+        """Test negative insights with rating 2"""
+        extractor = InsightExtractor(nlp_model=mock_nlp_for_negative)
+
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Below average solution',
+            'rating': 2,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert result['is_negative'] is True
+        assert "notable problems" in result['summary'] or "had notable" in result['summary']
+
+    def test_negative_insights_formatted_output(self, mock_nlp_for_negative):
+        """Test that negative insights are formatted as anti-pattern warnings"""
+        extractor = InsightExtractor(nlp_model=mock_nlp_for_negative)
+
+        matched_heuristic = {
+            'prompt': 'How to test?',
+            'response': 'Skip testing, it wastes time',
+            'rating': 0,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        formatted = result['formatted_insight']
+
+        # Should contain anti-pattern warning markers
+        assert "Anti-Pattern Warning" in formatted
+        assert "AVOIDED" in formatted
+        assert "---" in formatted
+
+    def test_negative_insights_code_response(self, mock_nlp_for_negative):
+        """Test negative insights for code responses"""
+        extractor = InsightExtractor(nlp_model=mock_nlp_for_negative)
+
+        matched_heuristic = {
+            'prompt': 'Test code',
+            'response': 'Bad code example that crashes',
+            'rating': 1,
+            'is_code_response': True
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should indicate code didn't work
+        assert any("Code example did not work as expected" in indicator for indicator in result['warning_indicators'])
+
+    def test_negative_insights_fallback(self):
+        """Test fallback negative insight when NLP is not available"""
+        extractor = InsightExtractor(nlp_model=None)
+
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': 'Bad solution',
+            'rating': 0,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should return fallback
+        assert result is not None
+        assert result['is_negative'] is True
+        assert 'formatted_insight' in result
+        assert "Anti-Pattern Warning" in result['formatted_insight']
+
+    def test_negative_insights_exception_handling(self, extractor):
+        """Test exception handling in negative insights extraction"""
+        # Create a heuristic that will cause NLP processing error
+        matched_heuristic = {
+            # Missing required fields to trigger exception
+            'rating': 1
+        }
+
+        # Mock the nlp to raise an exception
+        extractor.nlp = Mock(side_effect=Exception("NLP error"))
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should return fallback instead of crashing
+        assert result is not None
+        assert result['is_negative'] is True
+        assert 'formatted_insight' in result

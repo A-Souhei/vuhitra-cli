@@ -327,3 +327,135 @@ class TestHeuristicsRetriever:
 
         # Should return None instead of crashing
         assert result is None
+
+    # Tests for negative heuristics retrieval
+
+    def test_stage1_keyword_filter_negative(self, retriever):
+        """Test Stage 1: Keyword filtering for negative heuristics"""
+        # Mock ES search response with low-rated documents
+        mock_response = {
+            'hits': {
+                'hits': [
+                    {
+                        '_id': 'doc1',
+                        '_score': 10.5,
+                        '_source': {
+                            'prompt': 'How to test Python code?',
+                            'response': 'Just use print statements',
+                            'rating': 1,
+                            'prompt_keywords': ['test', 'python', 'code']
+                        }
+                    },
+                    {
+                        '_id': 'doc2',
+                        '_score': 8.3,
+                        '_source': {
+                            'prompt': 'Python testing approach',
+                            'response': 'Don\'t write tests',
+                            'rating': 0,
+                            'prompt_keywords': ['python', 'testing']
+                        }
+                    }
+                ]
+            }
+        }
+        retriever.es.search = Mock(return_value=mock_response)
+
+        candidates = retriever._stage1_keyword_filter_negative("How to test Python?", max_rating=2)
+
+        assert len(candidates) == 2
+        assert candidates[0]['_id'] == 'doc1'
+        assert candidates[0]['rating'] == 1
+        assert candidates[1]['_id'] == 'doc2'
+        assert candidates[1]['rating'] == 0
+
+    def test_retrieve_negative_heuristics_success(self, retriever):
+        """Test successful retrieval of negative heuristics"""
+        # Mock all stages for negative heuristics
+        mock_candidates = [{
+            '_id': 'doc1',
+            'prompt': 'How to test Python?',
+            'response': 'Don\'t write tests, they waste time',
+            'rating': 1,
+            'prompt_keywords': ['test', 'python']
+        }]
+
+        retriever._stage1_keyword_filter_negative = Mock(return_value=mock_candidates)
+        retriever._stage2_levenshtein_scoring = Mock(return_value=[
+            {**mock_candidates[0], 'levenshtein_score': 0.85}
+        ])
+        retriever._stage3_semantic_similarity = Mock(return_value=[
+            {
+                'document': mock_candidates[0],
+                'final_score': 0.75,
+                'semantic_score': 0.80,
+                'levenshtein_score': 0.85,
+                'keyword_score': 0.7,
+                'rating_score': 0.2
+            }
+        ])
+
+        result = retriever.retrieve_negative_heuristics("Python testing guide")
+
+        assert result is not None
+        assert 'matched_heuristic' in result
+        assert 'confidence_score' in result
+        assert 'scoring_breakdown' in result
+        assert 'is_negative' in result
+        assert result['is_negative'] is True
+        assert result['confidence_score'] == 0.75
+
+    def test_retrieve_negative_heuristics_no_candidates(self, retriever):
+        """Test negative heuristics retrieval when no candidates found"""
+        retriever._stage1_keyword_filter_negative = Mock(return_value=[])
+
+        result = retriever.retrieve_negative_heuristics("Some query")
+
+        assert result is None
+
+    def test_retrieve_negative_heuristics_with_max_rating(self, retriever):
+        """Test negative heuristics retrieval with custom max rating"""
+        retriever._stage1_keyword_filter_negative = Mock(return_value=[])
+
+        retriever.retrieve_negative_heuristics("Test query", max_rating=1)
+
+        retriever._stage1_keyword_filter_negative.assert_called_once_with("Test query", 1)
+
+    def test_retrieve_negative_heuristics_no_chain(self, retriever):
+        """Test that negative heuristics don't include chain"""
+        mock_candidates = [{
+            '_id': 'doc1',
+            'prompt': 'How to test?',
+            'response': 'Bad approach',
+            'rating': 0,
+            'prompt_keywords': ['test']
+        }]
+
+        retriever._stage1_keyword_filter_negative = Mock(return_value=mock_candidates)
+        retriever._stage2_levenshtein_scoring = Mock(return_value=[
+            {**mock_candidates[0], 'levenshtein_score': 0.85}
+        ])
+        retriever._stage3_semantic_similarity = Mock(return_value=[
+            {
+                'document': mock_candidates[0],
+                'final_score': 0.75,
+                'semantic_score': 0.80,
+                'levenshtein_score': 0.85,
+                'keyword_score': 0.7,
+                'rating_score': 0.0
+            }
+        ])
+
+        result = retriever.retrieve_negative_heuristics("Test query")
+
+        # Negative heuristics should not include chain
+        assert result['chain'] == []
+
+    def test_exception_handling_in_negative_retrieve(self, retriever):
+        """Test exception handling in retrieve_negative_heuristics"""
+        retriever._stage1_keyword_filter_negative = Mock(side_effect=Exception("ES error"))
+
+        result = retriever.retrieve_negative_heuristics("Test query")
+
+        # Should return None instead of crashing
+        assert result is None

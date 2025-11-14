@@ -42,7 +42,7 @@ chaining:
 
 # Auto-iteration settings (for rating=0 responses)
 auto_iteration:
-  max_iterations: 10               # Maximum number of auto-retry attempts for rating=0 responses
+  max_iterations: 5                # Maximum number of auto-retry attempts for rating=0 responses
   negative_weight_increment: 0.1   # Increment to negative heuristic weight per iteration
   store_failed_attempts: true      # Store metadata for failed iteration attempts (for debugging)
 

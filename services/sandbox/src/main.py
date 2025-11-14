@@ -375,7 +375,8 @@ def retrieve_similar():
             result = retriever.retrieve_negative_heuristics(
                 prompt=prompt,
                 max_rating=retriever.MAX_RATING_NEGATIVE,  # Use configured value
-                negative_weight_boost=negative_weight_boost
+                negative_weight_boost=negative_weight_boost,
+                verbose=verbose
             )
 
             if result:
@@ -396,7 +397,14 @@ def retrieve_similar():
 
         if is_negative or result.get('is_negative', False):
             # Extract negative insights (anti-patterns)
-            insights = insight_extractor.extract_negative_insights(result['matched_heuristic'])
+            # If chain exists, include all parent anti-patterns for complete failure history
+            if chain:
+                insights = insight_extractor.extract_negative_chain_insights(
+                    matched_heuristic=result['matched_heuristic'],
+                    chain=chain
+                )
+            else:
+                insights = insight_extractor.extract_negative_insights(result['matched_heuristic'])
         elif chain:
             # Extract chain insights for positive heuristics
             insights = insight_extractor.extract_chain_insights(

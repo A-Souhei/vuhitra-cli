@@ -219,7 +219,8 @@ class HeuristicsRetriever:
         self,
         prompt: str,
         max_rating: int = None,
-        negative_weight_boost: float = 0.0
+        negative_weight_boost: float = 0.0,
+        verbose: bool = False
     ) -> Optional[Dict]:
         """
         Retrieve the best matching negative heuristic (anti-pattern) for the given prompt.
@@ -303,8 +304,17 @@ class HeuristicsRetriever:
                 'chain': []
             }
 
-            # Note: We don't retrieve chains for negative heuristics as we want to avoid
-            # presenting a lineage of poor solutions
+            # Retrieve chain for negative heuristics if enabled and available
+            # This is useful for auto-iteration to show ALL previous failed attempts
+            if self.CHAINING_ENABLED and self.INCLUDE_CHAIN_IN_CONTEXT and self.es_client_wrapper:
+                doc_id = best_match['document'].get('_id')
+                if doc_id:
+                    chain = self.es_client_wrapper.get_chain(doc_id)
+                    # For negative heuristics, keep ALL chain items (even low-rated ones)
+                    # to show complete failure history during auto-iteration
+                    result['chain'] = chain
+                    if verbose:
+                        logger.info(f"Retrieved negative chain with {len(chain)} parent anti-patterns")
 
             logger.info(
                 f"Best negative match found with confidence {result['confidence_score']:.3f} "

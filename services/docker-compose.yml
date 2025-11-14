@@ -2,12 +2,15 @@ version: '3.8'
 
 services:
   # Redis service - Built from Dockerfile
+  # Part of app profile (needed by sandbox)
   redis:
     build:
       context: ..
       dockerfile: services/redis/Dockerfile
     image: vuhitra-redis:latest
     container_name: vuhitra-redis
+    profiles:
+      - app
     ports:
       - "16379:6379"     # Redis port
     volumes:
@@ -24,12 +27,15 @@ services:
       - vuhitra-network
 
   # Sandbox service - Built from Dockerfile
+  # Start with: docker compose --profile app up -d
   sandbox:
     build:
       context: ..
       dockerfile: services/sandbox/Dockerfile
     image: vuhitra-sandbox:latest
     container_name: vuhitra-sandbox
+    profiles:
+      - app
     ports:
       - "18001:8000"     # App port
     volumes:
@@ -103,12 +109,16 @@ services:
       - vuhitra-network
 
   # Elasticsearch service - Built from Dockerfile
+  # Part of app and dev profiles (needed by sandbox and kibana)
   elasticsearch:
     build:
       context: ..
       dockerfile: services/elasticsearch/Dockerfile
     image: vuhitra-elasticsearch:latest
     container_name: vuhitra-elasticsearch
+    profiles:
+      - app
+      - dev
     ports:
       - "9200:9200"      # HTTP API
       - "9300:9300"      # Transport
@@ -141,10 +151,14 @@ services:
     networks:
       - vuhitra-network
 
-  # Kibana service - UI for Elasticsearch
+  # Kibana service - UI for Elasticsearch (optional dev tool)
+  # Start with: docker compose --profile dev up -d (or --profile app for full stack)
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
     container_name: vuhitra-kibana
+    profiles:
+      - dev
+      - app
     ports:
       - "5601:5601"      # Kibana Web UI
     environment:

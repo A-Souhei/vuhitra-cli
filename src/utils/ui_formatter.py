@@ -12,8 +12,6 @@ from rich.tree import Tree
 from rich.table import Table
 from rich import box
 import json
-from datetime import datetime
-
 # Global console instance
 console = Console()
 

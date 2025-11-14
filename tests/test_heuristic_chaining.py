@@ -261,7 +261,7 @@ class TestChainInsightExtraction:
             assert not result.get("has_chain", False)
 
     def test_format_chain_with_anti_copying_instructions(self):
-        """Test that chain formatting includes anti-copying instructions via public API."""
+        """Test that chain formatting uses directive mode for 5-star matches."""
         mock_nlp = Mock()
         extractor = InsightExtractor(nlp_model=mock_nlp)
 
@@ -301,20 +301,18 @@ class TestChainInsightExtraction:
 
         formatted = result.get("formatted_insight", "")
 
-        # Check for new system-prompt style format (no conversational instructions)
-        assert "# System Context: Progressive Technical Solutions" in formatted
-        assert "Multiple approaches have been analyzed" in formatted
-        assert "Recommended approaches" in formatted
+        # For rating=5, should use directive mode with verified answer
+        assert "SYSTEM DIRECTIVE - VERIFIED ANSWER" in formatted
+        assert "VERIFIED correct answer" in formatted
+        assert "test response" in formatted
+        assert "CRITICAL INSTRUCTION" in formatted
+        assert "EXACT answer" in formatted or "VERBATIM" in formatted
 
         # Ensure no privacy-leaking information
-        assert "DO NOT simply copy" not in formatted
         assert "rated" not in formatted.lower()
         assert "5/5" not in formatted
         assert "4/5" not in formatted
         assert "Iteration 1" not in formatted
-
-        # Check for techniques and technologies (the actual useful info)
-        assert "old_technique" in formatted or "technique1" in formatted
 
 
 class TestChainEndToEnd:

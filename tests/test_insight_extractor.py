@@ -562,7 +562,7 @@ class TestInsightExtractor:
         formatted = result['formatted_insight']
 
         # Should contain anti-pattern warning markers
-        assert "Anti-Pattern Warning" in formatted
+        assert "SYSTEM DIRECTIVE - ANTI-PATTERN ALERT" in formatted or "Anti-Pattern Warning" in formatted
         assert "AVOIDED" in formatted
         assert "---" in formatted
 
@@ -599,7 +599,7 @@ class TestInsightExtractor:
         assert result is not None
         assert result['is_negative'] is True
         assert 'formatted_insight' in result
-        assert "Anti-Pattern Warning" in result['formatted_insight']
+        assert "SYSTEM DIRECTIVE - ANTI-PATTERN ALERT" in result['formatted_insight'] or "Anti-Pattern Warning" in result['formatted_insight']
 
     def test_negative_insights_exception_handling(self, extractor):
         """Test exception handling in negative insights extraction"""

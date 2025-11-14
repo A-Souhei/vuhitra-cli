@@ -326,21 +326,23 @@ class InsightExtractor:
         """
         Build confidence indicators for why this is a good match.
 
+        Note: Does NOT include ratings to protect user privacy.
+
         Args:
-            rating: User rating (0-5)
+            rating: User rating (0-5) - used for filtering but not exposed
             is_code: Whether response is code
             response_length: Number of words in response
 
         Returns:
-            List of confidence indicator strings
+            List of confidence indicator strings (no ratings exposed)
         """
         indicators = []
 
-        # Rating-based indicator
+        # Quality indicators based on rating (but don't expose the rating itself)
         if rating >= 4:
-            indicators.append(f"High user satisfaction (rated {rating}/5)")
+            indicators.append("High quality match")
         elif rating >= 3:
-            indicators.append(f"Positive user feedback (rated {rating}/5)")
+            indicators.append("Good quality match")
 
         # Response quality indicators
         if is_code:

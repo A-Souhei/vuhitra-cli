@@ -427,3 +427,141 @@ class TestInsightExtractor:
         # Should handle special characters without crashing
         assert result is not None
         assert 'summary' in result
+
+    # Tests for negative insights extraction
+
+    def test_extract_negative_insights_success(self, extractor):
+        """Test successful negative insight extraction"""
+        matched_heuristic = {
+            'prompt': 'How to test Python code?',
+            'response': 'Just use print statements for debugging. Don\'t write tests.',
+            'rating': 1,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert 'summary' in result
+        assert 'anti_techniques' in result
+        assert 'entities' in result
+        assert 'warning_indicators' in result
+        assert 'formatted_insight' in result
+        assert 'is_negative' in result
+
+        assert result['is_negative'] is True
+        assert isinstance(result['anti_techniques'], list)
+        assert isinstance(result['entities'], list)
+        assert isinstance(result['warning_indicators'], list)
+        assert isinstance(result['formatted_insight'], str)
+
+    def test_extract_negative_insights_rating_zero(self, extractor):
+        """Test negative insights with rating 0"""
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Bad approach that failed',
+            'rating': 0,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert result['is_negative'] is True
+        assert "Failed approach" in result['summary'] or "completely unsuccessful" in result['summary']
+        assert len(result['warning_indicators']) > 0
+
+    def test_extract_negative_insights_rating_one(self, extractor):
+        """Test negative insights with rating 1"""
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Poor quality solution',
+            'rating': 1,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert result['is_negative'] is True
+        assert "significant issues" in result['summary'] or "had significant" in result['summary']
+
+    def test_extract_negative_insights_rating_two(self, extractor):
+        """Test negative insights with rating 2"""
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Below average solution',
+            'rating': 2,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        assert result['is_negative'] is True
+        assert "notable problems" in result['summary'] or "had notable" in result['summary']
+
+    def test_negative_insights_formatted_output(self, extractor):
+        """Test that negative insights are formatted as anti-pattern warnings"""
+        matched_heuristic = {
+            'prompt': 'How to test?',
+            'response': 'Skip testing, it wastes time',
+            'rating': 0,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        formatted = result['formatted_insight']
+
+        # Should contain anti-pattern warning markers
+        assert "Anti-Pattern Warning" in formatted
+        assert "AVOIDED" in formatted
+        assert "---" in formatted
+
+    def test_negative_insights_code_response(self, extractor):
+        """Test negative insights for code responses"""
+        matched_heuristic = {
+            'prompt': 'Test code',
+            'response': 'Bad code example that crashes',
+            'rating': 1,
+            'is_code_response': True
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should indicate code didn't work
+        assert any("Code example did not work" in indicator for indicator in result['warning_indicators'])
+
+    def test_negative_insights_fallback(self):
+        """Test fallback negative insight when NLP is not available"""
+        extractor = InsightExtractor(nlp_model=None)
+
+        matched_heuristic = {
+            'prompt': 'Test',
+            'response': 'Bad solution',
+            'rating': 0,
+            'is_code_response': False
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should return fallback
+        assert result is not None
+        assert result['is_negative'] is True
+        assert 'formatted_insight' in result
+        assert "Anti-Pattern Warning" in result['formatted_insight']
+
+    def test_negative_insights_exception_handling(self, extractor):
+        """Test exception handling in negative insights extraction"""
+        # Create a heuristic that will cause NLP processing error
+        matched_heuristic = {
+            # Missing required fields to trigger exception
+            'rating': 1
+        }
+
+        # Mock the nlp to raise an exception
+        extractor.nlp = Mock(side_effect=Exception("NLP error"))
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should return fallback instead of crashing
+        assert result is not None
+        assert result['is_negative'] is True
+        assert 'formatted_insight' in result

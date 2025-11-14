@@ -497,6 +497,237 @@ Please provide a comprehensive response addressing the user's specific question.
             # Fallback to standard extraction
             return self.extract_insights(matched_heuristic)
 
+    def extract_negative_insights(self, matched_heuristic: Dict) -> Dict[str, Any]:
+        """
+        Extract insights from a negative heuristic (anti-pattern).
+
+        This method formats low-rated heuristics as warnings about approaches to avoid,
+        rather than recommendations to follow.
+
+        Args:
+            matched_heuristic: The matched historical interaction with low rating
+
+        Returns:
+            Dictionary containing:
+                - summary: Concise summary of why this approach failed
+                - anti_techniques: List of approaches that didn't work
+                - entities: Important named entities (tools, libraries that were problematic)
+                - warning_indicators: Why this is a low-quality match to avoid
+                - formatted_insight: Ready-to-inject context string (as anti-pattern)
+                - is_negative: True to indicate this is a negative heuristic
+        """
+        if not self.nlp:
+            logger.warning("spaCy model not loaded, cannot extract negative insights")
+            return self._create_fallback_negative_insight(matched_heuristic)
+
+        try:
+            prompt = matched_heuristic.get('prompt', '')
+            response = matched_heuristic.get('response', '')
+            rating = matched_heuristic.get('rating', 0)
+            is_code = matched_heuristic.get('is_code_response', False)
+
+            # Limit response text for performance
+            response_text = response[:self.MAX_NLP_TEXT_LENGTH] if len(response) > self.MAX_NLP_TEXT_LENGTH else response
+
+            # Process the response with spaCy
+            response_doc = self.nlp(response_text)
+
+            # Extract problematic techniques
+            anti_techniques = self._extract_key_techniques(response_doc, is_code)
+            entities = self._extract_entities(response_doc)
+
+            # Build summary focused on what went wrong
+            summary = self._build_negative_summary(
+                prompt=prompt,
+                response=response,
+                anti_techniques=anti_techniques,
+                rating=rating
+            )
+
+            # Warning indicators instead of confidence indicators
+            warning_indicators = self._build_warning_indicators(
+                rating=rating,
+                is_code=is_code,
+                response_length=len(response.split())
+            )
+
+            # Format as anti-pattern context
+            formatted_insight = self._format_negative_for_injection(
+                summary=summary,
+                anti_techniques=anti_techniques,
+                entities=entities,
+                warning_indicators=warning_indicators
+            )
+
+            return {
+                'summary': summary,
+                'anti_techniques': anti_techniques,
+                'entities': entities,
+                'warning_indicators': warning_indicators,
+                'formatted_insight': formatted_insight,
+                'is_negative': True
+            }
+
+        except Exception as e:
+            error_handler.handle_exception(
+                e,
+                context={
+                    "operation": "extract_negative_insights",
+                    "has_response": 'response' in matched_heuristic
+                }
+            )
+            return self._create_fallback_negative_insight(matched_heuristic)
+
+    def _build_negative_summary(
+        self,
+        prompt: str,
+        response: str,
+        anti_techniques: List[str],
+        rating: int
+    ) -> str:
+        """
+        Build a concise summary of why this approach was unsuccessful.
+
+        Args:
+            prompt: Original prompt
+            response: Response text
+            anti_techniques: Extracted techniques that didn't work
+            rating: User rating (low)
+
+        Returns:
+            Summary string focused on what to avoid
+        """
+        # Limit text for performance
+        response_text = response[:self.MAX_NLP_TEXT_LENGTH] if len(response) > self.MAX_NLP_TEXT_LENGTH else response
+
+        # Extract first meaningful sentence from response
+        doc = self.nlp(response_text)
+        sentences = list(doc.sents)
+
+        summary_parts = []
+
+        # Indicate this was an unsuccessful approach
+        if rating == 0:
+            summary_parts.append("This approach was completely unsuccessful")
+        elif rating == 1:
+            summary_parts.append("This approach had significant issues")
+        else:  # rating == 2
+            summary_parts.append("This approach had notable problems")
+
+        # Add what was tried if available
+        if anti_techniques:
+            summary_parts.append(f"attempting to use {anti_techniques[0]}")
+
+        return ", ".join(summary_parts)
+
+    def _build_warning_indicators(
+        self,
+        rating: int,
+        is_code: bool,
+        response_length: int
+    ) -> List[str]:
+        """
+        Build warning indicators for why this approach should be avoided.
+
+        Args:
+            rating: User rating (0-2 for negative heuristics)
+            is_code: Whether response is code
+            response_length: Number of words in response
+
+        Returns:
+            List of warning indicator strings
+        """
+        indicators = []
+
+        # Quality warnings based on rating
+        if rating == 0:
+            indicators.append("Failed approach - did not work")
+        elif rating == 1:
+            indicators.append("Poor quality solution - many issues")
+        elif rating == 2:
+            indicators.append("Below average solution - has problems")
+
+        # Additional context
+        if is_code:
+            indicators.append("Code example did not work as expected")
+
+        if response_length < 20:
+            indicators.append("Insufficient explanation")
+
+        return indicators
+
+    def _format_negative_for_injection(
+        self,
+        summary: str,
+        anti_techniques: List[str],
+        entities: List[Dict],
+        warning_indicators: List[str]
+    ) -> str:
+        """
+        Format negative insights as anti-pattern warnings for LLM context.
+
+        Args:
+            summary: Summary of why approach failed
+            anti_techniques: List of techniques to avoid
+            entities: List of entities that were problematic
+            warning_indicators: Warning indicators
+
+        Returns:
+            Formatted string ready for LLM context injection as anti-pattern
+        """
+        lines = []
+        lines.append("# System Context: Anti-Pattern Warning")
+        lines.append("")
+        lines.append("Based on analysis of similar questions, the following approach should be AVOIDED:")
+        lines.append("")
+        lines.append(f"⚠️  {summary}")
+        lines.append("")
+
+        # Add techniques as things to avoid
+        if anti_techniques:
+            lines.append("Approaches that did NOT work well:")
+            for tech in anti_techniques[:3]:
+                lines.append(f"  ✗ {tech}")
+            lines.append("")
+
+        # Add entities as technologies to be careful with in this context
+        if entities:
+            entity_names = [e['text'] for e in entities[:3]]
+            lines.append(f"Technologies that had issues in this context: {', '.join(entity_names)}")
+            lines.append("")
+
+        lines.append("Please provide an alternative approach that addresses the user's question more effectively.")
+        lines.append("---")
+
+        return "\n".join(lines)
+
+    def _create_fallback_negative_insight(self, matched_heuristic: Dict) -> Dict[str, Any]:
+        """
+        Create a basic negative insight when full NLP analysis is not available.
+
+        Args:
+            matched_heuristic: The matched negative heuristic document
+
+        Returns:
+            Basic negative insight dictionary
+        """
+        rating = matched_heuristic.get('rating', 0)
+
+        formatted = """# System Context: Anti-Pattern Warning
+
+Based on analysis of similar questions, certain approaches should be avoided.
+Please provide an alternative solution that addresses the user's specific question effectively.
+---"""
+
+        return {
+            'summary': "Approach with known issues",
+            'anti_techniques': [],
+            'entities': [],
+            'warning_indicators': ["Low quality match"],
+            'formatted_insight': formatted,
+            'is_negative': True
+        }
+
     def _format_chain_for_injection(
         self,
         primary_heuristic: Dict,

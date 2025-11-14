@@ -68,6 +68,9 @@ def fetch_similar_heuristic(prompt, verbose=False):
         if verbose and data.get('matched_heuristic'):
             print_context_verbose(data)
 
+        # Check if this is a negative heuristic (anti-pattern)
+        is_negative = data.get('is_negative', False)
+
         # Return the formatted insight if available and confidence is good
         if (data.get('confidence_score', 0) > confidence_threshold and
             data.get('insights') and
@@ -76,7 +79,11 @@ def fetch_similar_heuristic(prompt, verbose=False):
             formatted_insight = data['insights']['formatted_insight']
 
             if verbose:
-                print_success(f"✓ Heuristic match found (confidence: {data.get('confidence_score', 0):.2%})")
+                if is_negative:
+                    print_warning(f"⚠️  Negative heuristic (anti-pattern) found (confidence: {data.get('confidence_score', 0):.2%})")
+                    print_info("This will inform the LLM about approaches to AVOID")
+                else:
+                    print_success(f"✓ Heuristic match found (confidence: {data.get('confidence_score', 0):.2%})")
                 # Display the actual context content that will be used
                 print_context_content_verbose(formatted_insight)
 

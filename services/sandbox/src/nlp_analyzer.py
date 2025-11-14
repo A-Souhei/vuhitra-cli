@@ -18,6 +18,15 @@ class NLPAnalyzer:
 
     def __init__(self, config_path='heuristics_config.yaml'):
         """Initialize NLP tools."""
+        # Initialize code detection patterns first (ensures they're always available)
+        self.code_keywords = {
+            'def', 'class', 'import', 'function', 'const', 'let', 'var',
+            'return', 'if', 'else', 'for', 'while', 'try', 'catch', 'public',
+            'private', 'void', 'int', 'string', 'async', 'await'
+        }
+        self.code_symbols = {'(', ')', '{', '}', '[', ']', ';', ':', '=', '=>', '->'}
+
+        # Initialize spaCy
         try:
             self.nlp = spacy.load("en_core_web_lg")
         except OSError as e:
@@ -32,7 +41,12 @@ class NLPAnalyzer:
             )
             self.nlp = None
 
-        self.vader = SentimentIntensityAnalyzer()
+        # Initialize VADER with error handling
+        try:
+            self.vader = SentimentIntensityAnalyzer()
+        except Exception as e:
+            logger.warning(f"Failed to initialize VADER: {e}, sentiment analysis will use transformer only")
+            self.vader = None
 
         # Load sentiment analysis configuration
         self.sentiment_config = self._load_sentiment_config(config_path)
@@ -56,14 +70,6 @@ class NLPAnalyzer:
                 'timeout_seconds': 5,
                 'fallback_to_vader': True
             }
-        
-        # Code detection patterns
-        self.code_keywords = {
-            'def', 'class', 'import', 'function', 'const', 'let', 'var', 
-            'return', 'if', 'else', 'for', 'while', 'try', 'catch', 'public', 
-            'private', 'void', 'int', 'string', 'async', 'await'
-        }
-        self.code_symbols = {'(', ')', '{', '}', '[', ']', ';', ':', '=', '=>', '->'}
 
     def _analyze_sentiment_transformer(self, text: str) -> Dict[str, float]:
         """
@@ -109,8 +115,12 @@ class NLPAnalyzer:
             text: Input text
 
         Returns:
-            Dict with vader_score and spacy_score
+            Dict with vader_score and spacy_score, or None if VADER unavailable
         """
+        if self.vader is None:
+            logger.warning("VADER not available for sentiment analysis")
+            return None
+
         vader_score = self.vader.polarity_scores(text)['compound']
 
         return {
@@ -142,7 +152,17 @@ class NLPAnalyzer:
                 logger.warning("Transformer sentiment failed and fallback disabled, using VADER anyway")
 
         # Fallback to VADER
-        return self._analyze_sentiment_vader(text)
+        vader_result = self._analyze_sentiment_vader(text)
+
+        # If VADER also failed, return neutral sentiment
+        if vader_result is None:
+            logger.warning("Both transformer and VADER sentiment analysis unavailable, returning neutral")
+            return {
+                "vader_score": 0.0,
+                "spacy_score": 0.0
+            }
+
+        return vader_result
 
     def extract_keywords(self, text: str, top_n: int = 15) -> List[str]:
         """

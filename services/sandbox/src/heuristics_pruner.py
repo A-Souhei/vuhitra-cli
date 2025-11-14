@@ -275,8 +275,9 @@ class HeuristicsPruner:
                     # If similar AND other has higher rating (any rating >= 1), mark for pruning
                     # Since we're only pruning rating=0, any better alternative means we should prune
                     if similarity >= self.SIMILARITY_THRESHOLD:
-                        # For rating=0 heuristics, any higher rating means it's better
-                        if other_rating >= self.MIN_RATING_DIFFERENCE:
+                        # For rating=0 heuristics, check if other rating is sufficiently better
+                        rating_difference = other_rating - h_rating
+                        if rating_difference >= self.MIN_RATING_DIFFERENCE:
                             if verbose:
                                 logger.info(
                                     f"Marking {h_id} for pruning: rating={h_rating} (failed), "

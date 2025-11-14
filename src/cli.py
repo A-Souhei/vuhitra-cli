@@ -226,9 +226,9 @@ def interactive_mode(model, verbose=False):
 
             # Load auto-iteration config
             config = ConfigLoader()
-            max_iterations = 10  # Default, could be loaded from heuristics_config via sandbox
+            max_iterations = config.get_auto_iteration_max_iterations()
             timeout_seconds = config.get_auto_iteration_timeout()
-            negative_weight_increment = 0.1  # Default, could be loaded from config
+            negative_weight_increment = config.get_auto_iteration_negative_weight_increment()
 
             # Auto-iteration loop
             iteration_number = 0
@@ -278,8 +278,13 @@ def interactive_mode(model, verbose=False):
                     feedback_data['execution_time_ms'] = execution_time_ms
 
                     # Add auto-iteration metadata
-                    # Mark as is_auto_iteration if: we're in an iteration > 0, OR this is a rating=0
-                    # that could potentially be retried (not at max iterations yet)
+                    # is_auto_iteration is True in two cases:
+                    # 1. iteration_number > 0: This is a subsequent retry attempt (not the first)
+                    # 2. could_retry: This is the first attempt (iteration 0) BUT got rating=0 and we can retry
+                    #    - This flags the first failed attempt so we know it's part of an auto-iteration cycle
+                    # is_auto_iteration is False only when:
+                    # - First attempt (iteration 0) with any rating other than 0
+                    # - OR at max iterations (no more retries possible)
                     could_retry = (rating == 0 and iteration_number + 1 < max_iterations)
                     feedback_data['iteration_number'] = iteration_number
                     feedback_data['is_auto_iteration'] = (iteration_number > 0 or could_retry)
@@ -351,17 +356,27 @@ def interactive_mode(model, verbose=False):
 
                                 if provide_response == 'y':
                                     console.print("\n[bold]Please enter the correct response (or what you think is correct):[/bold]")
-                                    console.print("[dim]Press Enter twice when done (empty line to finish)[/dim]\n")
+                                    console.print("[dim]Press Enter twice when done (two consecutive empty lines to finish)[/dim]\n")
 
                                     # Collect multi-line response
                                     correct_response_lines = []
+                                    consecutive_empty_lines = 0
                                     while True:
                                         try:
                                             line = input()
-                                            if line == "" and correct_response_lines:  # Empty line and we have content
-                                                break
+                                            if line == "":
+                                                consecutive_empty_lines += 1
+                                                # Break on two consecutive empty lines
+                                                if consecutive_empty_lines >= 2:
+                                                    # Remove the first trailing empty line that was appended
+                                                    if correct_response_lines and correct_response_lines[-1] == "":
+                                                        correct_response_lines.pop()
+                                                    break
+                                            else:
+                                                consecutive_empty_lines = 0
                                             correct_response_lines.append(line)
                                         except (EOFError, KeyboardInterrupt):
+                                            # User cancelled input (Ctrl+C or Ctrl+D)
                                             break
 
                                     correct_response = "\n".join(correct_response_lines).strip()
@@ -395,6 +410,8 @@ def interactive_mode(model, verbose=False):
                                         console.print("\n[yellow]No response provided, skipping.[/yellow]")
 
                             except (EOFError, KeyboardInterrupt):
+                                # User interrupted during "provide correct response" flow (Ctrl+C or Ctrl+D)
+                                # Silently continue to options menu - this is intentional UX
                                 pass
 
                             # Now show the options menu
@@ -415,6 +432,8 @@ def interactive_mode(model, verbose=False):
                                     return
                                 # else: choice == '2' or any other - continue to next prompt
                             except (EOFError, KeyboardInterrupt):
+                                # User interrupted during options menu selection (Ctrl+C or Ctrl+D)
+                                # Silently exit iteration loop and continue - this is intentional UX
                                 pass
 
                             break  # Exit iteration loop

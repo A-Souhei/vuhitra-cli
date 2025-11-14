@@ -126,6 +126,14 @@ class ConfigLoader:
         """Get auto-iteration timeout in seconds (for rating=0 retry confirmation)"""
         return self.get('cli', 'auto_iteration_timeout_seconds', default=3)
 
+    def get_auto_iteration_max_iterations(self):
+        """Get maximum number of auto-iteration retry attempts for rating=0 responses"""
+        return self.get('cli', 'auto_iteration_max_iterations', default=5)
+
+    def get_auto_iteration_negative_weight_increment(self):
+        """Get negative heuristic weight increment per auto-iteration attempt"""
+        return self.get('cli', 'auto_iteration_negative_weight_increment', default=0.1)
+
     def get_environment_mode(self):
         return self.get('environment', 'mode', default='DEV')
     

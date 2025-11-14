@@ -28,7 +28,7 @@ def input_with_timeout(prompt: str, timeout_seconds: int = 3, default: str = 'Y'
     print(prompt, end='', flush=True)
 
     # Use select to wait for input with timeout (works on Linux/Unix)
-    # On Windows, this fallback to immediate input without timeout
+    # On Windows, this falls back to immediate input without timeout
     try:
         # select() works on Unix/Linux/Mac
         ready, _, _ = select.select([sys.stdin], [], [], timeout_seconds)

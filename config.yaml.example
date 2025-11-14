@@ -17,6 +17,7 @@ model:
   default: llama3.1:8b
   # Available models list
   available:
+    - tinyllama              # Lightweight model (~1GB, CPU-friendly, included in docker-compose)
     - llama3.1:8b
     - qwen3-vl:8b
     - qwen3:latest
@@ -29,6 +30,12 @@ model:
     - qwen2.5-coder:7b
 
 # Ollama server configuration
+# For docker-compose Ollama service (docker compose --profile ollama up -d):
+#   host: localhost (when running CLI outside docker)
+#   port: 11434 (mapped port)
+# For external/remote Ollama server:
+#   host: <your-server-ip>
+#   port: 11434 (or custom port)
 ollama:
   host: localhost
   protocol: http
@@ -56,10 +63,13 @@ sentry:
   attach_stacktrace: true
 
 # Sandbox service configuration
+# Port 18001 is the docker-compose mapped port (internal: 8000)
 sandbox:
   host: localhost
-  port: 8000
+  port: 18001
   protocol: http
+  # Confidence threshold for heuristics context injection (0.0-1.0)
+  confidence_threshold: 0.75
 
 # ElasticSearch configuration
 elasticsearch:

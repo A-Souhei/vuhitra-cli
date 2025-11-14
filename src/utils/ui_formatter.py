@@ -65,13 +65,9 @@ def print_user_prompt(prompt: str):
 def print_response(response: str):
     """Print LLM response with markdown formatting."""
     console.print()
-    console.print(Panel(
-        Markdown(response),
-        title="[bold green]🤖 Assistant Response[/bold green]",
-        border_style="green",
-        box=box.ROUNDED,
-        padding=(1, 2)
-    ))
+    console.print("🤖 [bold green]Assistant:[/bold green]")
+    console.print()
+    console.print(Markdown(response))
     console.print()
 
 
@@ -121,15 +117,19 @@ def print_context_verbose(heuristic_data: dict):
         content_branch.add(f"[yellow]Prompt:[/yellow] {prompt_preview}")
         content_branch.add(f"[yellow]Response:[/yellow] {response_preview}")
 
-    # Chain information
+    # Chain information - show ALL chained heuristics in verbose mode
     chain = heuristic_data.get('chain', [])
     if chain:
         chain_branch = tree.add(f"🔗 [cyan]Chain ({len(chain)} parents)[/cyan]")
-        for i, parent in enumerate(chain[:3], 1):  # Show first 3 parents
+        for i, parent in enumerate(chain, 1):  # Show ALL parents
             parent_node = chain_branch.add(f"[green]Parent {i}[/green]")
             parent_node.add(f"[yellow]ID:[/yellow] {parent.get('_id', 'N/A')}")
             parent_node.add(f"[yellow]Rating:[/yellow] {'⭐' * parent.get('rating', 0)}")
             parent_node.add(f"[yellow]Depth:[/yellow] {parent.get('chain_depth', 0)}")
+            # Add prompt preview for each parent
+            parent_prompt = parent.get('prompt', '')[:100] + '...' if len(parent.get('prompt', '')) > 100 else parent.get('prompt', '')
+            if parent_prompt:
+                parent_node.add(f"[yellow]Prompt:[/yellow] {parent_prompt}")
 
     # Scoring breakdown
     scoring = heuristic_data.get('scoring_breakdown', {})
@@ -141,6 +141,25 @@ def print_context_verbose(heuristic_data: dict):
         score_branch.add(f"[yellow]Final Score:[/yellow] {scoring.get('final_score', 0):.3f}")
 
     console.print(tree)
+    console.print()
+
+
+def print_context_content_verbose(context: str):
+    """Pretty print the actual context content (formatted_insight) in a thin border square."""
+    if not _verbose_mode or not context:
+        return
+
+    console.print("\n[bold blue]{'─' * 80}[/bold blue]")
+    console.print("[bold blue]📄 CONTEXT USED TO ENHANCE PROMPT[/bold blue]")
+    console.print("[bold blue]{'─' * 80}[/bold blue]\n")
+
+    # Display context in a thin-bordered panel
+    console.print(Panel(
+        context,
+        border_style="blue",
+        box=box.SQUARE,  # Thin border
+        padding=(0, 1)
+    ))
     console.print()
 
 

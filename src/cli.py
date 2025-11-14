@@ -9,9 +9,9 @@ from src.utils.config_loader import ConfigLoader
 from src.utils.feedback_collector import FeedbackCollector
 from src.utils.ui_formatter import (
     set_verbose_mode, is_verbose, print_banner, print_response,
-    print_context_verbose, print_elasticsearch_verbose, print_nlp_analysis_verbose,
-    print_timing_verbose, print_error, print_warning, print_success, print_info,
-    print_debug, print_user_prompt, console
+    print_context_verbose, print_context_content_verbose, print_elasticsearch_verbose,
+    print_nlp_analysis_verbose, print_timing_verbose, print_error, print_warning,
+    print_success, print_info, print_debug, print_user_prompt, console
 )
 from src.utils.prompt_history import PromptHistoryManager
 
@@ -73,10 +73,14 @@ def fetch_similar_heuristic(prompt, verbose=False):
             data.get('insights') and
             data['insights'].get('formatted_insight')):
 
+            formatted_insight = data['insights']['formatted_insight']
+
             if verbose:
                 print_success(f"✓ Heuristic match found (confidence: {data.get('confidence_score', 0):.2%})")
+                # Display the actual context content that will be used
+                print_context_content_verbose(formatted_insight)
 
-            return data['insights']['formatted_insight'], data
+            return formatted_insight, data
         else:
             if verbose:
                 print_info(f"No suitable heuristic match (confidence: {data.get('confidence_score', 0):.2%} < {confidence_threshold:.2%})")

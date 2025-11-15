@@ -13,14 +13,14 @@ eternal context is:
 import json
 import requests
 import numpy as np
-import redis
-import hashlib
+import logging
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from src.utils.config_loader import ConfigLoader
 from src.errors_handler import handle_exception
+from src.utils.embedding_utils import EmbeddingCacheMixin, cosine_similarity
 
 
 @dataclass
@@ -68,7 +68,7 @@ class EternalContext:
         }
 
 
-class EternalContextManager:
+class EternalContextManager(EmbeddingCacheMixin):
     """Manages persistent eternal context that survives across sessions."""
 
     def __init__(self, enabled: bool = None, storage_dir: Optional[str] = None):
@@ -160,257 +160,6 @@ class EternalContextManager:
                 'fallback': self.config.get_transformer_url()
             })
             return self.config.get_transformer_url()
-
-    def _init_redis(self):
-        """Initialize Redis connection for embedding caching."""
-        try:
-            redis_host = self.config.get('redis', 'host', default='localhost')
-            redis_port = self.config.get('redis', 'port', default=6379)
-
-            # Get password from secrets (optional)
-            try:
-                redis_password = self.config.get_redis_password()
-            except ValueError:
-                redis_password = None
-
-            self.redis_client = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                password=redis_password,
-                decode_responses=False,  # We'll store binary data (embeddings)
-                socket_connect_timeout=2
-            )
-
-            # Test connection
-            self.redis_client.ping()
-
-        except Exception as e:
-            # Redis is optional - continue without it
-            handle_exception(e, context={
-                'function': '_init_redis',
-                'note': 'Embedding caching will be disabled'
-            })
-            self.redis_client = None
-
-    def _get_embedding_cache_key(self, text: str) -> str:
-        """Generate Redis cache key for an embedding.
-
-        Args:
-            text: Text to generate key for
-
-        Returns:
-            Cache key string
-        """
-        # Use SHA256 hash of text as key
-        text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
-        return f"embedding_cache:{text_hash}"
-
-    def _get_cached_embedding(self, text: str) -> Optional[np.ndarray]:
-        """Get cached embedding from Redis.
-
-        Args:
-            text: Text to get embedding for
-
-        Returns:
-            Cached embedding or None if not found
-        """
-        if not self.redis_client:
-            return None
-
-        try:
-            key = self._get_embedding_cache_key(text)
-            cached_data = self.redis_client.get(key)
-
-            if cached_data:
-                # Deserialize numpy array
-                embedding = np.frombuffer(cached_data, dtype=np.float32)
-                return embedding
-
-            return None
-
-        except Exception as e:
-            handle_exception(e, context={
-                'function': '_get_cached_embedding',
-                'text_length': len(text)
-            })
-            return None
-
-    def _cache_embedding(self, text: str, embedding: np.ndarray) -> bool:
-        """Cache embedding in Redis.
-
-        Args:
-            text: Text the embedding is for
-            embedding: Embedding vector to cache
-
-        Returns:
-            True if cached successfully
-        """
-        if not self.redis_client:
-            return False
-
-        try:
-            key = self._get_embedding_cache_key(text)
-            # Serialize numpy array to bytes
-            embedding_bytes = embedding.tobytes()
-
-            # Cache for 30 days
-            self.redis_client.setex(key, 30 * 24 * 60 * 60, embedding_bytes)
-            return True
-
-        except Exception as e:
-            handle_exception(e, context={
-                'function': '_cache_embedding',
-                'text_length': len(text)
-            })
-            return False
-
-    def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
-        """Generate embedding for text using transformer service with Redis caching.
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Numpy array of embedding vector, or None if failed
-        """
-        try:
-            # Check cache first
-            cached_embedding = self._get_cached_embedding(text)
-            if cached_embedding is not None:
-                return cached_embedding
-
-            # Generate new embedding
-            endpoint = f"{self.transformer_url}/api/generate-embedding"
-            response = requests.post(
-                endpoint,
-                json={"text": text},
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            embedding = data.get('embedding')
-            if embedding:
-                embedding_array = np.array(embedding, dtype=np.float32)
-
-                # Cache the embedding
-                self._cache_embedding(text, embedding_array)
-
-                return embedding_array
-
-            return None
-
-        except Exception as e:
-            handle_exception(e, context={
-                'function': '_generate_embedding',
-                'endpoint': endpoint if 'endpoint' in locals() else 'unknown',
-                'text_length': len(text)
-            })
-            return None
-
-    def _generate_description_with_llm(self, content: str, filename: str) -> Optional[str]:
-        """Generate a description/summary of content using LLM.
-
-        Args:
-            content: File content
-            filename: Name of the file
-
-        Returns:
-            Generated description or None if failed
-        """
-        try:
-            # Use first 1000 characters for summary generation
-            preview = content[:1000]
-
-            # Build prompt for LLM
-            prompt = f"""Generate a brief 1-2 sentence description of this file content.
-Focus on what the file contains and its purpose.
-Do not include formatting, just return the plain text description.
-
-Filename: {filename}
-
-Content preview:
-{preview}
-
-Description:"""
-
-            # Get Ollama config
-            ollama_config = self.config.get('ollama', default={})
-            use_mode = ollama_config.get('use', 'local')
-            ollama_server = ollama_config.get(use_mode, {})
-
-            # Get model config
-            model_config = self.config.get('model', default={})
-            default_models = model_config.get('default', {})
-            model = default_models.get(use_mode, 'tinyllama')
-
-            # Build Ollama URL
-            protocol = ollama_server.get('protocol', 'http')
-            host = ollama_server.get('host', 'localhost')
-            port = ollama_server.get('port', 11434)
-            api_path = ollama_server.get('api_path', '/api/generate')
-
-            url = f"{protocol}://{host}:{port}{api_path}"
-
-            # Call Ollama
-            response = requests.post(
-                url,
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            description = data.get('response', '').strip()
-
-            # Clean up and limit description length
-            if description:
-                # Remove quotes if present
-                description = description.strip('"\'')
-                # Limit to 200 characters
-                if len(description) > 200:
-                    description = description[:197] + "..."
-                return description
-
-            return None
-
-        except Exception as e:
-            handle_exception(e, context={
-                'function': '_generate_description_with_llm',
-                'filename': filename
-            })
-            return None
-
-    def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Compute cosine similarity between two vectors.
-
-        Args:
-            vec1: First vector
-            vec2: Second vector
-
-        Returns:
-            Cosine similarity score (0-1)
-        """
-        try:
-            # Normalize vectors
-            vec1_norm = vec1 / (np.linalg.norm(vec1) + 1e-10)
-            vec2_norm = vec2 / (np.linalg.norm(vec2) + 1e-10)
-
-            # Compute dot product
-            similarity = np.dot(vec1_norm, vec2_norm)
-
-            # Clip to [0, 1] range
-            return float(max(0.0, min(1.0, similarity)))
-
-        except Exception as e:
-            handle_exception(e, context={
-                'function': '_cosine_similarity'
-            })
-            return 0.0
 
     def _chunk_text(self, text: str) -> List[str]:
         """Chunk text into overlapping segments for large files.
@@ -681,6 +430,8 @@ Description:"""
             # Generate embedding for prompt
             prompt_embedding = self._generate_embedding(prompt)
             if prompt_embedding is None:
+                # Log warning when embedding generation fails
+                logging.warning("Failed to generate embedding for prompt, returning all contexts unfiltered")
                 # Fallback: return all contexts if embedding generation fails
                 return [(label, ctx, 1.0) for label, ctx in self.contexts.items()]
 
@@ -688,7 +439,7 @@ Description:"""
 
             for label, ctx in self.contexts.items():
                 # Use stored description embedding or generate if not available
-                if ctx.description_embedding is not None:
+                if ctx.description_embedding is not None and len(ctx.description_embedding) > 0:
                     desc_embedding = np.array(ctx.description_embedding, dtype=np.float32)
                 else:
                     # Fallback: generate embedding on-the-fly
@@ -696,8 +447,8 @@ Description:"""
                     if desc_embedding is None:
                         continue
 
-                # Calculate similarity
-                similarity = self._cosine_similarity(prompt_embedding, desc_embedding)
+                # Calculate similarity using shared function
+                similarity = cosine_similarity(prompt_embedding, desc_embedding)
 
                 # Filter by threshold
                 if similarity >= self.similarity_threshold:

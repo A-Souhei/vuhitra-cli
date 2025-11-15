@@ -17,6 +17,8 @@ A minimalist CLI tool to interact with Ollama LLMs, featuring comprehensive erro
 - 🧪 **Comprehensive test suite** with pytest
 - ⚙️ **YAML-based configuration** for easy customization
 - 🎨 **Clean, maintainable codebase** with modern Python practices
+- 🧠 **Semantic context filtering** with embedding-based relevance matching
+- 💾 **Redis caching** for high-performance embedding storage
 
 ## 🚀 Quick Start
 
@@ -353,6 +355,7 @@ python main.py
 - **[QUICK_START.md](QUICK_START.md)** - Quick reference guide
 - **[docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)** - Complete implementation details
 - **[docs/TEST_RUNNER_GUIDE.md](docs/TEST_RUNNER_GUIDE.md)** - Test runner documentation
+- **[docs/SEMANTIC_FILTERING.md](docs/SEMANTIC_FILTERING.md)** - Semantic context filtering guide
 - **[src/errors_handler/README.md](src/errors_handler/README.md)** - Error handler guide
 - **[tests/README.md](tests/README.md)** - Testing guide
 

@@ -17,9 +17,12 @@ from src.utils.ui_formatter import (
 from src.utils.prompt_history import PromptHistoryManager
 from src.utils.conversation_history import ConversationHistoryManager
 from src.utils.command_handler import CommandHandler, CommandResult
+from src.utils.token_limit_manager import get_token_limit_manager
 
 # Maximum prompt length to prevent DoS through excessive payload sizes
-MAX_PROMPT_LENGTH = 10000
+# Note: This is now dynamic - will use discovered model limits from Redis
+# If no limit discovered yet, defaults to infinity (user will discover it)
+MAX_PROMPT_LENGTH = float('inf')
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +90,11 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
     start_time = time.time()
 
     try:
-        # Validate prompt length
-        if len(prompt) > MAX_PROMPT_LENGTH:
+        # Validate prompt length (now using dynamic limits if discovered)
+        # MAX_PROMPT_LENGTH is inf by default, so this only triggers if we have a DoS limit
+        if MAX_PROMPT_LENGTH != float('inf') and len(prompt) > MAX_PROMPT_LENGTH:
             logger.warning(f"Prompt length ({len(prompt)}) exceeds maximum ({MAX_PROMPT_LENGTH}), truncating")
-            prompt = prompt[:MAX_PROMPT_LENGTH]
+            prompt = prompt[:int(MAX_PROMPT_LENGTH)]
 
         config = ConfigLoader()
         sandbox_url = config.get_sandbox_url()
@@ -262,7 +266,8 @@ def interactive_mode(model, verbose=False):
         if not args:
             return CommandResult(
                 success=False,
-                message="Usage: /clear context - Clear conversation history"
+                message="Usage: /clear context - Clear conversation history\n"
+                        "       /clear tokenlimit - Clear discovered token limit for current model"
             )
 
         subcommand = args[0].lower()
@@ -280,13 +285,51 @@ def interactive_mode(model, verbose=False):
                     success=False,
                     message="Conversation history is disabled"
                 )
+        elif subcommand == "tokenlimit":
+            token_manager = get_token_limit_manager()
+            if token_manager.clear_limit(model):
+                return CommandResult(
+                    success=True,
+                    message=f"✓ Cleared discovered token limit for {model}\n"
+                            f"The limit will be re-discovered on next error"
+                )
+            else:
+                return CommandResult(
+                    success=False,
+                    message="Failed to clear token limit (Redis not available or error occurred)"
+                )
         else:
             return CommandResult(
                 success=False,
-                message=f"Unknown subcommand: {subcommand}. Use: /clear context"
+                message=f"Unknown subcommand: {subcommand}\n"
+                        f"Use: /clear context or /clear tokenlimit"
             )
 
     command_handler.register_command("clear", clear_command_handler)
+
+    # Register /limit command to show current token limit
+    def limit_command_handler(args):
+        """Handle /limit command to show discovered token limit."""
+        token_manager = get_token_limit_manager()
+        limit = token_manager.get_limit(model)
+
+        if limit == float('inf'):
+            return CommandResult(
+                success=True,
+                message=f"Model: {model}\n"
+                        f"Token limit: Not yet discovered (unlimited until error occurs)\n"
+                        f"The system will automatically learn the limit when it's exceeded."
+            )
+        else:
+            estimated_chars = int(limit * 4)  # Rough estimate
+            return CommandResult(
+                success=True,
+                message=f"Model: {model}\n"
+                        f"Discovered token limit: {int(limit)} tokens (~{estimated_chars} characters)\n"
+                        f"Use '/clear tokenlimit' to reset and re-discover"
+            )
+
+    command_handler.register_command("limit", limit_command_handler)
 
     if verbose:
         history_count = prompt_manager.get_history_count()
@@ -403,6 +446,14 @@ def interactive_mode(model, verbose=False):
                             "iteration": iteration_number,
                             "negative_weight_boost": negative_weight_boost
                         })
+
+                # Check token limit before generating (proactive warning)
+                token_manager = get_token_limit_manager()
+                is_within_limit, limit_warning = token_manager.check_limit(model, enhanced_prompt)
+
+                if not is_within_limit and verbose:
+                    print_warning(limit_warning)
+                    # Continue anyway - the actual error will be caught and limit stored if it fails
 
                 # Generate response
                 llm_start = time.time()

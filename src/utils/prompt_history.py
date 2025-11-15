@@ -46,7 +46,7 @@ class PromptHistoryManager:
 
         # Common commands completer
         self.commands = WordCompleter(
-            ['exit', 'quit', 'help', '/clear context'],
+            ['exit', 'quit', 'help', '/clear context', '/clear tokenlimit', '/limit'],
             ignore_case=True,
             sentence=True
         )

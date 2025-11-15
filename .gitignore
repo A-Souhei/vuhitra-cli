@@ -43,3 +43,4 @@ services/.env
 .env
 /services/sandbox/packages/*
 !/services/sandbox/packages/.gitkeep
+nogit/*

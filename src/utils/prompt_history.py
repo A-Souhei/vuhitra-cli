@@ -11,16 +11,18 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
 import os
+from src.utils.file_path_completer import FilePathCompleter, CombinedCompleter
 
 
 class PromptHistoryManager:
     """Manages prompt history with auto-complete functionality."""
 
-    def __init__(self, history_file: str = None):
+    def __init__(self, history_file: str = None, working_dir: str = None):
         """Initialize the prompt history manager.
 
         Args:
             history_file: Path to history file. If None, uses default location.
+            working_dir: Working directory for file path completion. If None, uses current dir.
         """
         # Set default history file location
         if history_file is None:
@@ -30,6 +32,7 @@ class PromptHistoryManager:
             history_file = os.path.join(vuhitra_dir, "prompt_history.txt")
 
         self.history_file = history_file
+        self.working_dir = working_dir or os.getcwd()
 
         # Custom style for the prompt
         self.style = Style.from_dict({
@@ -37,18 +40,30 @@ class PromptHistoryManager:
             'prompt-symbol': '#00ffff bold',
         })
 
-        # Initialize the prompt session with history and auto-suggest
-        self.session = PromptSession(
-            history=FileHistory(self.history_file),
-            auto_suggest=AutoSuggestFromHistory(),
-            enable_history_search=True,
-        )
-
         # Common commands completer
         self.commands = WordCompleter(
             ['exit', 'quit', 'help', '/clear context', '/clear tokenlimit', '/limit'],
             ignore_case=True,
             sentence=True
+        )
+
+        # File path completer for @ prefix
+        self.file_path_completer = FilePathCompleter(working_dir=self.working_dir)
+
+        # Combined completer that uses both command and file path completion
+        self.combined_completer = CombinedCompleter(
+            command_completer=self.commands,
+            file_path_completer=self.file_path_completer
+        )
+
+        # Initialize the prompt session with history, auto-suggest, and completer
+        # IMPORTANT: complete_while_typing=False means user must press Tab to show completions
+        self.session = PromptSession(
+            history=FileHistory(self.history_file),
+            auto_suggest=AutoSuggestFromHistory(),
+            enable_history_search=True,
+            completer=self.combined_completer,
+            complete_while_typing=False,  # Press Tab to show autocomplete dropdown
         )
 
     def get_prompt(self) -> str:
@@ -66,11 +81,10 @@ class PromptHistoryManager:
             prompt_text = HTML('<prompt-symbol>❯</prompt-symbol> ')
 
             # Get input with auto-suggest from history
+            # Note: completer and complete_while_typing are already set in PromptSession
             user_input = self.session.prompt(
                 prompt_text,
                 style=self.style,
-                completer=self.commands,
-                complete_while_typing=True,
                 vi_mode=False,  # Use emacs mode (can be configured)
             )
 

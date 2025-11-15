@@ -146,3 +146,25 @@ eternal_context:
     chunk_size: 1000
     # Overlap between chunks in words
     overlap: 200
+
+# Spark context configuration
+# Spark context is in-memory ephemeral context that dies with /clear context
+# Created automatically when using @ prefix without /load or /load-eternal commands
+spark_context:
+  # Enable/disable Spark context feature
+  enabled: true
+  # Maximum file size in MB that can be loaded
+  max_file_size_mb: 10
+  # Maximum number of Spark contexts (in-memory only, higher limit than ephemeral)
+  max_contexts: 20
+  # Embedding configuration
+  embed:
+    # Enable/disable embedding generation for Spark contexts
+    enabled: true
+  # Text chunking configuration (for large files)
+  chunking:
+    enabled: true
+    # Chunk size in characters
+    chunk_size: 1000
+    # Overlap between chunks in characters
+    overlap: 200

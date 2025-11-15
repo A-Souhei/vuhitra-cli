@@ -1,19 +1,20 @@
-## Ephemeral & Eternal Context: Extended RAG Dimensions
+## Ephemeral, Eternal & Spark Context: Extended RAG Dimensions
 
 ## Overview
 
-Vuhitra-CLI features a comprehensive **four-layer RAG (Retrieval-Augmented Generation) system** that provides different types of context to enhance LLM interactions:
+Vuhitra-CLI features a comprehensive **five-layer RAG (Retrieval-Augmented Generation) system** that provides different types of context to enhance LLM interactions:
 
 1. **Eternal Context** - Permanent, cross-session reference materials
 2. **Ephemeral Context** - Session-scoped, temporary reference materials
-3. **Conversation History** - Dynamic, recent conversation turns
-4. **Heuristics** - Historical knowledge learned from past interactions
+3. **Spark Context** - In-memory, lightweight ephemeral context (NEW!)
+4. **Conversation History** - Dynamic, recent conversation turns
+5. **Heuristics** - Historical knowledge learned from past interactions
 
-This document focuses on the **Eternal** and **Ephemeral** context dimensions, which enable file-based context injection.
+This document focuses on the **Eternal**, **Ephemeral**, and **Spark** context dimensions, which enable file-based context injection.
 
 ## Architecture
 
-### Four-Layer RAG Context
+### Five-Layer RAG Context
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -35,12 +36,18 @@ This document focuses on the **Eternal** and **Ephemeral** context dimensions, w
 │     • In-memory only                                     │
 │     • Session-scoped                                     │
 │                                                           │
-│  3. Conversation History (Top-k Retrieval)               │
+│  3. Spark Context (Full Injection, In-Memory) NEW!       │
+│     • Loaded from files via @ prefix                     │
+│     • Always present in every prompt                     │
+│     • In-memory only (no Redis, no disk)                 │
+│     • Dies with /clear context                           │
+│                                                           │
+│  4. Conversation History (Top-k Retrieval)               │
 │     • Recent conversation turns                          │
 │     • Semantic similarity search                         │
 │     • In-memory, session-scoped                          │
 │                                                           │
-│  4. Heuristics (kNN Retrieval)                           │
+│  5. Heuristics (kNN Retrieval)                           │
 │     • Historical knowledge                               │
 │     • Cross-session persistence                          │
 │     • Elasticsearch storage                              │
@@ -52,17 +59,17 @@ This document focuses on the **Eternal** and **Ephemeral** context dimensions, w
 
 ### Comparison Matrix
 
-| Feature | **Eternal Context** | **Ephemeral Context** | Conversation History | Heuristics |
-|---------|---------------------|----------------------|---------------------|------------|
-| **Scope** | **Cross-session** | **Session** | Session | Cross-session |
-| **Storage** | **Disk (JSON)** | **In-memory** | In-memory | Elasticsearch |
-| **Persistence** | **Permanent** | **Session only** | Session only | Permanent |
-| **Retrieval** | **Full injection** | **Full injection** | Top-k similarity | kNN + rating filter |
-| **First prompt** | **Always present** | **Always present** | Empty | Retrieved |
-| **Loading** | **Manual: `/load-eternal`** | **Manual: `/load`** | Automatic | Automatic |
-| **Clearing** | **`/clear eternal`** | **`/clear ephemeral`** | `/clear context` | Manual deletion |
-| **Auto-load on startup** | **Yes** | **No** | No | No |
-| **Use case** | **Permanent docs/specs** | **Temporary references** | Recent discussion | Historical knowledge |
+| Feature | **Eternal Context** | **Ephemeral Context** | **Spark Context** | Conversation History | Heuristics |
+|---------|---------------------|----------------------|-------------------|---------------------|------------|
+| **Scope** | **Cross-session** | **Session** | **Session** | Session | Cross-session |
+| **Storage** | **Disk (JSON)** | **In-memory** | **In-memory only** | In-memory | Elasticsearch |
+| **Persistence** | **Permanent** | **Session only** | **Session only** | Session only | Permanent |
+| **Retrieval** | **Full injection** | **Full injection** | **Full injection** | Top-k similarity | kNN + rating filter |
+| **First prompt** | **Always present** | **Always present** | **Always present** | Empty | Retrieved |
+| **Loading** | **Manual: `/load-eternal` or `@`** | **Manual: `/load` or `@`** | **Auto: `@prefix` in prompt** | Automatic | Automatic |
+| **Clearing** | **`/clear eternal`** | **`/clear ephemeral`** | **`/clear context` or `/clear spark`** | `/clear context` | Manual deletion |
+| **Auto-load on startup** | **Yes** | **No** | **No** | No | No |
+| **Use case** | **Permanent docs/specs** | **Temporary references** | **Quick file references** | Recent discussion | Historical knowledge |
 
 ## Usage
 

@@ -104,3 +104,159 @@ class TestHeuristics:
         assert "elasticsearch_connected" in health
         assert health["nlp_ready"] is True
         assert health["elasticsearch_connected"] is True
+
+    @patch('services.sandbox.src.heuristics.ElasticSearchClient')
+    @patch('services.sandbox.src.heuristics.NLPAnalyzer')
+    def test_user_feedback_persisted_async(self, mock_nlp_class, mock_es_class):
+        """Test that user_feedback field is persisted to Elasticsearch in async method."""
+        # Setup mocks
+        mock_nlp = Mock()
+        mock_nlp.analyze_sentiment.return_value = {"vader_score": -0.5, "spacy_score": -0.3}
+        mock_nlp.extract_keywords.return_value = ["test", "feedback"]
+        mock_nlp.detect_code.return_value = (False, "")
+        mock_nlp.count_words.return_value = 5
+        mock_nlp_class.return_value = mock_nlp
+        
+        mock_es = Mock()
+        mock_es.save_feedback.return_value = True
+        mock_es_class.return_value = mock_es
+        
+        heuristics = Heuristics()
+        
+        # Test with user_feedback provided (rating <= 2)
+        feedback_data = {
+            "prompt": "test prompt",
+            "response": "test response",
+            "rating": 1,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "execution_time_ms": 1000,
+            "user_feedback": "This is a user correction"
+        }
+        
+        # Call the method directly
+        heuristics._analyze_and_store(feedback_data)
+        
+        # Verify data was saved
+        mock_es.save_feedback.assert_called_once()
+        saved_data = mock_es.save_feedback.call_args[0][0]
+
+        # Verify user_feedback is in the saved data
+        assert "user_feedback" in saved_data
+        assert saved_data["user_feedback"] == "This is a user correction"
+
+    @patch('services.sandbox.src.heuristics.ElasticSearchClient')
+    @patch('services.sandbox.src.heuristics.NLPAnalyzer')
+    def test_user_feedback_persisted_sync(self, mock_nlp_class, mock_es_class):
+        """Test that user_feedback field is persisted to Elasticsearch in sync method."""
+        # Setup mocks
+        mock_nlp = Mock()
+        mock_nlp.analyze_sentiment.return_value = {"vader_score": -0.5, "spacy_score": -0.3}
+        mock_nlp.extract_keywords.return_value = ["test", "feedback"]
+        mock_nlp.detect_code.return_value = (False, "")
+        mock_nlp.count_words.return_value = 5
+        mock_nlp_class.return_value = mock_nlp
+        
+        mock_es = Mock()
+        mock_es.save_feedback.return_value = True
+        mock_es_class.return_value = mock_es
+        
+        heuristics = Heuristics()
+        
+        # Test with user_feedback provided (rating 1, since rating 0 is skipped)
+        feedback_data = {
+            "prompt": "test prompt",
+            "response": "test response",
+            "rating": 1,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "execution_time_ms": 1000,
+            "user_feedback": "This is a user correction for sync"
+        }
+        
+        # Call the sync method directly
+        result = heuristics._analyze_and_store_sync(feedback_data)
+        
+        # Verify data was saved
+        mock_es.save_feedback.assert_called_once()
+        saved_data = mock_es.save_feedback.call_args[0][0]
+
+        # Verify user_feedback is in the saved data
+        assert "user_feedback" in saved_data
+        assert saved_data["user_feedback"] == "This is a user correction for sync"
+        
+        # Verify it's in the elasticsearch_doc returned
+        assert result["elasticsearch_doc"]["user_feedback"] == "This is a user correction for sync"
+
+    @patch('services.sandbox.src.heuristics.ElasticSearchClient')
+    @patch('services.sandbox.src.heuristics.NLPAnalyzer')
+    def test_user_feedback_not_persisted_when_empty(self, mock_nlp_class, mock_es_class):
+        """Test that user_feedback field is not persisted when empty or missing."""
+        # Setup mocks
+        mock_nlp = Mock()
+        mock_nlp.analyze_sentiment.return_value = {"vader_score": 0.5, "spacy_score": 0.3}
+        mock_nlp.extract_keywords.return_value = ["test", "keyword"]
+        mock_nlp.detect_code.return_value = (False, "")
+        mock_nlp.count_words.return_value = 5
+        mock_nlp_class.return_value = mock_nlp
+        
+        mock_es = Mock()
+        mock_es.save_feedback.return_value = True
+        mock_es_class.return_value = mock_es
+        
+        heuristics = Heuristics()
+        
+        # Test without user_feedback field
+        feedback_data = {
+            "prompt": "test prompt",
+            "response": "test response",
+            "rating": 5,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "execution_time_ms": 1000
+        }
+        
+        # Call the method directly
+        heuristics._analyze_and_store(feedback_data)
+        
+        # Verify data was saved
+        mock_es.save_feedback.assert_called_once()
+        saved_data = mock_es.save_feedback.call_args[0][0]
+
+        # Verify user_feedback is NOT in the saved data when not provided
+        assert "user_feedback" not in saved_data
+
+    @patch('services.sandbox.src.heuristics.ElasticSearchClient')
+    @patch('services.sandbox.src.heuristics.NLPAnalyzer')
+    def test_user_feedback_not_persisted_when_empty_string(self, mock_nlp_class, mock_es_class):
+        """Test that user_feedback field is not persisted when it's an empty string."""
+        # Setup mocks
+        mock_nlp = Mock()
+        mock_nlp.analyze_sentiment.return_value = {"vader_score": 0.5, "spacy_score": 0.3}
+        mock_nlp.extract_keywords.return_value = ["test", "keyword"]
+        mock_nlp.detect_code.return_value = (False, "")
+        mock_nlp.count_words.return_value = 5
+        mock_nlp_class.return_value = mock_nlp
+        
+        mock_es = Mock()
+        mock_es.save_feedback.return_value = True
+        mock_es_class.return_value = mock_es
+        
+        heuristics = Heuristics()
+        
+        # Test with empty user_feedback
+        feedback_data = {
+            "prompt": "test prompt",
+            "response": "test response",
+            "rating": 1,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "execution_time_ms": 1000,
+            "user_feedback": ""
+        }
+        
+        # Call the method directly
+        heuristics._analyze_and_store(feedback_data)
+        
+        # Verify data was saved
+        mock_es.save_feedback.assert_called_once()
+        saved_data = mock_es.save_feedback.call_args[0][0]
+
+        # Verify user_feedback is NOT in the saved data when empty
+        assert "user_feedback" not in saved_data

@@ -137,10 +137,6 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
         duration_ms = (time.time() - start_time) * 1000
         print_timing_verbose("Heuristic retrieval", duration_ms)
 
-        # Print verbose context information
-        if verbose and data.get('matched_heuristic'):
-            print_context_verbose(data)
-
         # Check if this is a negative heuristic (anti-pattern)
         is_negative = data.get('is_negative', False)
 
@@ -152,6 +148,10 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
             formatted_insight = data['insights']['formatted_insight']
 
             if verbose:
+                # Print verbose context information only when match is accepted
+                if data.get('matched_heuristic'):
+                    print_context_verbose(data)
+
                 if is_negative:
                     print_warning(f"⚠️  Negative heuristic (anti-pattern) found (confidence: {data.get('confidence_score', 0):.2%})")
                     print_info("This will inform the LLM about approaches to AVOID")
@@ -163,7 +163,7 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
             return formatted_insight, data
         else:
             if verbose:
-                print_info(f"No suitable heuristic match (confidence: {data.get('confidence_score', 0):.2%} < {confidence_threshold:.2%})")
+                print_info(f"ℹ️  No suitable heuristic match (confidence: {data.get('confidence_score', 0):.2%} < {confidence_threshold:.2%})")
 
             return None, data
 
@@ -784,8 +784,10 @@ def interactive_mode(model, verbose=False):
                     if eternal_context_str and verbose:
                         # Get relevant contexts to show count
                         relevant = eternal_context.get_relevant_contexts(prompt, verbose=verbose)
+                        loaded_labels = [label for label, ctx, score in relevant]
                         print_debug("Eternal Context", {
                             "contexts_loaded": len(relevant),
+                            "loaded": loaded_labels if loaded_labels else "none",
                             "total_contexts": eternal_context.get_context_count(),
                             "relevance_filtered": eternal_context.semantic_filtering_enabled
                         })
@@ -798,8 +800,10 @@ def interactive_mode(model, verbose=False):
                     if ephemeral_context_str and verbose:
                         # Get relevant contexts to show count
                         relevant = ephemeral_context.get_relevant_contexts(prompt, verbose=verbose)
+                        loaded_labels = [ctx.label for ctx, score in relevant]
                         print_debug("Ephemeral Context", {
                             "contexts_loaded": len(relevant),
+                            "loaded": loaded_labels if loaded_labels else "none",
                             "total_contexts": ephemeral_context.get_context_count(),
                             "relevance_filtered": ephemeral_context.semantic_filtering_enabled
                         })

@@ -1,4 +1,5 @@
 import sys
+import os
 import logging
 import requests
 import time
@@ -19,8 +20,10 @@ from src.utils.prompt_history import PromptHistoryManager
 from src.utils.conversation_history import ConversationHistoryManager
 from src.utils.ephemeral_context import EphemeralContextManager
 from src.utils.eternal_context import EternalContextManager
+from src.utils.spark_context import SparkContextManager
 from src.utils.command_handler import CommandHandler, CommandResult
 from src.utils.token_limit_manager import get_token_limit_manager
+from src.utils.path_resolver import get_path_resolver
 
 # Add sandbox service to path for heuristics config
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "src"))
@@ -258,8 +261,14 @@ def interactive_mode(model, verbose=False):
     # Initialize feedback collector
     feedback_collector = FeedbackCollector()
 
-    # Initialize prompt history manager
-    prompt_manager = PromptHistoryManager()
+    # Get working directory for @ prefix resolution
+    working_dir = os.getcwd()
+
+    # Initialize path resolver for @ prefix paths
+    path_resolver = get_path_resolver(working_dir=working_dir)
+
+    # Initialize prompt history manager with working directory for file completion
+    prompt_manager = PromptHistoryManager(working_dir=working_dir)
 
     # Initialize conversation history manager
     conversation_history = ConversationHistoryManager()
@@ -269,6 +278,9 @@ def interactive_mode(model, verbose=False):
 
     # Initialize eternal context manager (loads existing contexts from storage)
     eternal_context = EternalContextManager()
+
+    # Initialize Spark context manager (in-memory ephemeral)
+    spark_context = SparkContextManager()
 
     # Initialize heuristics config (used for conversation history settings)
     heuristics_config = HeuristicsConfigLoader()
@@ -282,27 +294,37 @@ def interactive_mode(model, verbose=False):
         if not args:
             return CommandResult(
                 success=False,
-                message="Usage: /clear context - Clear conversation history\n"
+                message="Usage: /clear context - Clear conversation history and Sparks\n"
                         "       /clear tokenlimit - Clear discovered token limit for current model\n"
                         "       /clear ephemeral [label|--all] - Clear ephemeral context\n"
-                        "       /clear eternal [label|--all] - Clear eternal context"
+                        "       /clear eternal [label|--all] - Clear eternal context\n"
+                        "       /clear spark [label|--all] - Clear Spark context"
             )
 
         subcommand = args[0].lower()
 
         if subcommand == "context":
+            messages = []
+
+            # Clear conversation history
             if conversation_history.is_enabled():
                 count = conversation_history.get_history_count()
                 conversation_history.clear_history()
-                return CommandResult(
-                    success=True,
-                    message=f"✓ Cleared {count} conversation turns from history"
-                )
+                messages.append(f"✓ Cleared {count} conversation turns from history")
             else:
-                return CommandResult(
-                    success=False,
-                    message="Conversation history is disabled"
-                )
+                messages.append("Conversation history is disabled")
+
+            # Also clear all Sparks (as per requirements - Sparks die with /clear context)
+            if spark_context.is_enabled():
+                spark_count = spark_context.get_count()
+                if spark_count > 0:
+                    spark_context.clear_all()
+                    messages.append(f"✓ Cleared {spark_count} Spark(s)")
+
+            return CommandResult(
+                success=True,
+                message="\n".join(messages)
+            )
         elif subcommand == "tokenlimit":
             token_manager = get_token_limit_manager()
             if token_manager.clear_limit(model):
@@ -382,11 +404,35 @@ def interactive_mode(model, verbose=False):
                         success=False,
                         message=f"Eternal context '{target}' not found. Use '/show eternal' to see loaded contexts."
                     )
+        elif subcommand == "spark":
+            if not spark_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Spark context is disabled"
+                )
+
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /clear spark <label> - Clear specific Spark context\n"
+                            "       /clear spark --all - Clear all Spark contexts"
+                )
+
+            target = args[1]
+
+            if target == "--all":
+                success, message = spark_context.clear_all()
+                return CommandResult(success=success, message=message)
+            else:
+                success, message = spark_context.clear_by_label(target)
+                if not success:
+                    message += "\nUse '/show spark' to see loaded Spark contexts."
+                return CommandResult(success=success, message=message)
         else:
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /clear context, /clear tokenlimit, /clear ephemeral, or /clear eternal"
+                        f"Use: /clear context, /clear tokenlimit, /clear ephemeral, /clear eternal, or /clear spark"
             )
 
     command_handler.register_command("clear", clear_command_handler)
@@ -429,14 +475,56 @@ def interactive_mode(model, verbose=False):
                 success=False,
                 message="Usage: /load <file_path> [label]\n"
                         "       /load ./docs/api_spec.md\n"
+                        "       /load @docs/api_spec.md\n"
+                        "       /load @docs/ (loads all files in directory)\n"
                         "       /load ./docs/coding_standards.md standards"
             )
 
         file_path = args[0]
         label = args[1] if len(args) > 1 else None
 
-        success, message = ephemeral_context.load_file(file_path, label)
-        return CommandResult(success=success, message=message)
+        # Resolve @ prefix path if present
+        success, resolved_path, error = path_resolver.resolve_path(file_path)
+        if not success:
+            return CommandResult(success=False, message=error)
+
+        # Check if it's a directory
+        if path_resolver.is_directory(file_path):
+            # Load all files in directory
+            success, files, error = path_resolver.get_directory_files(file_path)
+            if not success:
+                return CommandResult(success=False, message=error)
+
+            # Load each file
+            loaded = []
+            failed = []
+            for file in files:
+                file_label = label if label else None
+                file_success, file_message = ephemeral_context.load_file(file, file_label)
+                if file_success:
+                    loaded.append(os.path.basename(file))
+                else:
+                    failed.append((os.path.basename(file), file_message))
+
+            # Build result message
+            messages = []
+            if loaded:
+                messages.append(f"✓ Loaded {len(loaded)} ephemeral context(s) from {file_path}")
+                messages.append(f"  Files: {', '.join(loaded)}")
+
+            if failed:
+                messages.append(f"✗ Failed to load {len(failed)} file(s):")
+                for filename, error_msg in failed:
+                    messages.append(f"  - {filename}: {error_msg}")
+
+            if not loaded and failed:
+                return CommandResult(success=False, message="\n".join(messages))
+
+            return CommandResult(success=True, message="\n".join(messages))
+        else:
+            # Load single file
+            success, message = ephemeral_context.load_file(resolved_path, label)
+            return CommandResult(success=success, message=message)
 
     command_handler.register_command("load", load_command_handler)
 
@@ -454,14 +542,56 @@ def interactive_mode(model, verbose=False):
                 success=False,
                 message="Usage: /load-eternal <file_path> [label]\n"
                         "       /load-eternal ./docs/api_spec.md\n"
+                        "       /load-eternal @docs/api_spec.md\n"
+                        "       /load-eternal @docs/ (loads all files in directory)\n"
                         "       /load-eternal ./docs/coding_standards.md standards"
             )
 
         file_path = args[0]
         label = args[1] if len(args) > 1 else None
 
-        success, message = eternal_context.load_file(file_path, label)
-        return CommandResult(success=success, message=message)
+        # Resolve @ prefix path if present
+        success, resolved_path, error = path_resolver.resolve_path(file_path)
+        if not success:
+            return CommandResult(success=False, message=error)
+
+        # Check if it's a directory
+        if path_resolver.is_directory(file_path):
+            # Load all files in directory
+            success, files, error = path_resolver.get_directory_files(file_path)
+            if not success:
+                return CommandResult(success=False, message=error)
+
+            # Load each file
+            loaded = []
+            failed = []
+            for file in files:
+                file_label = label if label else None
+                file_success, file_message = eternal_context.load_file(file, file_label)
+                if file_success:
+                    loaded.append(os.path.basename(file))
+                else:
+                    failed.append((os.path.basename(file), file_message))
+
+            # Build result message
+            messages = []
+            if loaded:
+                messages.append(f"✓ Loaded {len(loaded)} eternal context(s) from {file_path}")
+                messages.append(f"  Files: {', '.join(loaded)}")
+
+            if failed:
+                messages.append(f"✗ Failed to load {len(failed)} file(s):")
+                for filename, error_msg in failed:
+                    messages.append(f"  - {filename}: {error_msg}")
+
+            if not loaded and failed:
+                return CommandResult(success=False, message="\n".join(messages))
+
+            return CommandResult(success=True, message="\n".join(messages))
+        else:
+            # Load single file
+            success, message = eternal_context.load_file(resolved_path, label)
+            return CommandResult(success=success, message=message)
 
     command_handler.register_command("load-eternal", load_eternal_command_handler)
 
@@ -472,7 +602,8 @@ def interactive_mode(model, verbose=False):
             return CommandResult(
                 success=False,
                 message="Usage: /show ephemeral - Show loaded ephemeral contexts\n"
-                        "       /show eternal - Show loaded eternal contexts"
+                        "       /show eternal - Show loaded eternal contexts\n"
+                        "       /show spark - Show loaded Spark contexts"
             )
 
         subcommand = args[0].lower()
@@ -495,14 +626,83 @@ def interactive_mode(model, verbose=False):
 
             summary = eternal_context.get_summary()
             return CommandResult(success=True, message=summary)
+        elif subcommand == "spark":
+            if not spark_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Spark context is disabled"
+                )
+
+            summary = spark_context.get_summary()
+            return CommandResult(success=True, message=summary)
         else:
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /show ephemeral or /show eternal"
+                        f"Use: /show ephemeral, /show eternal, or /show spark"
             )
 
     command_handler.register_command("show", show_command_handler)
+
+    def detect_and_load_spark_references(prompt_text: str) -> tuple:
+        """Detect and load @ references in prompt as Sparks.
+
+        Args:
+            prompt_text: The user's prompt text
+
+        Returns:
+            Tuple of (modified_prompt, loaded_sparks_list, errors_list)
+        """
+        import re
+
+        # Find all @ references in the prompt (pattern: @path/to/file or @filename)
+        # Match @ followed by non-whitespace characters
+        pattern = r'@([^\s]+)'
+        matches = re.findall(pattern, prompt_text)
+
+        if not matches:
+            return prompt_text, [], []
+
+        loaded_sparks = []
+        errors = []
+
+        for match in matches:
+            path = f"@{match}"
+
+            # Check if this path is already loaded as Spark, ephemeral, or eternal
+            # If so, skip it (avoid duplicate loading)
+            path_without_at = match
+            existing_spark = spark_context.get_context_by_label(path_without_at)
+            existing_ephemeral = ephemeral_context.get_context_by_label(path_without_at)
+            existing_eternal = eternal_context.get_context_by_label(path_without_at)
+
+            if existing_spark or existing_ephemeral or existing_eternal:
+                continue  # Already loaded, skip
+
+            # Try to load as Spark
+            success, resolved_path, error = path_resolver.resolve_path(path)
+            if not success:
+                errors.append(f"Failed to resolve {path}: {error}")
+                continue
+
+            # Check if it's a directory or file
+            if path_resolver.is_directory(path):
+                # Load directory as Spark
+                dir_success, dir_message = spark_context.load_directory(resolved_path, label_prefix=path_without_at)
+                if dir_success:
+                    loaded_sparks.append(f"{path} (directory)")
+                else:
+                    errors.append(f"Failed to load directory {path}: {dir_message}")
+            else:
+                # Load file as Spark
+                file_success, file_message = spark_context.load_file(resolved_path, label=path_without_at)
+                if file_success:
+                    loaded_sparks.append(path)
+                else:
+                    errors.append(f"Failed to load {path}: {file_message}")
+
+        # Return original prompt (keep @ references in the text), loaded sparks, and errors
+        return prompt_text, loaded_sparks, errors
 
     if verbose:
         history_count = prompt_manager.get_history_count()
@@ -537,6 +737,18 @@ def interactive_mode(model, verbose=False):
                     else:
                         print_error(result.message)
                 continue
+
+            # Detect and load @ references as Sparks (if not already loaded)
+            prompt, loaded_sparks, spark_errors = detect_and_load_spark_references(prompt)
+
+            # Show loaded Sparks
+            if loaded_sparks and verbose:
+                print_info(f"Loaded {len(loaded_sparks)} Spark(s): {', '.join(loaded_sparks)}")
+
+            # Show Spark loading errors
+            if spark_errors:
+                for error in spark_errors:
+                    print_warning(error)
 
             # Print user prompt in verbose mode
             if verbose:
@@ -584,6 +796,16 @@ def interactive_mode(model, verbose=False):
                             "total_size_kb": f"{ephemeral_context.get_total_size_kb():.1f} KB"
                         })
 
+                # Get Spark context (in-memory ephemeral, dies with /clear context)
+                spark_context_str = ""
+                if spark_context.is_enabled():
+                    spark_context_str = spark_context.get_context_string()
+
+                    if spark_context_str and verbose:
+                        print_debug("Spark Context", {
+                            "contexts_loaded": spark_context.get_count()
+                        })
+
                 # Retrieve relevant conversation history if enabled
                 conversation_context = ""
                 if conversation_history.is_enabled():
@@ -613,16 +835,19 @@ def interactive_mode(model, verbose=False):
                     negative_weight_boost=negative_weight_boost
                 )
 
-                # Enhance prompt with eternal, ephemeral, conversation history, and heuristic context
+                # Enhance prompt with eternal, ephemeral, spark, conversation history, and heuristic context
                 enhanced_prompt = prompt
                 context_parts = []
 
-                # Order: Eternal (first, permanent), Ephemeral (session), Conversation, Heuristics
+                # Order: Eternal (first, permanent), Ephemeral (session), Spark (in-memory), Conversation, Heuristics
                 if eternal_context_str:
                     context_parts.append(eternal_context_str)
 
                 if ephemeral_context_str:
                     context_parts.append(ephemeral_context_str)
+
+                if spark_context_str:
+                    context_parts.append(spark_context_str)
 
                 if conversation_context:
                     context_parts.append(conversation_context)
@@ -639,6 +864,7 @@ def interactive_mode(model, verbose=False):
                             "enhanced_length": len(enhanced_prompt),
                             "eternal_context": len(eternal_context_str) if eternal_context_str else 0,
                             "ephemeral_context": len(ephemeral_context_str) if ephemeral_context_str else 0,
+                            "spark_context": len(spark_context_str) if spark_context_str else 0,
                             "conversation_context": len(conversation_context) if conversation_context else 0,
                             "heuristic_context": len(heuristic_context) if heuristic_context else 0,
                             "iteration": iteration_number,

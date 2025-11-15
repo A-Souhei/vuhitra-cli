@@ -11,16 +11,18 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
 import os
+from src.utils.file_path_completer import FilePathCompleter, CombinedCompleter
 
 
 class PromptHistoryManager:
     """Manages prompt history with auto-complete functionality."""
 
-    def __init__(self, history_file: str = None):
+    def __init__(self, history_file: str = None, working_dir: str = None):
         """Initialize the prompt history manager.
 
         Args:
             history_file: Path to history file. If None, uses default location.
+            working_dir: Working directory for file path completion. If None, uses current dir.
         """
         # Set default history file location
         if history_file is None:
@@ -30,6 +32,7 @@ class PromptHistoryManager:
             history_file = os.path.join(vuhitra_dir, "prompt_history.txt")
 
         self.history_file = history_file
+        self.working_dir = working_dir or os.getcwd()
 
         # Custom style for the prompt
         self.style = Style.from_dict({
@@ -51,6 +54,15 @@ class PromptHistoryManager:
             sentence=True
         )
 
+        # File path completer for @ prefix
+        self.file_path_completer = FilePathCompleter(working_dir=self.working_dir)
+
+        # Combined completer that uses both command and file path completion
+        self.combined_completer = CombinedCompleter(
+            command_completer=self.commands,
+            file_path_completer=self.file_path_completer
+        )
+
     def get_prompt(self) -> str:
         """Get user input with history and auto-complete.
 
@@ -69,7 +81,7 @@ class PromptHistoryManager:
             user_input = self.session.prompt(
                 prompt_text,
                 style=self.style,
-                completer=self.commands,
+                completer=self.combined_completer,
                 complete_while_typing=True,
                 vi_mode=False,  # Use emacs mode (can be configured)
             )

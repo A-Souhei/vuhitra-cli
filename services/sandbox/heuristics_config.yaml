@@ -52,3 +52,11 @@ auto_pruning:
   similarity_threshold: 0.85       # Similarity threshold for identifying duplicate/similar heuristics
   min_rating_difference: 1         # Minimum rating difference to consider one heuristic "better"
   batch_size: 100                  # Number of heuristics to check per pruning batch
+
+# Conversation history settings (RAG-based context selection)
+conversation_history:
+  enabled: true                    # Enable conversation history with embedding-based retrieval
+  max_history_size: 100            # Maximum number of conversation turns to keep in memory
+  top_k_relevant: 3                # Number of most relevant past conversations to include
+  min_similarity: 0.5              # Minimum similarity score to include a conversation (0.0-1.0)
+  include_in_context: true         # Include relevant history in LLM context

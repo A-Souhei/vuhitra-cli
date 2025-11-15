@@ -89,6 +89,13 @@ class HeuristicsConfigLoader:
                 'similarity_threshold': 0.85,
                 'min_rating_difference': 1,
                 'batch_size': 100
+            },
+            'conversation_history': {
+                'enabled': True,
+                'max_history_size': 100,
+                'top_k_relevant': 3,
+                'min_similarity': 0.5,
+                'include_in_context': True
             }
         }
 
@@ -231,3 +238,24 @@ class HeuristicsConfigLoader:
     def get_pruning_batch_size(self) -> int:
         """Get number of heuristics to check per pruning batch."""
         return self.get('auto_pruning', 'batch_size', default=100)
+
+    # Conversation history configuration
+    def get_conversation_history_enabled(self) -> bool:
+        """Get whether conversation history is enabled."""
+        return self.get('conversation_history', 'enabled', default=True)
+
+    def get_conversation_history_max_size(self) -> int:
+        """Get maximum number of conversation turns to keep in memory."""
+        return self.get('conversation_history', 'max_history_size', default=100)
+
+    def get_conversation_history_top_k(self) -> int:
+        """Get number of most relevant past conversations to include."""
+        return self.get('conversation_history', 'top_k_relevant', default=3)
+
+    def get_conversation_history_min_similarity(self) -> float:
+        """Get minimum similarity score to include a conversation."""
+        return self.get('conversation_history', 'min_similarity', default=0.5)
+
+    def get_conversation_history_include_in_context(self) -> bool:
+        """Get whether to include relevant history in LLM context."""
+        return self.get('conversation_history', 'include_in_context', default=True)

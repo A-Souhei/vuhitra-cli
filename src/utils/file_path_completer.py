@@ -5,6 +5,7 @@ suggestions when the user types '@' followed by a path.
 """
 
 import os
+import re
 from pathlib import Path
 from typing import Iterable
 from prompt_toolkit.completion import Completer, Completion
@@ -97,17 +98,22 @@ class FilePathCompleter(Completer):
         Yields:
             Completion objects for matching paths
         """
-        text = document.text_before_cursor
+        text_before_cursor = document.text_before_cursor
 
-        # Only provide completions if text contains '@'
-        if '@' not in text:
+        # Check if we're in an @ mention (file inclusion)
+        # Match @filepath pattern at the end of text (including just @)
+        match = re.search(r'@([^\s"]*)$', text_before_cursor)
+
+        if not match:
+            # Check for quoted pattern @"filepath
+            match = re.search(r'@"([^"]*)$', text_before_cursor)
+
+        if not match:
+            # No @ pattern found at the end of text
             return
 
-        # Find the last '@' in the text
-        last_at_index = text.rfind('@')
-
-        # Get the text after the '@'
-        prefix_text = text[last_at_index + 1:]
+        # We're in an @ mention
+        prefix = match.group(1)
 
         # Refresh cache if needed
         if self._should_refresh_cache():
@@ -116,26 +122,26 @@ class FilePathCompleter(Completer):
             self._cache_timestamp = time.time()
 
         # Filter paths that match the prefix
+        if self._cache is None:
+            return
+
         for path_info in self._cache:
             path = path_info['path']
             is_dir = path_info['is_dir']
 
             # Check if path starts with the prefix (case-insensitive)
-            if path.lower().startswith(prefix_text.lower()):
-                # Calculate display text
+            if path.lower().startswith(prefix.lower()):
+                # Add / for directories  
                 display_suffix = '/' if is_dir else ''
-                display_text = f"@{path}{display_suffix}"
+                display_text = path + display_suffix
 
                 # Add metadata to display
-                if is_dir:
-                    display_meta = "directory"
-                else:
-                    display_meta = "file"
+                display_meta = 'dir' if is_dir else 'file'
 
                 # Create completion
                 yield Completion(
-                    text=path,  # Just the path part (without @)
-                    start_position=-len(prefix_text),
+                    text=display_text,
+                    start_position=-len(prefix),
                     display=display_text,
                     display_meta=display_meta,
                 )
@@ -145,8 +151,8 @@ class CombinedCompleter(Completer):
     """Combines multiple completers into one.
 
     This completer delegates to different completers based on the context.
-    - If text contains '@', use FilePathCompleter
-    - Otherwise, use the default command completer
+    - If text matches @ pattern, use FilePathCompleter ONLY
+    - Otherwise, use the default command completer ONLY
     """
 
     def __init__(self, command_completer: Completer, file_path_completer: FilePathCompleter):
@@ -169,11 +175,17 @@ class CombinedCompleter(Completer):
         Yields:
             Completion objects from the appropriate completer
         """
-        text = document.text_before_cursor
+        text_before_cursor = document.text_before_cursor
 
-        # If text contains '@', use file path completer
-        if '@' in text:
+        # Check if we're in an @ mention using regex
+        match = re.search(r'@([^\s"]*)$', text_before_cursor) or \
+                re.search(r'@"([^"]*)$', text_before_cursor)
+
+        if match:
+            # ONLY use file path completer for @ prefix - don't mix with commands
             yield from self.file_path_completer.get_completions(document, complete_event)
-        else:
-            # Otherwise, use command completer
-            yield from self.command_completer.get_completions(document, complete_event)
+            # Note: we return here, don't fall through to command completer
+            return
+        
+        # If no @ pattern, use command completer
+        yield from self.command_completer.get_completions(document, complete_event)

@@ -40,13 +40,6 @@ class PromptHistoryManager:
             'prompt-symbol': '#00ffff bold',
         })
 
-        # Initialize the prompt session with history and auto-suggest
-        self.session = PromptSession(
-            history=FileHistory(self.history_file),
-            auto_suggest=AutoSuggestFromHistory(),
-            enable_history_search=True,
-        )
-
         # Common commands completer
         self.commands = WordCompleter(
             ['exit', 'quit', 'help', '/clear context', '/clear tokenlimit', '/limit'],
@@ -61,6 +54,16 @@ class PromptHistoryManager:
         self.combined_completer = CombinedCompleter(
             command_completer=self.commands,
             file_path_completer=self.file_path_completer
+        )
+
+        # Initialize the prompt session with history, auto-suggest, and completer
+        # IMPORTANT: complete_while_typing=False means user must press Tab to show completions
+        self.session = PromptSession(
+            history=FileHistory(self.history_file),
+            auto_suggest=AutoSuggestFromHistory(),
+            enable_history_search=True,
+            completer=self.combined_completer,
+            complete_while_typing=False,  # Press Tab to show autocomplete dropdown
         )
 
     def get_prompt(self) -> str:
@@ -78,11 +81,10 @@ class PromptHistoryManager:
             prompt_text = HTML('<prompt-symbol>❯</prompt-symbol> ')
 
             # Get input with auto-suggest from history
+            # Note: completer and complete_while_typing are already set in PromptSession
             user_input = self.session.prompt(
                 prompt_text,
                 style=self.style,
-                completer=self.combined_completer,
-                complete_while_typing=True,
                 vi_mode=False,  # Use emacs mode (can be configured)
             )
 

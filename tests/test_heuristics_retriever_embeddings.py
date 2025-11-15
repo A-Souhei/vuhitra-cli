@@ -143,6 +143,11 @@ class TestHeuristicsRetrieverEmbeddings:
             assert 'scoring_breakdown' in result
             assert result['matched_heuristic']['_id'] == 'doc1'
             assert result['matched_heuristic']['rating'] == 5
+            
+            # Verify pure embedding similarity scoring (no rating weighting)
+            assert result['confidence_score'] == 0.85
+            assert result['scoring_breakdown']['embedding_similarity'] == 0.85
+            assert 'rating_normalized' not in result['scoring_breakdown']
     
     def test_retrieve_best_match_no_candidates(self, retriever):
         """Test when no candidates match the query."""
@@ -277,7 +282,7 @@ class TestHeuristicsRetrieverEmbeddings:
                 'hits': [
                     {
                         '_id': 'bad_doc1',
-                        '_score': 0.6,
+                        '_score': 0.6,  # Embedding similarity
                         '_source': {
                             'prompt': 'bad approach',
                             'response': 'failed',
@@ -302,16 +307,96 @@ class TestHeuristicsRetrieverEmbeddings:
             )
             
             assert result is not None
-            # Confidence should be boosted but capped at 1.0
-            assert result['confidence_score'] <= 1.0
+            # Base similarity is 0.6, boosted by 30% = 0.6 * 1.3 = 0.78
+            expected_confidence = min(1.0, 0.6 * 1.3)
+            assert abs(result['confidence_score'] - expected_confidence) < 0.01
             assert result['scoring_breakdown']['negative_weight_boost_applied'] == 0.3
+            assert result['scoring_breakdown']['embedding_similarity'] == 0.6
+            assert 'rating_normalized' not in result['scoring_breakdown']
     
-    def test_scoring_weights(self, retriever):
-        """Test that scoring weights are properly configured."""
-        assert hasattr(retriever, 'SEMANTIC_WEIGHT')
-        assert hasattr(retriever, 'RATING_WEIGHT')
-        assert retriever.SEMANTIC_WEIGHT >= 0
-        assert retriever.RATING_WEIGHT >= 0
+    def test_pure_embedding_similarity_scoring(self, retriever):
+        """Test that scoring uses ONLY embedding similarity, no rating weighting."""
+        # Create two candidates with different ratings but same similarity
+        mock_response = {
+            'hits': {
+                'hits': [
+                    {
+                        '_id': 'doc1',
+                        '_score': 0.9,  # Same similarity
+                        '_source': {
+                            'prompt': 'test A',
+                            'response': 'response A',
+                            'rating': 5  # High rating
+                        }
+                    },
+                    {
+                        '_id': 'doc2',
+                        '_score': 0.9,  # Same similarity
+                        '_source': {
+                            'prompt': 'test B',
+                            'response': 'response B',
+                            'rating': 1  # Low rating
+                        }
+                    }
+                ]
+            }
+        }
+        
+        retriever.es.search = Mock(return_value=mock_response)
+        
+        with patch('requests.post') as mock_post:
+            mock_post.return_value = MockResponse({
+                'embedding': [0.1] * 384,
+                'dimension': 384
+            }, 200)
+            
+            result = retriever.retrieve_best_match("test prompt", min_rating=1)
+            
+            # Both should have identical confidence scores (pure similarity)
+            assert result['confidence_score'] == 0.9
+            assert result['scoring_breakdown']['embedding_similarity'] == 0.9
+    
+    def test_rating_filters_but_does_not_affect_score(self, retriever):
+        """Test that rating filters results but doesn't change confidence scoring."""
+        mock_response = {
+            'hits': {
+                'hits': [
+                    {
+                        '_id': 'doc1',
+                        '_score': 0.95,
+                        '_source': {
+                            'prompt': 'high rated',
+                            'response': 'response',
+                            'rating': 5
+                        }
+                    },
+                    {
+                        '_id': 'doc2',
+                        '_score': 0.85,
+                        '_source': {
+                            'prompt': 'low rated',
+                            'response': 'response',
+                            'rating': 2
+                        }
+                    }
+                ]
+            }
+        }
+        
+        retriever.es.search = Mock(return_value=mock_response)
+        
+        with patch('requests.post') as mock_post:
+            mock_post.return_value = MockResponse({
+                'embedding': [0.1] * 384,
+                'dimension': 384
+            }, 200)
+            
+            # Should still get doc1 (highest similarity)
+            result = retriever.retrieve_best_match("test prompt", min_rating=4)
+            
+            assert result['matched_heuristic']['_id'] == 'doc1'
+            # Confidence is pure similarity
+            assert result['confidence_score'] == 0.95
     
     def test_es_not_connected(self):
         """Test behavior when Elasticsearch is not connected."""

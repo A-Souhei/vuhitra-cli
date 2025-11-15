@@ -21,6 +21,55 @@ MAX_PROMPT_LENGTH = 10000
 
 logger = logging.getLogger(__name__)
 
+def wait_for_services(max_retries=30, retry_delay=1.0):
+    """
+    Wait for sandbox and transformer services to be ready.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        retry_delay: Delay between retries in seconds
+        
+    Returns:
+        bool: True if services are ready, False otherwise
+    """
+    config = ConfigLoader()
+    sandbox_url = config.get_sandbox_url()
+    health_endpoint = f"{sandbox_url}/health"
+    
+    print_info("Waiting for services to be ready...")
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(health_endpoint, timeout=2)
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Check if retriever health includes transformer service
+                retriever_health = data.get('retriever', {})
+                if retriever_health.get('overall', False):
+                    print_success("✓ All services are ready (sandbox + transformer)")
+                    return True
+                elif retriever_health.get('elasticsearch', False):
+                    print_warning(f"Elasticsearch ready, waiting for transformer service... (attempt {attempt}/{max_retries})")
+                else:
+                    print_warning(f"Services starting... (attempt {attempt}/{max_retries})")
+            else:
+                print_warning(f"Sandbox returned status {response.status_code}, retrying... (attempt {attempt}/{max_retries})")
+        except requests.exceptions.ConnectionError:
+            print_warning(f"Cannot connect to sandbox, retrying... (attempt {attempt}/{max_retries})")
+        except requests.exceptions.Timeout:
+            print_warning(f"Health check timeout, retrying... (attempt {attempt}/{max_retries})")
+        except Exception as e:
+            print_warning(f"Health check error: {str(e)}, retrying... (attempt {attempt}/{max_retries})")
+        
+        if attempt < max_retries:
+            time.sleep(retry_delay)
+    
+    print_error("✗ Services did not become ready in time")
+    print_info("Please ensure Docker containers are running:")
+    print_info("  cd services && docker compose up -d")
+    return False
+
 def initialize_error_handler():
     """Initialize the error handler with configuration."""
     try:
@@ -64,7 +113,7 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
         response = requests.post(
             endpoint,
             json=request_json,
-            timeout=5
+            timeout=15  # Increased timeout for transformer model loading on first request
         )
         response.raise_for_status()
         data = response.json()
@@ -247,7 +296,7 @@ def interactive_mode(model, verbose=False):
                     verbose=verbose,
                     negative_weight_boost=negative_weight_boost
                 )
-
+                
                 # Enhance prompt with heuristic context if available
                 enhanced_prompt = prompt
                 if heuristic_context:
@@ -481,7 +530,7 @@ def non_interactive_mode(model, prompt, verbose=False):
 
         # Fetch similar heuristic to enhance context
         heuristic_context, heuristic_data = fetch_similar_heuristic(prompt, verbose=verbose)
-
+        
         # Enhance prompt with heuristic context if available
         enhanced_prompt = prompt
         if heuristic_context:
@@ -522,6 +571,11 @@ def main():
 
         # Set verbose mode from args
         verbose = args.verbose
+        
+        # Wait for services to be ready before proceeding
+        if not wait_for_services():
+            print_error("Cannot proceed without services. Exiting.")
+            sys.exit(1)
 
         capture_message("CLI started", level="info", context={
             'mode': 'interactive' if not args.prompt else 'non_interactive',

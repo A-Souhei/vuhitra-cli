@@ -64,9 +64,12 @@ else
     echo -e "${YELLOW}Running NON-CONTAINER tests only${NC}"
     echo "  - Excluding: test_sandbox_endpoints.py (requires sandbox container)"
     echo "  - Excluding: test_sandbox_redis.py (requires Redis container)"
+    echo "  - Excluding: test_heuristics_endpoints.py (Flask integration tests)"
+    echo "  - Excluding: test_heuristics_retriever_old.py (old implementation)"
     echo "  - Including: test_sandbox_endpoints_mocked.py (mocked version)"
     echo "  - Including: test_sandbox_redis_mocked.py (mocked version)"
-    IGNORE_OPTS="--ignore=tests/test_sandbox_endpoints.py --ignore=tests/test_sandbox_redis.py"
+    echo "  - Including: test_heuristics_retriever_embeddings.py (new embedding tests)"
+    IGNORE_OPTS="--ignore=tests/test_sandbox_endpoints.py --ignore=tests/test_sandbox_redis.py --ignore=tests/test_heuristics_endpoints.py --ignore=tests/test_heuristics_retriever_old.py"
     TEST_PATTERN="tests/"
 fi
 

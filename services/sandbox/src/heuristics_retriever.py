@@ -10,7 +10,7 @@ This module implements a sophisticated retrieval system using:
 Replaces the old spaCy + Levenshtein approach with pure embedding-based similarity.
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from elasticsearch import Elasticsearch
 import requests
 
@@ -85,6 +85,39 @@ class HeuristicsRetriever:
         self.CHAINING_ENABLED = self.config.get_chaining_enabled()
         self.INCLUDE_CHAIN_IN_CONTEXT = self.config.get_include_chain_in_context()
         self.MIN_PARENT_RATING = self.config.get_min_parent_rating()
+
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Check health of retriever components.
+        
+        Returns:
+            Dict with health status of ES and transformer service
+        """
+        health = {
+            'elasticsearch': False,
+            'transformer_service': False,
+            'overall': False
+        }
+        
+        # Check Elasticsearch
+        if self.es:
+            try:
+                health['elasticsearch'] = self.es.ping()
+            except:
+                pass
+        
+        # Check transformer service
+        try:
+            response = requests.get(
+                f"{self.transformer_url}/health",
+                timeout=2
+            )
+            health['transformer_service'] = response.status_code == 200
+        except:
+            pass
+        
+        health['overall'] = health['elasticsearch'] and health['transformer_service']
+        return health
 
     def _generate_embedding(self, text: str) -> Optional[List[float]]:
         """
@@ -186,39 +219,30 @@ class HeuristicsRetriever:
                 doc = hit['_source']
                 doc['_id'] = hit['_id']
                 
-                # The _score from kNN search is the similarity score
+                # The _score from kNN search is the similarity score (cosine similarity, 0-1)
                 similarity_score = hit['_score']
                 
                 # Skip if below minimum similarity threshold
                 if similarity_score < self.MIN_SIMILARITY:
                     continue
                 
-                # Normalize rating to 0-1 scale (assuming rating is 1-5)
-                rating = doc.get('rating', 3)
-                rating_normalized = (rating - 1) / 4.0  # Convert 1-5 to 0-1
-                
-                # Calculate final weighted score
-                final_score = (
-                    self.SEMANTIC_WEIGHT * similarity_score +
-                    self.RATING_WEIGHT * rating_normalized
-                )
-                
+                # Use ONLY embedding similarity as the confidence score
+                # Rating is kept in the document for filtering but doesn't affect scoring
                 scored_candidates.append({
                     'document': doc,
                     'similarity_score': similarity_score,
-                    'rating_score': rating_normalized,
-                    'final_score': final_score
+                    'final_score': similarity_score  # Pure embedding similarity
                 })
 
             if not scored_candidates:
                 logger.info("No matches passed similarity threshold")
                 return None
 
-            # Sort by final score
+            # Sort by similarity score (already the final score)
             scored_candidates.sort(key=lambda x: x['final_score'], reverse=True)
             best_match = scored_candidates[0]
 
-            # Apply negative weight boost
+            # Apply negative weight boost if specified
             adjusted_confidence = best_match['final_score'] * (1.0 - negative_weight_boost)
 
             result = {
@@ -226,7 +250,6 @@ class HeuristicsRetriever:
                 'confidence_score': adjusted_confidence,
                 'scoring_breakdown': {
                     'embedding_similarity': best_match['similarity_score'],
-                    'rating_normalized': best_match['rating_score'],
                     'negative_weight_boost_applied': negative_weight_boost
                 },
                 'chain': []
@@ -339,19 +362,13 @@ class HeuristicsRetriever:
                     continue
                 
                 rating = doc.get('rating', 2)
-                # For negative heuristics, lower rating = higher score
-                rating_normalized = (5 - rating) / 4.0  # Invert: rating 1 -> 1.0, rating 5 -> 0.0
-                
-                final_score = (
-                    self.SEMANTIC_WEIGHT * similarity_score +
-                    self.RATING_WEIGHT * rating_normalized
-                )
+                # Use ONLY embedding similarity (no rating weighting)
+                # For negative heuristics, rating is kept for filtering only
                 
                 scored_candidates.append({
                     'document': doc,
                     'similarity_score': similarity_score,
-                    'rating_score': rating_normalized,
-                    'final_score': final_score
+                    'final_score': similarity_score  # Pure embedding similarity
                 })
 
             if not scored_candidates:
@@ -369,7 +386,6 @@ class HeuristicsRetriever:
                 'confidence_score': adjusted_confidence,
                 'scoring_breakdown': {
                     'embedding_similarity': best_match['similarity_score'],
-                    'rating_normalized': best_match['rating_score'],
                     'negative_weight_boost_applied': negative_weight_boost
                 },
                 'is_negative': True,

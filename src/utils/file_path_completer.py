@@ -7,9 +7,10 @@ suggestions when the user types '@' followed by a path.
 import os
 import re
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
+from src.utils.prompt_injection_completer import PromptInjectionCompleter
 
 
 class FilePathCompleter(Completer):
@@ -152,18 +153,22 @@ class CombinedCompleter(Completer):
 
     This completer delegates to different completers based on the context.
     - If text matches @ pattern, use FilePathCompleter ONLY
+    - If text matches : pattern, use PromptInjectionCompleter ONLY
     - Otherwise, use the default command completer ONLY
     """
 
-    def __init__(self, command_completer: Completer, file_path_completer: FilePathCompleter):
+    def __init__(self, command_completer: Completer, file_path_completer: FilePathCompleter,
+                 prompt_injection_completer: Optional[PromptInjectionCompleter] = None):
         """Initialize the combined completer.
 
         Args:
             command_completer: Completer for commands (e.g., WordCompleter)
             file_path_completer: Completer for file paths with @ prefix
+            prompt_injection_completer: Completer for prompt injections with : prefix
         """
         self.command_completer = command_completer
         self.file_path_completer = file_path_completer
+        self.prompt_injection_completer = prompt_injection_completer or PromptInjectionCompleter()
 
     def get_completions(self, document: Document, complete_event) -> Iterable[Completion]:
         """Get completion suggestions from appropriate completer.
@@ -177,15 +182,21 @@ class CombinedCompleter(Completer):
         """
         text_before_cursor = document.text_before_cursor
 
-        # Check if we're in an @ mention using regex
-        match = re.search(r'@([^\s"]*)$', text_before_cursor) or \
-                re.search(r'@"([^"]*)$', text_before_cursor)
+        # Check if we're in a : prompt injection pattern
+        colon_match = re.search(r':([^\s]*)$', text_before_cursor)
+        if colon_match:
+            # ONLY use prompt injection completer for : prefix
+            yield from self.prompt_injection_completer.get_completions(document, complete_event)
+            return
 
-        if match:
+        # Check if we're in an @ mention using regex
+        at_match = re.search(r'@([^\s"]*)$', text_before_cursor) or \
+                   re.search(r'@"([^"]*)$', text_before_cursor)
+
+        if at_match:
             # ONLY use file path completer for @ prefix - don't mix with commands
             yield from self.file_path_completer.get_completions(document, complete_event)
-            # Note: we return here, don't fall through to command completer
             return
-        
-        # If no @ pattern, use command completer
+
+        # If no @ or : pattern, use command completer
         yield from self.command_completer.get_completions(document, complete_event)

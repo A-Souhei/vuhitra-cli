@@ -708,6 +708,44 @@ def interactive_mode(model, verbose=False):
         # Return original prompt (keep @ references in the text), loaded sparks, and errors
         return prompt_text, loaded_sparks, errors
 
+    def process_prompt_injections(prompt_text: str) -> str:
+        """Process :category shortcuts and replace with random phrases.
+
+        Args:
+            prompt_text: The user's prompt text
+
+        Returns:
+            Modified prompt with :category replaced by random phrases with emojis
+        """
+        import re
+        from src.utils.prompt_injection_completer import PromptInjectionCompleter
+
+        # Check if there are any :category patterns
+        pattern = r':(\w+)'
+        if not re.search(pattern, prompt_text):
+            return prompt_text
+
+        # Initialize the completer to get phrases
+        completer = PromptInjectionCompleter()
+
+        def replace_with_phrase(match):
+            """Replace :category with random phrase from that category."""
+            category = match.group(1)
+            phrase = completer.get_random_phrase(category)
+            emoji = completer.get_category_emoji(category)
+
+            if phrase:
+                # Add emoji before the phrase
+                return f"{emoji} {phrase}"
+            else:
+                # Keep original if category not found
+                return match.group(0)
+
+        # Replace all :category with phrases
+        modified_prompt = re.sub(pattern, replace_with_phrase, prompt_text)
+
+        return modified_prompt
+
     if verbose:
         history_count = prompt_manager.get_history_count()
         print_info(f"Prompt history loaded: {history_count} previous prompts available")
@@ -731,6 +769,9 @@ def interactive_mode(model, verbose=False):
 
             if not prompt.strip():
                 continue
+
+            # Replace :category shortcuts with random phrases
+            prompt = process_prompt_injections(prompt)
 
             # Check if this is a command
             if command_handler.is_command(prompt):
@@ -884,6 +925,22 @@ def interactive_mode(model, verbose=False):
                             "iteration": iteration_number,
                             "negative_weight_boost": negative_weight_boost
                         })
+
+                # Inject reasoning prompt for auto-iteration retries (the cherry on top!)
+                # When iteration_number > 0, it means we got rating=0 and are retrying
+                if iteration_number > 0:
+                    from src.utils.prompt_injection_completer import PromptInjectionCompleter
+                    completer = PromptInjectionCompleter()
+                    reasoning_phrase = completer.get_random_phrase('reasoning')
+                    reasoning_emoji = completer.get_category_emoji('reasoning')
+
+                    if reasoning_phrase:
+                        # Inject the reasoning instruction into the prompt
+                        reasoning_injection = f"{reasoning_emoji} {reasoning_phrase}"
+                        enhanced_prompt = f"{enhanced_prompt}\n\n{reasoning_injection}"
+
+                        if verbose:
+                            print_info(f"🍒 Auto-iteration boost: Added reasoning prompt - '{reasoning_phrase}'")
 
                 # Check token limit before generating (proactive warning)
                 token_manager = get_token_limit_manager()

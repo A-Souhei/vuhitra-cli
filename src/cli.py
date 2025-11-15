@@ -935,7 +935,14 @@ def interactive_mode(model, verbose=False):
 
                 # Inject reasoning prompt for auto-iteration retries (the cherry on top!)
                 # When iteration_number > 0, it means we got rating=0 and are retrying
-                if iteration_number > 0:
+                # SKIP if we have user_feedback - we want LLM to follow the correction, not overthink it
+                user_feedback_value = (
+                    heuristic_data.get('matched_heuristic', {}).get('user_feedback', '')
+                    if heuristic_data else ''
+                )
+                has_user_feedback = bool(user_feedback_value and user_feedback_value.strip())
+
+                if iteration_number > 0 and not has_user_feedback:
                     from src.utils.prompt_injection_completer import PromptInjectionCompleter
                     completer = PromptInjectionCompleter()
                     reasoning_phrase = completer.get_random_phrase('reasoning')
@@ -948,6 +955,8 @@ def interactive_mode(model, verbose=False):
 
                         if verbose:
                             print_info(f"🍒 Auto-iteration boost: Added reasoning prompt - '{reasoning_phrase}'")
+                elif iteration_number > 0 and has_user_feedback and verbose:
+                    print_info("🎯 Skipping reasoning boost - user correction provided (follow directive, don't overthink)")
 
                 # Check token limit before generating (proactive warning)
                 token_manager = get_token_limit_manager()

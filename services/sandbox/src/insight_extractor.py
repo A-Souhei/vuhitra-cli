@@ -744,10 +744,18 @@ Please provide a comprehensive response addressing the user's specific question.
             
             # Add user feedback if provided - this is the correction!
             if user_feedback:
-                lines.append("✓ USER CORRECTION - What is actually correct:")
-                lines.append(f"   {user_feedback}")
+                lines.append("=" * 70)
+                lines.append("✓ USER CORRECTION - FACTUALLY CORRECT ANSWER:")
                 lines.append("")
-                lines.append("DIRECTIVE: Use the USER CORRECTION above as the factually accurate information.")
+                lines.append(f"{user_feedback}")
+                lines.append("")
+                lines.append("=" * 70)
+                lines.append("")
+                lines.append("🚨 CRITICAL DIRECTIVE:")
+                lines.append("The USER CORRECTION above is the ONLY factually correct answer.")
+                lines.append("DO NOT use your own reasoning or internal knowledge.")
+                lines.append("DO NOT second-guess or recalculate.")
+                lines.append("RESPOND with the information from USER CORRECTION.")
             else:
                 lines.append("DIRECTIVE: Do NOT repeat this mistake. Provide the factually correct answer.")
             lines.append("")

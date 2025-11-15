@@ -46,6 +46,13 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 # This allows models to be cached across rebuilds when using volume mounts
 RUN mkdir -p /root/.cache/huggingface
 
+# Pre-download sentence-transformers model to avoid first-run delay
+# This model (all-MiniLM-L6-v2) is ~80MB and used for embedding generation
+RUN python3 -c "from sentence_transformers import SentenceTransformer; \
+    print('Downloading sentence-transformers model...'); \
+    model = SentenceTransformer('all-MiniLM-L6-v2'); \
+    print('Model downloaded successfully')"
+
 # Copy application code
 COPY services/transformer/ .
 

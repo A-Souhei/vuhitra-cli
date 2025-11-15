@@ -3,8 +3,9 @@ ElasticSearch client for storing and managing heuristics data.
 """
 from elasticsearch import Elasticsearch
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Dict, Optional
 import logging
+import requests
 from src.errors_handler.error_handler import get_error_handler
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,14 @@ error_handler = get_error_handler()
 class ElasticSearchClient:
     """Manages ElasticSearch connection and data operations."""
 
-    def __init__(self, host: str = "localhost", port: int = 9200, index_name: str = "llm_feedback"):
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 9200,
+        index_name: str = "llm_feedback",
+        transformer_host: str = "transformer",
+        transformer_port: int = 5050
+    ):
         """
         Initialize ElasticSearch client.
         
@@ -22,10 +30,15 @@ class ElasticSearchClient:
             host: ElasticSearch host
             port: ElasticSearch port
             index_name: Name of the index to use
+            transformer_host: Transformer service host
+            transformer_port: Transformer service port
         """
         self.host = host
         self.port = port
         self.index_name = index_name
+        self.transformer_host = transformer_host
+        self.transformer_port = transformer_port
+        self.transformer_url = f"http://{transformer_host}:{transformer_port}"
         self.es = None
         self._connect()
 
@@ -61,6 +74,12 @@ class ElasticSearchClient:
                     "properties": {
                         "prompt": {"type": "text"},
                         "prompt_keywords": {"type": "keyword"},
+                        "prompt_embedding": {
+                            "type": "dense_vector",
+                            "dims": 384,
+                            "index": True,
+                            "similarity": "cosine"
+                        },
                         "prompt_sentiment_vader": {"type": "float"},
                         "prompt_sentiment_spacy": {"type": "float"},
                         "prompt_word_count": {"type": "integer"},
@@ -85,6 +104,34 @@ class ElasticSearchClient:
             self.es.indices.create(index=self.index_name, body=mappings)
             logger.info(f"Created index: {self.index_name}")
 
+    def _generate_embedding(self, text: str) -> Optional[list]:
+        """
+        Generate embedding for text using transformer service.
+        
+        Args:
+            text: Text to generate embedding for
+            
+        Returns:
+            List of floats representing the embedding, or None if failed
+        """
+        try:
+            response = requests.post(
+                f"{self.transformer_url}/api/generate-embedding",
+                json={"text": text},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('embedding')
+            else:
+                logger.warning(f"Failed to generate embedding: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"Error calling transformer service for embedding: {e}")
+            return None
+
     def save_feedback(self, data: Dict) -> bool:
         """
         Save feedback data to ElasticSearch.
@@ -100,6 +147,15 @@ class ElasticSearchClient:
             return False
 
         try:
+            # Generate embedding for the prompt if available
+            if "prompt" in data and data["prompt"]:
+                embedding = self._generate_embedding(data["prompt"])
+                if embedding:
+                    data["prompt_embedding"] = embedding
+                    logger.debug(f"Generated embedding with {len(embedding)} dimensions")
+                else:
+                    logger.warning("Failed to generate embedding, saving without it")
+            
             data["processed_at"] = datetime.now(timezone.utc).isoformat()
             result = self.es.index(index=self.index_name, document=data)
             logger.info(f"Saved feedback document: {result['_id']}")

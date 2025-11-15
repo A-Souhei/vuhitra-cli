@@ -7,14 +7,13 @@ A Flask-based microservice that provides transformer-based NLP capabilities:
 - Keyword extraction
 - Text reformulation and typo fixing
 - Matrix context generation for LLM consumption
+- Embedding generation for semantic search
 """
 
 import os
 import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import sentry_sdk
-from sentry_sdk.integrations.flask import FlaskIntegration
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -22,17 +21,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.code_recognizer import CodeRecognizer
 from src.context_compacter import ContextCompacter
 from src.sentiment_analyzer import SentimentAnalyzer
+from src.errors_handler.error_handler import get_error_handler
 
+# Initialize error handler
+error_handler = get_error_handler()
 
-# Initialize Sentry (optional)
+# Configure error handler with environment variables
 sentry_dsn = os.getenv('SENTRY_DSN', '')
-if sentry_dsn:
-    sentry_sdk.init(
-        dsn=sentry_dsn,
-        integrations=[FlaskIntegration()],
-        traces_sample_rate=1.0,
-        environment=os.getenv('ENVIRONMENT', 'DEV')
-    )
+environment = os.getenv('ENVIRONMENT', 'DEV')
+
+error_handler.configure(
+    sentry_dsn=sentry_dsn if sentry_dsn else None,
+    mode=environment,
+    enable_logging=environment == 'DEV'
+)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -46,7 +48,6 @@ MIN_TEXT_LENGTH = 1
 code_recognizer = None
 context_compacter = None
 sentiment_analyzer = None
-
 
 def get_code_recognizer():
     """Get or initialize code recognizer (lazy loading)."""
@@ -155,8 +156,14 @@ def recognize_code():
         })
 
     except Exception as e:
-        print(f"Error in recognize_code: {e}")
-        return jsonify({'error': str(e)}), 500
+        error_handler.handle_exception(
+            e,
+            context={
+                "endpoint": "/api/recognize-code",
+                "has_data": request.data is not None
+            }
+        )
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/extract-keywords', methods=['POST'])
@@ -556,6 +563,101 @@ def fix_typos():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/generate-embedding', methods=['POST'])
+def generate_embedding():
+    """
+    Generate embeddings for text using sentence-transformers.
+
+    Request body:
+    {
+        "text": "string - the text to generate embeddings for",
+        "texts": ["list", "of", "texts"] (optional) - multiple texts for batch processing
+    }
+
+    Response:
+    {
+        "embedding": [0.123, -0.456, ...],  # For single text
+        "embeddings": [[...], [...], ...],  # For batch processing
+        "dimension": 384,
+        "model": "all-MiniLM-L6-v2"
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Missing request body'}), 400
+
+        # Support both single text and batch processing
+        texts = None
+        if 'texts' in data and isinstance(data['texts'], list):
+            texts = data['texts']
+            if not texts:
+                return jsonify({'error': 'texts list cannot be empty'}), 400
+            # Validate each text
+            for idx, text in enumerate(texts):
+                is_valid, error_msg = validate_text_input(text, f'texts[{idx}]')
+                if not is_valid:
+                    return jsonify({'error': error_msg}), 400
+        elif 'text' in data:
+            text = data['text']
+            is_valid, error_msg = validate_text_input(text, 'text')
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
+            texts = [text]
+        else:
+            return jsonify({'error': 'Missing required field: text or texts'}), 400
+
+        # Get the sentence transformer model from context compacter
+        compacter = get_context_compacter()
+        
+        # Generate embeddings
+        embeddings = compacter.sentence_model.encode(texts, convert_to_numpy=True)
+        
+        # Convert to list for JSON serialization
+        embeddings_list = embeddings.tolist()
+        
+        # Return single embedding or batch
+        if len(texts) == 1:
+            return jsonify({
+                'embedding': embeddings_list[0],
+                'dimension': len(embeddings_list[0]),
+                'model': 'all-MiniLM-L6-v2'
+            })
+        else:
+            return jsonify({
+                'embeddings': embeddings_list,
+                'dimension': len(embeddings_list[0]) if embeddings_list else 0,
+                'model': 'all-MiniLM-L6-v2',
+                'count': len(embeddings_list)
+            })
+
+    except Exception as e:
+        error_handler.handle_exception(
+            e,
+            context={
+                "endpoint": "/api/generate-embedding",
+                "has_data": request.data is not None
+            }
+        )
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+# Global error handler for uncaught exceptions
+@app.errorhandler(Exception)
+def handle_uncaught_exception(e):
+    """Handle any uncaught exceptions."""
+    error_handler.handle_exception(
+        e,
+        context={
+            "endpoint": request.endpoint,
+            "method": request.method,
+            "url": request.url
+        }
+    )
+    return jsonify({'error': 'Internal server error'}), 500
+
+
 if __name__ == '__main__':
     # Get port from environment or use default
     port = int(os.getenv('PORT', 5050))
@@ -571,6 +673,7 @@ if __name__ == '__main__':
     print("  POST /api/create-matrix-context - Create matrix-style context (MAIN)")
     print("  POST /api/analyze-sentiment - Analyze sentiment with transformer model")
     print("  POST /api/fix-typos - Fix typos and grammar")
+    print("  POST /api/generate-embedding - Generate embeddings for semantic search")
     print()
 
     # Run the app

@@ -76,8 +76,14 @@ class ConversationHistoryManager:
         self.transformer_url = self._get_transformer_url()
 
     def _get_transformer_url(self) -> str:
-        """Get transformer service URL from sandbox health endpoint."""
+        """Get transformer service URL from config with fallback to sandbox health check."""
         try:
+            # Primary: Use config
+            transformer_url = self.config.get_transformer_url()
+            if transformer_url:
+                return transformer_url
+
+            # Fallback: Try to get from sandbox health endpoint
             sandbox_url = self.config.get_sandbox_url()
             health_endpoint = f"{sandbox_url}/health"
             response = requests.get(health_endpoint, timeout=2)
@@ -90,15 +96,15 @@ class ConversationHistoryManager:
                 if transformer_url:
                     return transformer_url
 
-            # Fallback to default
-            return "http://localhost:5050"
+            # Final fallback to config default
+            return self.config.get_transformer_url()
 
         except Exception as e:
             handle_exception(e, context={
                 'function': '_get_transformer_url',
-                'fallback': 'http://localhost:5050'
+                'fallback': self.config.get_transformer_url()
             })
-            return "http://localhost:5050"
+            return self.config.get_transformer_url()
 
     def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """Generate embedding for text using transformer service.

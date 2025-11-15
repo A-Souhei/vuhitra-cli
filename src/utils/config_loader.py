@@ -173,3 +173,18 @@ class ConfigLoader:
 
     def get_sandbox_confidence_threshold(self):
         return self.get('sandbox', 'confidence_threshold', default=0.75)
+
+    def get_transformer_host(self):
+        return self.get('transformer', 'host', default='localhost')
+    
+    def get_transformer_port(self):
+        return self.get('transformer', 'port', default=15050)
+    
+    def get_transformer_protocol(self):
+        return self.get('transformer', 'protocol', default='http')
+    
+    def get_transformer_url(self):
+        protocol = self.get_transformer_protocol()
+        host = self.get_transformer_host()
+        port = self.get_transformer_port()
+        return f"{protocol}://{host}:{port}"

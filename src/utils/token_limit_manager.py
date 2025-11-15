@@ -5,6 +5,7 @@ When a model hits its token limit, we store that limit in Redis for future use.
 """
 
 import logging
+import re
 import redis
 from typing import Optional, Union
 from src.utils.config_loader import ConfigLoader
@@ -172,7 +173,6 @@ class TokenLimitManager:
                     # Extract number from right side
                     right_part = parts[1].strip()
                     # Get first number found
-                    import re
                     numbers = re.findall(r'\d+', right_part)
                     if numbers:
                         limit = int(numbers[0])
@@ -181,7 +181,6 @@ class TokenLimitManager:
 
             # Pattern 2: "maximum" keyword
             if 'maximum' in error_lower:
-                import re
                 # Find number before "maximum"
                 match = re.search(r'(\d+)\s*maximum', error_lower)
                 if match:
@@ -222,7 +221,7 @@ class TokenLimitManager:
         if estimated_tokens > safe_limit:
             warning = (
                 f"Prompt may exceed token limit for {model}\n"
-                f"Estimated: ~{estimated_tokens} tokens, Limit: {limit} tokens\n"
+                f"Estimated: ~{estimated_tokens} tokens, Limit: {int(limit)} tokens\n"
                 f"Consider using /clear context or shortening your prompt"
             )
             return False, warning

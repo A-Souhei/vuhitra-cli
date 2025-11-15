@@ -213,7 +213,35 @@ spark_context:
   max_file_size_mb: 10
   # Maximum number of Spark contexts (in-memory only)
   max_contexts: 20
+  # Embedding configuration
+  embed:
+    # Enable/disable embedding generation for Spark contexts
+    # Embeddings improve semantic retrieval and context understanding
+    enabled: true
+  # Text chunking configuration (for large files)
+  chunking:
+    enabled: true
+    # Chunk size in characters
+    chunk_size: 1000
+    # Overlap between chunks in characters
+    overlap: 200
 ```
+
+### Embedding Configuration
+
+Spark contexts now support **embedding generation** for improved semantic understanding:
+
+- **`embed.enabled`**: When `true`, generates embeddings for loaded content using the transformer service
+- **Purpose**: Embeddings enable semantic similarity searches and better context retrieval
+- **Automatic**: Embeddings are generated automatically when loading files
+- **Chunking**: Large files are chunked, and each chunk gets its own embedding
+- **Graceful Degradation**: If embedding generation fails, the content is still loaded without embeddings
+
+**Benefits of Embeddings:**
+- Better semantic understanding of context
+- Enables future similarity-based retrieval from Spark contexts
+- Consistent with ephemeral and eternal context embedding strategies
+- No performance impact when disabled
 
 ## Technical Details
 
@@ -239,6 +267,23 @@ The `SparkContextManager` class manages Spark contexts:
 - No Redis or disk persistence
 - Automatically cleared with `/clear context`
 - Can be manually managed with `/clear spark` and `/show spark`
+
+### Embedding Generation
+
+Spark contexts support embedding generation for semantic understanding:
+
+1. **Transformer Service Integration**: Uses the transformer service API for embedding generation
+2. **Automatic Chunking**: Large files (> `chunk_size` characters) are split into overlapping chunks
+3. **Per-Chunk Embeddings**: Each chunk gets its own embedding vector for fine-grained semantic search
+4. **Full Document Embeddings**: Small files get a single embedding for the entire content
+5. **Error Handling**: Embedding failures are logged but don't prevent file loading
+6. **Configurable**: Can be enabled/disabled via `spark_context.embed.enabled` in config
+
+**Embedding Storage:**
+- Embeddings are stored as NumPy arrays in the `SparkContext` dataclass
+- Full document embedding in `embedding` field
+- Chunk embeddings in `chunk_embeddings` list
+- Accessed via `get_embeddings()` method for advanced operations
 
 ### Integration with RAG Pipeline
 

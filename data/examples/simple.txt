@@ -1,0 +1,3 @@
+This is a simple text file for testing Spark context loading.
+It contains just enough content to test basic functionality.
+The file is small and should not be chunked.

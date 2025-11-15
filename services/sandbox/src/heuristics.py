@@ -131,6 +131,10 @@ class Heuristics:
                 "timestamp": feedback_data.get("timestamp"),
                 "execution_time_ms": feedback_data.get("execution_time_ms", 0)
             }
+            
+            # Add user_feedback if provided (for negative feedback corrections)
+            if "user_feedback" in feedback_data and feedback_data["user_feedback"]:
+                complete_data["user_feedback"] = feedback_data["user_feedback"]
 
             # Add auto-iteration metadata if present
             current_step = "adding_iteration_metadata"
@@ -259,6 +263,10 @@ class Heuristics:
                 "timestamp": feedback_data.get("timestamp"),
                 "execution_time_ms": feedback_data.get("execution_time_ms", 0)
             }
+            
+            # Add user_feedback if provided (for negative feedback corrections)
+            if "user_feedback" in feedback_data and feedback_data["user_feedback"]:
+                complete_data["user_feedback"] = feedback_data["user_feedback"]
 
             # Add auto-iteration metadata if present
             current_step = "adding_iteration_metadata"

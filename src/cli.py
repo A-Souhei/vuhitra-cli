@@ -17,6 +17,7 @@ from src.utils.ui_formatter import (
 )
 from src.utils.prompt_history import PromptHistoryManager
 from src.utils.conversation_history import ConversationHistoryManager
+from src.utils.ephemeral_context import EphemeralContextManager
 from src.utils.command_handler import CommandHandler, CommandResult
 from src.utils.token_limit_manager import get_token_limit_manager
 
@@ -262,6 +263,9 @@ def interactive_mode(model, verbose=False):
     # Initialize conversation history manager
     conversation_history = ConversationHistoryManager()
 
+    # Initialize ephemeral context manager
+    ephemeral_context = EphemeralContextManager()
+
     # Initialize heuristics config (used for conversation history settings)
     heuristics_config = HeuristicsConfigLoader()
 
@@ -275,7 +279,8 @@ def interactive_mode(model, verbose=False):
             return CommandResult(
                 success=False,
                 message="Usage: /clear context - Clear conversation history\n"
-                        "       /clear tokenlimit - Clear discovered token limit for current model"
+                        "       /clear tokenlimit - Clear discovered token limit for current model\n"
+                        "       /clear ephemeral [label|--all] - Clear ephemeral context"
             )
 
         subcommand = args[0].lower()
@@ -306,11 +311,44 @@ def interactive_mode(model, verbose=False):
                     success=False,
                     message="Failed to clear token limit (Redis not available or error occurred)"
                 )
+        elif subcommand == "ephemeral":
+            if not ephemeral_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Ephemeral context is disabled"
+                )
+
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /clear ephemeral <label> - Clear specific context\n"
+                            "       /clear ephemeral --all - Clear all ephemeral contexts"
+                )
+
+            target = args[1]
+
+            if target == "--all":
+                count = ephemeral_context.clear_all()
+                return CommandResult(
+                    success=True,
+                    message=f"✓ Cleared all ephemeral contexts ({count} contexts removed)"
+                )
+            else:
+                if ephemeral_context.remove_by_label(target):
+                    return CommandResult(
+                        success=True,
+                        message=f"✓ Removed ephemeral context '{target}'"
+                    )
+                else:
+                    return CommandResult(
+                        success=False,
+                        message=f"Context '{target}' not found. Use '/show ephemeral' to see loaded contexts."
+                    )
         else:
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /clear context or /clear tokenlimit"
+                        f"Use: /clear context, /clear tokenlimit, or /clear ephemeral"
             )
 
     command_handler.register_command("clear", clear_command_handler)
@@ -338,6 +376,60 @@ def interactive_mode(model, verbose=False):
             )
 
     command_handler.register_command("limit", limit_command_handler)
+
+    # Register /load command to load ephemeral context from file
+    def load_command_handler(args):
+        """Handle /load command to load ephemeral context from file."""
+        if not ephemeral_context.is_enabled():
+            return CommandResult(
+                success=False,
+                message="Ephemeral context is disabled. Enable it in config.yaml"
+            )
+
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /load <file_path> [label]\n"
+                        "       /load ./docs/api_spec.md\n"
+                        "       /load ./docs/coding_standards.md standards"
+            )
+
+        file_path = args[0]
+        label = args[1] if len(args) > 1 else None
+
+        success, message = ephemeral_context.load_file(file_path, label)
+        return CommandResult(success=success, message=message)
+
+    command_handler.register_command("load", load_command_handler)
+
+    # Register /show command to show information
+    def show_command_handler(args):
+        """Handle /show command to display information."""
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /show ephemeral - Show loaded ephemeral contexts"
+            )
+
+        subcommand = args[0].lower()
+
+        if subcommand == "ephemeral":
+            if not ephemeral_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Ephemeral context is disabled"
+                )
+
+            summary = ephemeral_context.get_summary()
+            return CommandResult(success=True, message=summary)
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown subcommand: {subcommand}\n"
+                        f"Use: /show ephemeral"
+            )
+
+    command_handler.register_command("show", show_command_handler)
 
     if verbose:
         history_count = prompt_manager.get_history_count()
@@ -397,6 +489,17 @@ def interactive_mode(model, verbose=False):
             rating = None
 
             while iteration_number < max_iterations:
+                # Get ephemeral context (always injected, not retrieved)
+                ephemeral_context_str = ""
+                if ephemeral_context.is_enabled():
+                    ephemeral_context_str = ephemeral_context.get_context_string()
+
+                    if ephemeral_context_str and verbose:
+                        print_debug("Ephemeral Context", {
+                            "contexts_loaded": ephemeral_context.get_context_count(),
+                            "total_size_kb": f"{ephemeral_context.get_total_size_kb():.1f} KB"
+                        })
+
                 # Retrieve relevant conversation history if enabled
                 conversation_context = ""
                 if conversation_history.is_enabled():
@@ -426,9 +529,13 @@ def interactive_mode(model, verbose=False):
                     negative_weight_boost=negative_weight_boost
                 )
 
-                # Enhance prompt with conversation history and heuristic context
+                # Enhance prompt with ephemeral context, conversation history, and heuristic context
                 enhanced_prompt = prompt
                 context_parts = []
+
+                # Order: Ephemeral (first), Conversation, Heuristics
+                if ephemeral_context_str:
+                    context_parts.append(ephemeral_context_str)
 
                 if conversation_context:
                     context_parts.append(conversation_context)
@@ -443,6 +550,7 @@ def interactive_mode(model, verbose=False):
                         print_debug("Enhanced Prompt", {
                             "original_length": len(prompt),
                             "enhanced_length": len(enhanced_prompt),
+                            "ephemeral_context": len(ephemeral_context_str) if ephemeral_context_str else 0,
                             "conversation_context": len(conversation_context) if conversation_context else 0,
                             "heuristic_context": len(heuristic_context) if heuristic_context else 0,
                             "iteration": iteration_number,

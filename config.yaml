@@ -110,3 +110,20 @@ elasticsearch:
   host: localhost
   port: 9200
   index: llm_feedback
+
+# Ephemeral context configuration
+# Ephemeral context allows loading files into session context that persist until cleared
+ephemeral_context:
+  # Enable/disable ephemeral context feature
+  enabled: true
+  # Maximum file size in MB that can be loaded
+  max_file_size_mb: 10
+  # Maximum number of simultaneous contexts
+  max_contexts: 10
+  # Text chunking configuration (for large files)
+  chunking:
+    enabled: true
+    # Chunk size in words
+    chunk_size: 1000
+    # Overlap between chunks in words
+    overlap: 200

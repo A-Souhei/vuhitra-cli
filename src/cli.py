@@ -191,13 +191,17 @@ def send_feedback_to_sandbox(feedback_data, verbose=False):
         endpoint = f"{sandbox_url}/analyze/feedback"
 
         if verbose:
-            print_debug("Feedback Submission", {
+            debug_info = {
                 "endpoint": endpoint,
                 "rating": feedback_data.get('rating'),
                 "prompt_length": len(feedback_data.get('prompt', '')),
                 "response_length": len(feedback_data.get('response', '')),
                 "execution_time_ms": feedback_data.get('execution_time_ms')
-            })
+            }
+            # Show user feedback if provided
+            if 'user_feedback' in feedback_data and feedback_data['user_feedback']:
+                debug_info["user_feedback"] = feedback_data['user_feedback']
+            print_debug("Feedback Submission", debug_info)
 
         # Add verbose flag to request payload
         request_payload = feedback_data.copy()
@@ -862,8 +866,9 @@ def interactive_mode(model, verbose=False):
                         })
 
                 # Retrieve relevant conversation history if enabled
+                # SKIP during auto-iteration retries to avoid corrupting heuristic learning
                 conversation_context = ""
-                if conversation_history.is_enabled():
+                if conversation_history.is_enabled() and iteration_number == 0:
                     top_k = heuristics_config.get_conversation_history_top_k()
                     min_similarity = heuristics_config.get_conversation_history_min_similarity()
                     include_in_context = heuristics_config.get_conversation_history_include_in_context()
@@ -882,6 +887,8 @@ def interactive_mode(model, verbose=False):
                             })
 
                         conversation_context = conversation_history.format_history_for_context(relevant_history)
+                elif conversation_history.is_enabled() and iteration_number > 0 and verbose:
+                    print_info("🔇 Conversation history disabled during auto-iteration (heuristics-only mode)")
 
                 # Fetch similar heuristic to enhance context (with boost if iterating)
                 heuristic_context, heuristic_data = fetch_similar_heuristic(

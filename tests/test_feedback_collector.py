@@ -98,8 +98,8 @@ class TestFeedbackCollector(unittest.TestCase):
 
         # Should return None for invalid input
         self.assertIsNone(feedback_data)
-        # Check that "Skipping feedback." was printed
-        mock_print.assert_any_call("Skipping feedback.")
+        # Check that "Invalid rating. Skipping feedback." was printed
+        mock_print.assert_any_call("Invalid rating. Skipping feedback.")
 
     @patch('src.utils.feedback_collector.ConfigLoader')
     @patch('builtins.input', return_value='10')
@@ -116,7 +116,7 @@ class TestFeedbackCollector(unittest.TestCase):
 
         # Should return None for out of range input
         self.assertIsNone(feedback_data)
-        mock_print.assert_any_call("Skipping feedback.")
+        mock_print.assert_any_call("Invalid rating. Skipping feedback.")
 
     @patch('src.utils.feedback_collector.ConfigLoader')
     @patch('builtins.input', return_value='-1')
@@ -133,7 +133,7 @@ class TestFeedbackCollector(unittest.TestCase):
 
         # Should return None for negative input
         self.assertIsNone(feedback_data)
-        mock_print.assert_any_call("Skipping feedback.")
+        mock_print.assert_any_call("Invalid rating. Skipping feedback.")
 
     @patch('src.utils.feedback_collector.ConfigLoader')
     @patch('builtins.input', return_value='0')

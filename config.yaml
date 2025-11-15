@@ -110,3 +110,39 @@ elasticsearch:
   host: localhost
   port: 9200
   index: llm_feedback
+
+# Ephemeral context configuration
+# Ephemeral context allows loading files into session context that persist until cleared
+ephemeral_context:
+  # Enable/disable ephemeral context feature
+  enabled: true
+  # Maximum file size in MB that can be loaded
+  max_file_size_mb: 10
+  # Maximum number of simultaneous contexts
+  max_contexts: 10
+  # Text chunking configuration (for large files)
+  chunking:
+    enabled: true
+    # Chunk size in words
+    chunk_size: 1000
+    # Overlap between chunks in words
+    overlap: 200
+
+# Eternal context configuration
+# Eternal context persists across sessions (permanent until explicitly deleted)
+eternal_context:
+  # Enable/disable eternal context feature
+  enabled: true
+  # Storage directory for eternal contexts (relative to project root or absolute path)
+  storage_dir: .vuhitra/eternal_contexts
+  # Maximum file size in MB that can be loaded
+  max_file_size_mb: 10
+  # Maximum number of eternal contexts
+  max_contexts: 20
+  # Text chunking configuration (for large files)
+  chunking:
+    enabled: true
+    # Chunk size in words
+    chunk_size: 1000
+    # Overlap between chunks in words
+    overlap: 200

@@ -92,10 +92,10 @@ sandbox:
   confidence_threshold: 0.75
 
 # Transformer service configuration
-# Port 15050 is the docker-compose mapped port (internal: 5050)
+# Port 16050 is the docker-compose mapped port (internal: 5050)
 transformer:
   host: localhost
-  port: 15050
+  port: 16050
   protocol: http
 
 # Redis service configuration

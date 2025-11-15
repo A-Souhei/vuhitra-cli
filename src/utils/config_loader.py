@@ -178,7 +178,7 @@ class ConfigLoader:
         return self.get('transformer', 'host', default='localhost')
     
     def get_transformer_port(self):
-        return self.get('transformer', 'port', default=15050)
+        return self.get('transformer', 'port', default=16050)
     
     def get_transformer_protocol(self):
         return self.get('transformer', 'protocol', default='http')

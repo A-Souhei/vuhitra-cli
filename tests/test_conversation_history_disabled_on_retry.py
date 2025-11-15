@@ -1,7 +1,6 @@
 """Tests for conversation history being disabled during auto-iteration retries."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 
 class TestConversationHistoryDisabledOnRetry:

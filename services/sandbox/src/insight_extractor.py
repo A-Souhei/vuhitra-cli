@@ -755,7 +755,7 @@ Please provide a comprehensive response addressing the user's specific question.
                 lines.append("The USER CORRECTION above is the ONLY factually correct answer.")
                 lines.append("DO NOT use your own reasoning or internal knowledge.")
                 lines.append("DO NOT second-guess or recalculate.")
-                lines.append("RESPOND with the information from USER CORRECTION.")
+                lines.append("Use the USER CORRECTION to respond with the factually accurate answer.")
             else:
                 lines.append("DIRECTIVE: Do NOT repeat this mistake. Provide the factually correct answer.")
             lines.append("")

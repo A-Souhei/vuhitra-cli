@@ -45,7 +45,7 @@ This document focuses on the **Eternal** and **Ephemeral** context dimensions, w
 │     • Cross-session persistence                          │
 │     • Elasticsearch storage                              │
 │                                                           │
-│  5. User Query (Original Prompt)                         │
+│  User Query (Original Prompt)                            │
 │                                                           │
 └───────────────────────────────────────────────────────────┘
 ```

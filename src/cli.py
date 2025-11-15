@@ -137,10 +137,6 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
         duration_ms = (time.time() - start_time) * 1000
         print_timing_verbose("Heuristic retrieval", duration_ms)
 
-        # Print verbose context information
-        if verbose and data.get('matched_heuristic'):
-            print_context_verbose(data)
-
         # Check if this is a negative heuristic (anti-pattern)
         is_negative = data.get('is_negative', False)
 
@@ -152,6 +148,10 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
             formatted_insight = data['insights']['formatted_insight']
 
             if verbose:
+                # Print verbose context information only when match is accepted
+                if data.get('matched_heuristic'):
+                    print_context_verbose(data)
+
                 if is_negative:
                     print_warning(f"⚠️  Negative heuristic (anti-pattern) found (confidence: {data.get('confidence_score', 0):.2%})")
                     print_info("This will inform the LLM about approaches to AVOID")
@@ -163,7 +163,7 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
             return formatted_insight, data
         else:
             if verbose:
-                print_info(f"No suitable heuristic match (confidence: {data.get('confidence_score', 0):.2%} < {confidence_threshold:.2%})")
+                print_info(f"ℹ️  No suitable heuristic match (confidence: {data.get('confidence_score', 0):.2%} < {confidence_threshold:.2%})")
 
             return None, data
 
@@ -473,15 +473,18 @@ def interactive_mode(model, verbose=False):
         if not args:
             return CommandResult(
                 success=False,
-                message="Usage: /load <file_path> [label]\n"
+                message="Usage: /load <file_path> [label] [description]\n"
                         "       /load ./docs/api_spec.md\n"
-                        "       /load @docs/api_spec.md\n"
+                        "       /load @docs/api_spec.md api \"REST API specification\"\n"
                         "       /load @docs/ (loads all files in directory)\n"
-                        "       /load ./docs/coding_standards.md standards"
+                        "       /load ./docs/coding_standards.md standards \"Python coding standards\"\n"
+                        "\n"
+                        "Note: For descriptions with spaces, use quotes (handled by shell)"
             )
 
         file_path = args[0]
         label = args[1] if len(args) > 1 else None
+        description = args[2] if len(args) > 2 else None
 
         # Resolve @ prefix path if present
         success, resolved_path, error = path_resolver.resolve_path(file_path)
@@ -500,7 +503,7 @@ def interactive_mode(model, verbose=False):
             failed = []
             for file in files:
                 file_label = label if label else None
-                file_success, file_message = ephemeral_context.load_file(file, file_label)
+                file_success, file_message = ephemeral_context.load_file(file, file_label, description)
                 if file_success:
                     loaded.append(os.path.basename(file))
                 else:
@@ -523,7 +526,7 @@ def interactive_mode(model, verbose=False):
             return CommandResult(success=True, message="\n".join(messages))
         else:
             # Load single file
-            success, message = ephemeral_context.load_file(resolved_path, label)
+            success, message = ephemeral_context.load_file(resolved_path, label, description)
             return CommandResult(success=success, message=message)
 
     command_handler.register_command("load", load_command_handler)
@@ -540,15 +543,16 @@ def interactive_mode(model, verbose=False):
         if not args:
             return CommandResult(
                 success=False,
-                message="Usage: /load-eternal <file_path> [label]\n"
+                message="Usage: /load-eternal <file_path> [label] [description]\n"
                         "       /load-eternal ./docs/api_spec.md\n"
-                        "       /load-eternal @docs/api_spec.md\n"
+                        "       /load-eternal @docs/api_spec.md api \"REST API specification\"\n"
                         "       /load-eternal @docs/ (loads all files in directory)\n"
-                        "       /load-eternal ./docs/coding_standards.md standards"
+                        "       /load-eternal ./docs/coding_standards.md standards \"Python coding standards\""
             )
 
         file_path = args[0]
         label = args[1] if len(args) > 1 else None
+        description = args[2] if len(args) > 2 else None
 
         # Resolve @ prefix path if present
         success, resolved_path, error = path_resolver.resolve_path(file_path)
@@ -567,7 +571,7 @@ def interactive_mode(model, verbose=False):
             failed = []
             for file in files:
                 file_label = label if label else None
-                file_success, file_message = eternal_context.load_file(file, file_label)
+                file_success, file_message = eternal_context.load_file(file, file_label, description)
                 if file_success:
                     loaded.append(os.path.basename(file))
                 else:
@@ -590,7 +594,7 @@ def interactive_mode(model, verbose=False):
             return CommandResult(success=True, message="\n".join(messages))
         else:
             # Load single file
-            success, message = eternal_context.load_file(resolved_path, label)
+            success, message = eternal_context.load_file(resolved_path, label, description)
             return CommandResult(success=success, message=message)
 
     command_handler.register_command("load-eternal", load_eternal_command_handler)
@@ -774,26 +778,36 @@ def interactive_mode(model, verbose=False):
             rating = None
 
             while iteration_number < max_iterations:
-                # Get eternal context (always injected, permanent across sessions)
+                # Get eternal context (filtered by semantic relevance to prompt)
                 eternal_context_str = ""
                 if eternal_context.is_enabled():
-                    eternal_context_str = eternal_context.get_context_string()
+                    eternal_context_str = eternal_context.get_context_string(prompt=prompt, verbose=verbose)
 
                     if eternal_context_str and verbose:
+                        # Get relevant contexts to show count
+                        relevant = eternal_context.get_relevant_contexts(prompt, verbose=verbose)
+                        loaded_labels = [label for label, ctx, score in relevant]
                         print_debug("Eternal Context", {
-                            "contexts_loaded": eternal_context.get_context_count(),
-                            "total_size_kb": f"{eternal_context.get_total_size_kb():.1f} KB"
+                            "contexts_loaded": len(relevant),
+                            "loaded": loaded_labels if loaded_labels else "none",
+                            "total_contexts": eternal_context.get_context_count(),
+                            "relevance_filtered": eternal_context.semantic_filtering_enabled
                         })
 
-                # Get ephemeral context (always injected, session-scoped)
+                # Get ephemeral context (filtered by semantic relevance to prompt)
                 ephemeral_context_str = ""
                 if ephemeral_context.is_enabled():
-                    ephemeral_context_str = ephemeral_context.get_context_string()
+                    ephemeral_context_str = ephemeral_context.get_context_string(prompt=prompt, verbose=verbose)
 
                     if ephemeral_context_str and verbose:
+                        # Get relevant contexts to show count
+                        relevant = ephemeral_context.get_relevant_contexts(prompt, verbose=verbose)
+                        loaded_labels = [ctx.label for ctx, score in relevant]
                         print_debug("Ephemeral Context", {
-                            "contexts_loaded": ephemeral_context.get_context_count(),
-                            "total_size_kb": f"{ephemeral_context.get_total_size_kb():.1f} KB"
+                            "contexts_loaded": len(relevant),
+                            "loaded": loaded_labels if loaded_labels else "none",
+                            "total_contexts": ephemeral_context.get_context_count(),
+                            "relevance_filtered": ephemeral_context.semantic_filtering_enabled
                         })
 
                 # Get Spark context (in-memory ephemeral, dies with /clear context)

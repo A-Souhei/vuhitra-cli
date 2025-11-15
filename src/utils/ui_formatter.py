@@ -104,7 +104,6 @@ def print_context_verbose(heuristic_data: dict):
 
         # NLP analysis
         nlp_branch = tree.add("🧠 [cyan]NLP Analysis[/cyan]")
-        nlp_branch.add(f"[yellow]Sentiment (VADER):[/yellow] {matched.get('prompt_sentiment_vader', 0):.2f}")
         nlp_branch.add(f"[yellow]Keywords:[/yellow] {', '.join(matched.get('prompt_keywords', [])[:5])}")
 
         # Prompt and response preview
@@ -208,12 +207,6 @@ def print_nlp_analysis_verbose(analysis: dict):
     console.print("\n[bold green]" + "═" * 80 + "[/bold green]")
     console.print("[bold green]🧠 NLP ANALYSIS[/bold green]")
     console.print("[bold green]" + "═" * 80 + "[/bold green]\n")
-
-    # Sentiment analysis
-    console.print("[bold cyan]Sentiment Analysis:[/bold cyan]")
-    vader_score = analysis.get('sentiment_vader', 0)
-    vader_emoji = "😊" if vader_score > 0.2 else "😐" if vader_score > -0.2 else "😞"
-    console.print(f"  {vader_emoji} VADER Score: [yellow]{vader_score:.3f}[/yellow]")
 
     # Keywords
     keywords = analysis.get('keywords', [])

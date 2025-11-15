@@ -12,12 +12,15 @@ eternal context is:
 
 import json
 import requests
+import numpy as np
+import logging
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from src.utils.config_loader import ConfigLoader
 from src.errors_handler import handle_exception
+from src.utils.embedding_utils import EmbeddingCacheMixin, cosine_similarity
 
 
 @dataclass
@@ -28,6 +31,8 @@ class EternalContext:
     file_path: str  # Original file path
     content: str  # Full text content
     timestamp: str  # ISO format timestamp when loaded
+    description: str = ""  # Description/summary for semantic matching
+    description_embedding: Optional[List[float]] = None  # Embedding of description (stored as list for JSON serialization)
     chunks: List[str] = field(default_factory=list)  # Chunks if content is large
 
     def get_size_bytes(self) -> int:
@@ -63,7 +68,7 @@ class EternalContext:
         }
 
 
-class EternalContextManager:
+class EternalContextManager(EmbeddingCacheMixin):
     """Manages persistent eternal context that survives across sessions."""
 
     def __init__(self, enabled: bool = None, storage_dir: Optional[str] = None):
@@ -92,6 +97,11 @@ class EternalContextManager:
         self.chunk_size = chunking_config.get('chunk_size', 1000)
         self.chunk_overlap = chunking_config.get('overlap', 200)
 
+        # Semantic filtering configuration
+        semantic_config = eternal_config.get('semantic_filtering', {})
+        self.semantic_filtering_enabled = semantic_config.get('enabled', True)
+        self.similarity_threshold = semantic_config.get('similarity_threshold', 0.5)
+
         # Set storage directory
         if storage_dir:
             self.storage_dir = Path(storage_dir)
@@ -111,6 +121,10 @@ class EternalContextManager:
 
         # Get transformer service URL
         self.transformer_url = self._get_transformer_url()
+
+        # Initialize Redis for embedding caching
+        self.redis_client = None
+        self._init_redis()
 
         # Load existing eternal contexts from storage
         if self.enabled:
@@ -284,12 +298,13 @@ class EternalContextManager:
             })
             return loaded_count
 
-    def load_file(self, file_path: str, label: Optional[str] = None) -> Tuple[bool, str]:
+    def load_file(self, file_path: str, label: Optional[str] = None, description: Optional[str] = None) -> Tuple[bool, str]:
         """Load a file into eternal context and persist it.
 
         Args:
             file_path: Path to file to load
             label: Optional user-friendly label (defaults to filename)
+            description: Optional description/summary for semantic matching
 
         Returns:
             Tuple of (success: bool, message: str)
@@ -334,12 +349,31 @@ class EternalContextManager:
             if not content.strip():
                 return False, f"File is empty: {file_path}"
 
+            # Use provided description or auto-generate with LLM
+            if description is None:
+                # Try to auto-generate description using LLM
+                description = self._generate_description_with_llm(content, path.name)
+
+                # Fallback to filename if auto-generation fails
+                if description is None:
+                    description = f"Content from {path.name}"
+
+            # Generate embedding for description (for semantic filtering)
+            description_embedding = None
+            if self.semantic_filtering_enabled and description:
+                desc_emb = self._generate_embedding(description)
+                if desc_emb is not None:
+                    # Convert to list for JSON serialization
+                    description_embedding = desc_emb.tolist()
+
             # Create eternal context
             context = EternalContext(
                 label=label,
                 file_path=str(path),
                 content=content,
-                timestamp=datetime.now().isoformat()
+                timestamp=datetime.now().isoformat(),
+                description=description,
+                description_embedding=description_embedding
             )
 
             # Chunk if needed
@@ -375,26 +409,107 @@ class EternalContextManager:
             })
             return False, f"Error loading file: {str(e)}"
 
-    def get_context_string(self) -> str:
-        """Return formatted context string for prompt injection.
+    def get_relevant_contexts(self, prompt: str, verbose: bool = False) -> List[Tuple[str, EternalContext, float]]:
+        """Get contexts relevant to the prompt based on semantic similarity.
+
+        Args:
+            prompt: User's prompt
+            verbose: Whether to print debug information
 
         Returns:
-            Formatted string containing all eternal contexts
+            List of tuples (label, context, similarity_score) sorted by relevance
+        """
+        if not self.enabled or not self.contexts:
+            return []
+
+        # If semantic filtering is disabled, return all contexts
+        if not self.semantic_filtering_enabled:
+            return [(label, ctx, 1.0) for label, ctx in self.contexts.items()]
+
+        try:
+            # Generate embedding for prompt
+            prompt_embedding = self._generate_embedding(prompt)
+            if prompt_embedding is None:
+                # Log warning when embedding generation fails
+                logging.warning("Failed to generate embedding for prompt, returning all contexts unfiltered")
+                # Fallback: return all contexts if embedding generation fails
+                return [(label, ctx, 1.0) for label, ctx in self.contexts.items()]
+
+            relevant_contexts = []
+
+            for label, ctx in self.contexts.items():
+                # Use stored description embedding or generate if not available
+                if ctx.description_embedding is not None and len(ctx.description_embedding) > 0:
+                    desc_embedding = np.array(ctx.description_embedding, dtype=np.float32)
+                else:
+                    # Fallback: generate embedding on-the-fly
+                    desc_embedding = self._generate_embedding(ctx.description)
+                    if desc_embedding is None:
+                        continue
+
+                # Calculate similarity using shared function
+                similarity = cosine_similarity(prompt_embedding, desc_embedding)
+
+                # Filter by threshold
+                if similarity >= self.similarity_threshold:
+                    relevant_contexts.append((label, ctx, similarity))
+
+            # Sort by similarity (descending)
+            relevant_contexts.sort(key=lambda x: x[2], reverse=True)
+
+            return relevant_contexts
+
+        except Exception as e:
+            handle_exception(e, context={
+                'function': 'get_relevant_contexts',
+                'num_contexts': len(self.contexts)
+            })
+            # Fallback: return all contexts on error
+            return [(label, ctx, 1.0) for label, ctx in self.contexts.items()]
+
+    def get_context_string(self, prompt: Optional[str] = None, verbose: bool = False) -> str:
+        """Return formatted context string for prompt injection.
+
+        Args:
+            prompt: Optional prompt to filter contexts by semantic relevance
+            verbose: Whether to print debug information
+
+        Returns:
+            Formatted string containing relevant eternal contexts
         """
         if not self.enabled or not self.contexts:
             return ""
 
         try:
-            lines = ["=== Eternal Context (Permanent Reference Materials) ==="]
+            # Get relevant contexts (filtered if prompt provided)
+            if prompt and self.semantic_filtering_enabled:
+                relevant = self.get_relevant_contexts(prompt, verbose=verbose)
 
-            for label, ctx in self.contexts.items():
-                lines.append(f"\n--- {label} ---")
-                lines.append(ctx.content)
-                lines.append(f"--- End of {label} ---\n")
+                if not relevant:
+                    return ""  # No relevant contexts found
 
-            lines.append("=== End of Eternal Context ===\n")
+                lines = ["=== Eternal Context (Permanent Reference Materials) ==="]
 
-            return "\n".join(lines)
+                for label, ctx, similarity in relevant:
+                    lines.append(f"\n--- {label} (relevance: {similarity:.2%}) ---")
+                    lines.append(ctx.content)
+                    lines.append(f"--- End of {label} ---\n")
+
+                lines.append("=== End of Eternal Context ===\n")
+
+                return "\n".join(lines)
+            else:
+                # Return all contexts (no filtering)
+                lines = ["=== Eternal Context (Permanent Reference Materials) ==="]
+
+                for label, ctx in self.contexts.items():
+                    lines.append(f"\n--- {label} ---")
+                    lines.append(ctx.content)
+                    lines.append(f"--- End of {label} ---\n")
+
+                lines.append("=== End of Eternal Context ===\n")
+
+                return "\n".join(lines)
 
         except Exception as e:
             handle_exception(e, context={

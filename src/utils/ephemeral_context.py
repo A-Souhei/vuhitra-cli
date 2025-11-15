@@ -11,12 +11,14 @@ and injected into every prompt without retrieval. Unlike conversation history
 
 import requests
 import numpy as np
+import logging
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
 from src.utils.config_loader import ConfigLoader
 from src.errors_handler import handle_exception
+from src.utils.embedding_utils import EmbeddingCacheMixin, cosine_similarity
 
 
 @dataclass
@@ -27,6 +29,8 @@ class EphemeralContext:
     file_path: str  # Original file path
     content: str  # Full text content
     timestamp: str  # ISO format timestamp when loaded
+    description: str = ""  # Description/summary for semantic matching
+    description_embedding: Optional[np.ndarray] = None  # Embedding of description for semantic filtering
     embedding: Optional[np.ndarray] = None  # Full document embedding
     chunks: List[str] = field(default_factory=list)  # Chunks if content is large
     chunk_embeddings: List[np.ndarray] = field(default_factory=list)  # Per-chunk embeddings
@@ -55,7 +59,7 @@ class EphemeralContext:
         }
 
 
-class EphemeralContextManager:
+class EphemeralContextManager(EmbeddingCacheMixin):
     """Manages session-scoped ephemeral context loaded from files."""
 
     def __init__(self, enabled: bool = None):
@@ -83,8 +87,17 @@ class EphemeralContextManager:
         self.chunk_size = chunking_config.get('chunk_size', 1000)
         self.chunk_overlap = chunking_config.get('overlap', 200)
 
+        # Semantic filtering configuration
+        semantic_config = ephemeral_config.get('semantic_filtering', {})
+        self.semantic_filtering_enabled = semantic_config.get('enabled', True)
+        self.similarity_threshold = semantic_config.get('similarity_threshold', 0.5)
+
         # Get transformer service URL
         self.transformer_url = self._get_transformer_url()
+
+        # Initialize Redis for embedding caching
+        self.redis_client = None
+        self._init_redis()
 
     def _get_transformer_url(self) -> str:
         """Get transformer service URL from config with fallback to sandbox health check."""
@@ -116,39 +129,6 @@ class EphemeralContextManager:
                 'fallback': self.config.get_transformer_url()
             })
             return self.config.get_transformer_url()
-
-    def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
-        """Generate embedding for text using transformer service.
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Numpy array of embedding vector, or None if failed
-        """
-        try:
-            endpoint = f"{self.transformer_url}/api/generate-embedding"
-            response = requests.post(
-                endpoint,
-                json={"text": text},
-                timeout=30  # Longer timeout for potentially large texts
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            embedding = data.get('embedding')
-            if embedding:
-                return np.array(embedding, dtype=np.float32)
-
-            return None
-
-        except Exception as e:
-            handle_exception(e, context={
-                'function': '_generate_embedding',
-                'endpoint': endpoint if 'endpoint' in locals() else 'unknown',
-                'text_length': len(text)
-            })
-            return None
 
     def _chunk_text(self, text: str) -> List[str]:
         """Chunk text into overlapping segments for large files.
@@ -185,12 +165,13 @@ class EphemeralContextManager:
             })
             return [text]  # Return as single chunk on error
 
-    def load_file(self, file_path: str, label: Optional[str] = None) -> Tuple[bool, str]:
+    def load_file(self, file_path: str, label: Optional[str] = None, description: Optional[str] = None) -> Tuple[bool, str]:
         """Load a file into ephemeral context with full embedding.
 
         Args:
             file_path: Path to file to load
             label: Optional user-friendly label (defaults to filename)
+            description: Optional description/summary for semantic matching
 
         Returns:
             Tuple of (success: bool, message: str)
@@ -235,12 +216,28 @@ class EphemeralContextManager:
             if not content.strip():
                 return False, f"File is empty: {file_path}"
 
+            # Use provided description or auto-generate with LLM
+            if description is None:
+                # Try to auto-generate description using LLM
+                description = self._generate_description_with_llm(content, path.name)
+
+                # Fallback to filename if auto-generation fails
+                if description is None:
+                    description = f"Content from {path.name}"
+
+            # Generate embedding for description (for semantic filtering)
+            description_embedding = None
+            if self.semantic_filtering_enabled and description:
+                description_embedding = self._generate_embedding(description)
+
             # Create ephemeral context
             context = EphemeralContext(
                 label=label,
                 file_path=str(path),
                 content=content,
-                timestamp=datetime.now().isoformat()
+                timestamp=datetime.now().isoformat(),
+                description=description,
+                description_embedding=description_embedding
             )
 
             # Chunk if needed
@@ -287,26 +284,110 @@ class EphemeralContextManager:
             })
             return False, f"Error loading file: {str(e)}"
 
-    def get_context_string(self) -> str:
-        """Return formatted context string for prompt injection.
+    def get_relevant_contexts(self, prompt: str, verbose: bool = False) -> List[Tuple[EphemeralContext, float]]:
+        """Get contexts relevant to the prompt based on semantic similarity.
+
+        Args:
+            prompt: User's prompt
+            verbose: Whether to print debug information
 
         Returns:
-            Formatted string containing all ephemeral contexts
+            List of tuples (context, similarity_score) sorted by relevance
+        """
+        if not self.enabled or not self.contexts:
+            return []
+
+        # If semantic filtering is disabled, return all contexts
+        if not self.semantic_filtering_enabled:
+            return [(ctx, 1.0) for ctx in self.contexts]
+
+        try:
+            # Generate embedding for prompt
+            prompt_embedding = self._generate_embedding(prompt)
+            if prompt_embedding is None:
+                # Log warning when embedding generation fails
+                logging.warning("Failed to generate embedding for prompt, returning all contexts unfiltered")
+                # Fallback: return all contexts if embedding generation fails
+                return [(ctx, 1.0) for ctx in self.contexts]
+
+            relevant_contexts = []
+
+            for ctx in self.contexts:
+                # Use stored description embedding or generate if not available
+                if ctx.description_embedding is not None:
+                    desc_embedding = ctx.description_embedding
+                    # Ensure desc_embedding is a numpy array (handle JSON deserialization)
+                    if isinstance(desc_embedding, list):
+                        desc_embedding = np.array(desc_embedding, dtype=np.float32)
+                else:
+                    # Fallback: generate embedding on-the-fly
+                    desc_embedding = self._generate_embedding(ctx.description)
+                    if desc_embedding is None:
+                        continue
+
+                # Calculate similarity using shared function
+                similarity = cosine_similarity(prompt_embedding, desc_embedding)
+
+                # Filter by threshold
+                if similarity >= self.similarity_threshold:
+                    relevant_contexts.append((ctx, similarity))
+
+            # Sort by similarity (descending)
+            relevant_contexts.sort(key=lambda x: x[1], reverse=True)
+
+            return relevant_contexts
+
+        except Exception as e:
+            handle_exception(e, context={
+                'function': 'get_relevant_contexts',
+                'num_contexts': len(self.contexts)
+            })
+            # Fallback: return all contexts on error
+            return [(ctx, 1.0) for ctx in self.contexts]
+
+    def get_context_string(self, prompt: Optional[str] = None, verbose: bool = False) -> str:
+        """Return formatted context string for prompt injection.
+
+        Args:
+            prompt: Optional prompt to filter contexts by semantic relevance
+            verbose: Whether to print debug information
+
+        Returns:
+            Formatted string containing relevant ephemeral contexts
         """
         if not self.enabled or not self.contexts:
             return ""
 
         try:
-            lines = ["=== Ephemeral Context (Session Reference Materials) ==="]
+            # Get relevant contexts (filtered if prompt provided)
+            if prompt and self.semantic_filtering_enabled:
+                relevant = self.get_relevant_contexts(prompt, verbose=verbose)
 
-            for ctx in self.contexts:
-                lines.append(f"\n--- {ctx.label} ---")
-                lines.append(ctx.content)
-                lines.append(f"--- End of {ctx.label} ---\n")
+                if not relevant:
+                    return ""  # No relevant contexts found
 
-            lines.append("=== End of Ephemeral Context ===\n")
+                lines = ["=== Ephemeral Context (Session Reference Materials) ==="]
 
-            return "\n".join(lines)
+                for ctx, similarity in relevant:
+                    lines.append(f"\n--- {ctx.label} (relevance: {similarity:.2%}) ---")
+                    lines.append(ctx.content)
+                    lines.append(f"--- End of {ctx.label} ---\n")
+
+                lines.append("=== End of Ephemeral Context ===\n")
+
+                return "\n".join(lines)
+            else:
+                # Return all contexts (no filtering)
+                lines = ["=== Ephemeral Context (Session Reference Materials) ==="]
+
+                for ctx in self.contexts:
+                    lines.append(f"\n--- {ctx.label} ---")
+                    lines.append(ctx.content)
+                    lines.append(f"--- End of {ctx.label} ---\n")
+
+                lines.append("=== End of Ephemeral Context ===\n")
+
+                return "\n".join(lines)
 
         except Exception as e:
             handle_exception(e, context={

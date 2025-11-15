@@ -127,6 +127,12 @@ ephemeral_context:
     chunk_size: 1000
     # Overlap between chunks in words
     overlap: 200
+  # Semantic filtering configuration
+  # Only inject contexts that are semantically relevant to the prompt
+  semantic_filtering:
+    enabled: true
+    # Minimum similarity threshold (0.0-1.0) for context to be included
+    similarity_threshold: 0.5
 
 # Eternal context configuration
 # Eternal context persists across sessions (permanent until explicitly deleted)
@@ -146,6 +152,12 @@ eternal_context:
     chunk_size: 1000
     # Overlap between chunks in words
     overlap: 200
+  # Semantic filtering configuration
+  # Only inject contexts that are semantically relevant to the prompt
+  semantic_filtering:
+    enabled: true
+    # Minimum similarity threshold (0.0-1.0) for context to be included
+    similarity_threshold: 0.5
 
 # Spark context configuration
 # Spark context is in-memory ephemeral context that dies with /clear context

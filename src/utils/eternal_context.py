@@ -79,17 +79,19 @@ class EternalContextManager:
 
         # Load settings from config with parameter overrides
         if enabled is None:
-            self.enabled = self.config.get('eternal_context', {}).get('enabled', True)
+            eternal_config = self.config.get('eternal_context', default={})
+            self.enabled = eternal_config.get('enabled', True)
         else:
             self.enabled = enabled
 
         # Get configuration
-        eternal_config = self.config.get('eternal_context', {})
+        eternal_config = self.config.get('eternal_context', default={})
         self.max_file_size_mb = eternal_config.get('max_file_size_mb', 10)
         self.max_contexts = eternal_config.get('max_contexts', 20)
-        self.chunking_enabled = eternal_config.get('chunking', {}).get('enabled', True)
-        self.chunk_size = eternal_config.get('chunking', {}).get('chunk_size', 1000)
-        self.chunk_overlap = eternal_config.get('chunking', {}).get('overlap', 200)
+        chunking_config = eternal_config.get('chunking', {})
+        self.chunking_enabled = chunking_config.get('enabled', True)
+        self.chunk_size = chunking_config.get('chunk_size', 1000)
+        self.chunk_overlap = chunking_config.get('overlap', 200)
 
         # Set storage directory
         if storage_dir:

@@ -69,17 +69,19 @@ class EphemeralContextManager:
 
         # Load settings from config with parameter overrides
         if enabled is None:
-            self.enabled = self.config.get('ephemeral_context', {}).get('enabled', True)
+            ephemeral_config = self.config.get('ephemeral_context', default={})
+            self.enabled = ephemeral_config.get('enabled', True)
         else:
             self.enabled = enabled
 
         # Get configuration
-        ephemeral_config = self.config.get('ephemeral_context', {})
+        ephemeral_config = self.config.get('ephemeral_context', default={})
         self.max_file_size_mb = ephemeral_config.get('max_file_size_mb', 10)
         self.max_contexts = ephemeral_config.get('max_contexts', 10)
-        self.chunking_enabled = ephemeral_config.get('chunking', {}).get('enabled', True)
-        self.chunk_size = ephemeral_config.get('chunking', {}).get('chunk_size', 1000)
-        self.chunk_overlap = ephemeral_config.get('chunking', {}).get('overlap', 200)
+        chunking_config = ephemeral_config.get('chunking', {})
+        self.chunking_enabled = chunking_config.get('enabled', True)
+        self.chunk_size = chunking_config.get('chunk_size', 1000)
+        self.chunk_overlap = chunking_config.get('overlap', 200)
 
         # Get transformer service URL
         self.transformer_url = self._get_transformer_url()
@@ -272,7 +274,8 @@ class EphemeralContextManager:
             if context.is_chunked():
                 msg = f"✓ Loaded '{label}' ({size_kb:.1f} KB, {len(context.chunks)} chunks, {len(context.chunk_embeddings)} embeddings)"
             else:
-                msg = f"✓ Loaded '{label}' ({size_kb:.1f} KB, 1 chunk, embedding generated)"
+                embedding_status = "embedding generated" if context.embedding is not None else "no embedding"
+                msg = f"✓ Loaded '{label}' ({size_kb:.1f} KB, 1 chunk, {embedding_status})"
 
             return True, msg
 

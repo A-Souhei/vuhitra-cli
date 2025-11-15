@@ -87,6 +87,20 @@ sandbox:
   # Confidence threshold for heuristics context injection (0.0-1.0)
   confidence_threshold: 0.75
 
+# Transformer service configuration
+# Port 16050 is the docker-compose mapped port (internal: 5050)
+transformer:
+  host: localhost
+  port: 16050
+  protocol: http
+
+# Redis service configuration
+# Port 16379 is the docker-compose mapped port (internal: 6379)
+# This Redis instance is used by the sandbox service and token limit manager
+redis:
+  host: localhost
+  port: 16379
+
 # ElasticSearch configuration
 elasticsearch:
   host: localhost

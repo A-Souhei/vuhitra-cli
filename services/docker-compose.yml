@@ -73,7 +73,7 @@ services:
     profiles:
       - app
     ports:
-      - "15050:5050"     # Transformer service port
+      - "16050:5050"     # Transformer service port
     volumes:
       - transformer_models:/root/.cache/huggingface  # Cache HuggingFace models
     environment:

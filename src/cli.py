@@ -2,6 +2,7 @@ import sys
 import logging
 import requests
 import time
+from pathlib import Path
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
@@ -15,9 +16,18 @@ from src.utils.ui_formatter import (
     print_success, print_info, print_debug, print_user_prompt, console
 )
 from src.utils.prompt_history import PromptHistoryManager
+from src.utils.conversation_history import ConversationHistoryManager
+from src.utils.command_handler import CommandHandler, CommandResult
+from src.utils.token_limit_manager import get_token_limit_manager
+
+# Add sandbox service to path for heuristics config
+sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "src"))
+from heuristics_config_loader import HeuristicsConfigLoader
 
 # Maximum prompt length to prevent DoS through excessive payload sizes
-MAX_PROMPT_LENGTH = 10000
+# Note: This is now dynamic - will use discovered model limits from Redis
+# If no limit discovered yet, defaults to infinity (user will discover it)
+MAX_PROMPT_LENGTH = float('inf')
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +95,11 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
     start_time = time.time()
 
     try:
-        # Validate prompt length
-        if len(prompt) > MAX_PROMPT_LENGTH:
+        # Validate prompt length (now using dynamic limits if discovered)
+        # MAX_PROMPT_LENGTH is inf by default, so this only triggers if we have a DoS limit
+        if MAX_PROMPT_LENGTH != float('inf') and len(prompt) > MAX_PROMPT_LENGTH:
             logger.warning(f"Prompt length ({len(prompt)}) exceeds maximum ({MAX_PROMPT_LENGTH}), truncating")
-            prompt = prompt[:MAX_PROMPT_LENGTH]
+            prompt = prompt[:int(MAX_PROMPT_LENGTH)]
 
         config = ConfigLoader()
         sandbox_url = config.get_sandbox_url()
@@ -248,10 +259,96 @@ def interactive_mode(model, verbose=False):
     # Initialize prompt history manager
     prompt_manager = PromptHistoryManager()
 
+    # Initialize conversation history manager
+    conversation_history = ConversationHistoryManager()
+
+    # Initialize heuristics config (used for conversation history settings)
+    heuristics_config = HeuristicsConfigLoader()
+
+    # Initialize command handler
+    command_handler = CommandHandler()
+
+    # Register /clear command
+    def clear_command_handler(args):
+        """Handle /clear command."""
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /clear context - Clear conversation history\n"
+                        "       /clear tokenlimit - Clear discovered token limit for current model"
+            )
+
+        subcommand = args[0].lower()
+
+        if subcommand == "context":
+            if conversation_history.is_enabled():
+                count = conversation_history.get_history_count()
+                conversation_history.clear_history()
+                return CommandResult(
+                    success=True,
+                    message=f"✓ Cleared {count} conversation turns from history"
+                )
+            else:
+                return CommandResult(
+                    success=False,
+                    message="Conversation history is disabled"
+                )
+        elif subcommand == "tokenlimit":
+            token_manager = get_token_limit_manager()
+            if token_manager.clear_limit(model):
+                return CommandResult(
+                    success=True,
+                    message=f"✓ Cleared discovered token limit for {model}\n"
+                            f"The limit will be re-discovered on next error"
+                )
+            else:
+                return CommandResult(
+                    success=False,
+                    message="Failed to clear token limit (Redis not available or error occurred)"
+                )
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown subcommand: {subcommand}\n"
+                        f"Use: /clear context or /clear tokenlimit"
+            )
+
+    command_handler.register_command("clear", clear_command_handler)
+
+    # Register /limit command to show current token limit
+    def limit_command_handler(args):
+        """Handle /limit command to show discovered token limit."""
+        token_manager = get_token_limit_manager()
+        limit = token_manager.get_limit(model)
+
+        if limit == float('inf'):
+            return CommandResult(
+                success=True,
+                message=f"Model: {model}\n"
+                        f"Token limit: Not yet discovered (unlimited until error occurs)\n"
+                        f"The system will automatically learn the limit when it's exceeded."
+            )
+        else:
+            estimated_chars = int(limit * 4)  # Rough estimate
+            return CommandResult(
+                success=True,
+                message=f"Model: {model}\n"
+                        f"Discovered token limit: {int(limit)} tokens (~{estimated_chars} characters)\n"
+                        f"Use '/clear tokenlimit' to reset and re-discover"
+            )
+
+    command_handler.register_command("limit", limit_command_handler)
+
     if verbose:
         history_count = prompt_manager.get_history_count()
         print_info(f"Prompt history loaded: {history_count} previous prompts available")
         print_info(f"Auto-complete enabled: Press ↑/↓ to navigate history, → to accept suggestion")
+
+        if conversation_history.is_enabled():
+            conv_count = conversation_history.get_history_count()
+            print_info(f"Conversation history enabled: {conv_count} previous conversations")
+            print_info(f"Commands available: {', '.join(['/' + cmd for cmd in command_handler.get_available_commands()])}")
+
         console.print()
 
     while True:
@@ -264,6 +361,16 @@ def interactive_mode(model, verbose=False):
                 break
 
             if not prompt.strip():
+                continue
+
+            # Check if this is a command
+            if command_handler.is_command(prompt):
+                result = command_handler.execute(prompt)
+                if result:
+                    if result.success:
+                        print_success(result.message)
+                    else:
+                        print_error(result.message)
                 continue
 
             # Print user prompt in verbose mode
@@ -290,26 +397,65 @@ def interactive_mode(model, verbose=False):
             rating = None
 
             while iteration_number < max_iterations:
+                # Retrieve relevant conversation history if enabled
+                conversation_context = ""
+                if conversation_history.is_enabled():
+                    top_k = heuristics_config.get_conversation_history_top_k()
+                    min_similarity = heuristics_config.get_conversation_history_min_similarity()
+                    include_in_context = heuristics_config.get_conversation_history_include_in_context()
+
+                    if include_in_context:
+                        relevant_history = conversation_history.retrieve_relevant_history(
+                            prompt,
+                            top_k=top_k,
+                            min_similarity=min_similarity
+                        )
+
+                        if relevant_history and verbose:
+                            print_debug("Conversation History", {
+                                "relevant_turns": len(relevant_history),
+                                "top_similarity": f"{relevant_history[0][1]:.2%}" if relevant_history else "N/A"
+                            })
+
+                        conversation_context = conversation_history.format_history_for_context(relevant_history)
+
                 # Fetch similar heuristic to enhance context (with boost if iterating)
                 heuristic_context, heuristic_data = fetch_similar_heuristic(
                     prompt,
                     verbose=verbose,
                     negative_weight_boost=negative_weight_boost
                 )
-                
-                # Enhance prompt with heuristic context if available
+
+                # Enhance prompt with conversation history and heuristic context
                 enhanced_prompt = prompt
+                context_parts = []
+
+                if conversation_context:
+                    context_parts.append(conversation_context)
+
                 if heuristic_context:
-                    enhanced_prompt = f"{heuristic_context}\n\nUser query: {prompt}"
+                    context_parts.append(heuristic_context)
+
+                if context_parts:
+                    enhanced_prompt = "\n\n".join(context_parts) + f"\n\nUser query: {prompt}"
 
                     if verbose:
                         print_debug("Enhanced Prompt", {
                             "original_length": len(prompt),
                             "enhanced_length": len(enhanced_prompt),
-                            "context_added": len(heuristic_context),
+                            "conversation_context": len(conversation_context) if conversation_context else 0,
+                            "heuristic_context": len(heuristic_context) if heuristic_context else 0,
                             "iteration": iteration_number,
                             "negative_weight_boost": negative_weight_boost
                         })
+
+                # Check token limit before generating (proactive warning)
+                token_manager = get_token_limit_manager()
+                is_within_limit, limit_warning = token_manager.check_limit(model, enhanced_prompt)
+
+                if not is_within_limit and verbose:
+                    print_warning(limit_warning)
+                    # Continue anyway - the actual error will be caught and limit stored if it fails
 
                 # Generate response
                 llm_start = time.time()
@@ -321,6 +467,16 @@ def interactive_mode(model, verbose=False):
 
                 # Print response with markdown formatting
                 print_response(response)
+
+                # Store conversation turn in history (do this before feedback to ensure it's captured)
+                if conversation_history.is_enabled():
+                    stored = conversation_history.add_turn(prompt, response)
+                    if verbose and stored:
+                        conv_count = conversation_history.get_history_count()
+                        print_debug("Conversation History", {
+                            "stored": True,
+                            "total_turns": conv_count
+                        })
 
                 # Collect feedback if enabled
                 feedback_data = feedback_collector.collect_feedback(prompt, response)

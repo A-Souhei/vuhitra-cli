@@ -38,7 +38,7 @@ class FeedbackCollector:
     def collect_feedback(self, prompt: str, response: str) -> Optional[Dict]:
         """
         Collect user satisfaction rating for the LLM response.
-        Now supports custom feedback text after the rating.
+        For low ratings (0-2), asks follow-up question for context.
 
         Args:
             prompt: The user's original prompt
@@ -47,20 +47,13 @@ class FeedbackCollector:
         Returns:
             Optional[Dict]: Feedback data dictionary if valid rating provided, None otherwise.
                            Dictionary contains: prompt, response, rating, timestamp, user_feedback (optional)
-
-        Examples:
-            User input: "0" -> rating=0, no feedback text
-            User input: "0 dogs are omnivorous" -> rating=0, feedback="dogs are omnivorous"
-            User input: "0: dogs are omnivorous" -> rating=0, feedback="dogs are omnivorous"
-            User input: "5 great answer!" -> rating=5, feedback="great answer!"
         """
         if not self.is_enabled():
             return None
 
         # Display the rating prompt with labels
         labels_str = ", ".join([f"{k}={v}" for k, v in self.SENTIMENT_LABELS.items()])
-        print(f"\nRate satisfaction ({labels_str}, or Enter to skip)")
-        print(f"Optional: Add context after rating (e.g., '0 dogs are omnivorous'): ", end="", flush=True)
+        print(f"\nRate satisfaction ({labels_str}, or Enter to skip): ", end="", flush=True)
 
         try:
             user_input = input().strip()
@@ -69,8 +62,8 @@ class FeedbackCollector:
             if not user_input:
                 return None
 
-            # Validate and get rating + optional feedback text
-            rating, feedback_text = self._validate_rating(user_input)
+            # Validate rating (simple integer now)
+            rating = self._validate_rating(user_input)
 
             if rating is None:
                 print("Invalid rating. Skipping feedback.")
@@ -87,6 +80,16 @@ class FeedbackCollector:
                 # "prompt_sentiment": "",  # Will be added by sentiment analysis service
             }
 
+            # For low ratings, ask for optional context
+            feedback_text = None
+            if rating <= 2:
+                print("Can you provide context to help improve? (e.g., 'dogs are omnivorous', or Enter to skip): ", end="", flush=True)
+                try:
+                    feedback_text = input().strip()
+                except (EOFError, KeyboardInterrupt):
+                    # User cancelled, that's fine
+                    pass
+
             # Add user feedback text if provided
             if feedback_text:
                 feedback_data["user_feedback"] = feedback_text
@@ -101,37 +104,22 @@ class FeedbackCollector:
             print("\nSkipping feedback.")
             return None
 
-    def _validate_rating(self, user_input: str) -> tuple[Optional[int], Optional[str]]:
+    def _validate_rating(self, user_input: str) -> Optional[int]:
         """
-        Validate user input for rating and extract optional feedback text.
-        Supports formats like: "0", "0 dogs are omnivorous", "0: dogs are omnivorous"
+        Validate user input for rating (simple integer).
 
         Args:
             user_input: The raw user input string
 
         Returns:
-            tuple[Optional[int], Optional[str]]: (rating, feedback_text)
-                - rating: Valid rating (0-5) if input is valid, None otherwise
-                - feedback_text: Optional user feedback text, None if not provided
+            Optional[int]: Valid rating (0-5) if input is valid, None otherwise
         """
-        import re
-
-        # Try to match pattern: <rating> [optional separator] [feedback text]
-        # Patterns: "0", "0 text", "0: text", "0- text", "0 - text"
-        match = re.match(r'^(\d+)\s*[:;\-]?\s*(.*)$', user_input)
-
-        if not match:
-            return None, None
-
         try:
-            rating_str = match.group(1)
-            feedback_text = match.group(2).strip() if match.group(2) else None
-
-            rating = int(rating_str)
+            rating = int(user_input)
             if 0 <= rating <= 5:
-                return rating, feedback_text if feedback_text else None
+                return rating
             else:
-                return None, None
+                return None
         except ValueError:
             # Input is not a valid integer
-            return None, None
+            return None

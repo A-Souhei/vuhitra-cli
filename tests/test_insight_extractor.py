@@ -618,3 +618,52 @@ class TestInsightExtractor:
         assert result is not None
         assert result['is_negative'] is True
         assert 'formatted_insight' in result
+
+    def test_negative_insights_with_user_feedback(self, extractor):
+        """Test that user_feedback is properly included in negative insights"""
+        matched_heuristic = {
+            'prompt': 'Why do dogs kill small animals?',
+            'response': 'Dogs are herbivorous animals that only eat plants.',
+            'rating': 0,
+            'is_code_response': False,
+            'user_feedback': 'dogs are omnivorous'  # User correction
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should include user_feedback in the result
+        assert result is not None
+        assert result['is_negative'] is True
+        assert 'user_feedback' in result
+        assert result['user_feedback'] == 'dogs are omnivorous'
+        
+        # Should include user feedback in formatted insight
+        assert 'formatted_insight' in result
+        formatted = result['formatted_insight']
+        assert 'USER CORRECTION' in formatted
+        assert 'dogs are omnivorous' in formatted
+        assert 'Use the USER CORRECTION' in formatted
+
+    def test_negative_insights_without_user_feedback(self, extractor):
+        """Test that negative insights work without user_feedback"""
+        matched_heuristic = {
+            'prompt': 'Test prompt',
+            'response': 'Bad response',
+            'rating': 1,
+            'is_code_response': False
+            # No user_feedback field
+        }
+
+        result = extractor.extract_negative_insights(matched_heuristic)
+
+        # Should work without user_feedback
+        assert result is not None
+        assert result['is_negative'] is True
+        assert 'user_feedback' in result
+        assert result['user_feedback'] == ''  # Should be empty string
+        
+        # Should have standard directive without user feedback
+        formatted = result['formatted_insight']
+        assert 'USER CORRECTION' not in formatted
+        assert 'Do NOT repeat this mistake' in formatted
+

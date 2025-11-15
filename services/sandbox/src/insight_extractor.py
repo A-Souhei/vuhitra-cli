@@ -552,6 +552,7 @@ Please provide a comprehensive response addressing the user's specific question.
                 - entities: Important named entities (tools, libraries that were problematic)
                 - warning_indicators: Why this is a low-quality match to avoid
                 - formatted_insight: Ready-to-inject context string (as anti-pattern)
+                - user_feedback: User-provided correction or context (if available)
                 - is_negative: True to indicate this is a negative heuristic
         """
         if not self.nlp:
@@ -563,6 +564,7 @@ Please provide a comprehensive response addressing the user's specific question.
             response = matched_heuristic.get('response', '')
             rating = matched_heuristic.get('rating', 0)
             is_code = matched_heuristic.get('is_code_response', False)
+            user_feedback = matched_heuristic.get('user_feedback', '')  # Get user correction/context
 
             # Limit response text for performance
             response_text = response[:self.MAX_NLP_TEXT_LENGTH] if len(response) > self.MAX_NLP_TEXT_LENGTH else response
@@ -579,7 +581,8 @@ Please provide a comprehensive response addressing the user's specific question.
                 prompt=prompt,
                 response=response,
                 anti_techniques=anti_techniques,
-                rating=rating
+                rating=rating,
+                user_feedback=user_feedback  # Include user feedback in summary
             )
 
             # Warning indicators instead of confidence indicators
@@ -595,7 +598,8 @@ Please provide a comprehensive response addressing the user's specific question.
                 anti_techniques=anti_techniques,
                 entities=entities,
                 warning_indicators=warning_indicators,
-                failed_response=response  # Include the actual failed response
+                failed_response=response,  # Include the actual failed response
+                user_feedback=user_feedback  # Include user's correction/context
             )
 
             return {
@@ -604,6 +608,7 @@ Please provide a comprehensive response addressing the user's specific question.
                 'entities': entities,
                 'warning_indicators': warning_indicators,
                 'formatted_insight': formatted_insight,
+                'user_feedback': user_feedback,  # Include for reference
                 'is_negative': True
             }
 
@@ -622,7 +627,8 @@ Please provide a comprehensive response addressing the user's specific question.
         prompt: str,
         response: str,
         anti_techniques: List[str],
-        rating: int
+        rating: int,
+        user_feedback: str = ""
     ) -> str:
         """
         Build a concise summary of why this approach was unsuccessful.
@@ -632,6 +638,7 @@ Please provide a comprehensive response addressing the user's specific question.
             response: Response text
             anti_techniques: Extracted techniques that didn't work
             rating: User rating (low)
+            user_feedback: Optional user-provided correction or context
 
         Returns:
             Summary string focused on what to avoid
@@ -697,7 +704,8 @@ Please provide a comprehensive response addressing the user's specific question.
         anti_techniques: List[str],
         entities: List[Dict],
         warning_indicators: List[str],
-        failed_response: str = ""
+        failed_response: str = "",
+        user_feedback: str = ""
     ) -> str:
         """
         Format negative insights as anti-pattern warnings for LLM context.
@@ -708,6 +716,7 @@ Please provide a comprehensive response addressing the user's specific question.
             entities: List of entities that were problematic
             warning_indicators: Warning indicators
             failed_response: The actual failed response to show as example of what NOT to do
+            user_feedback: User-provided correction or context explaining what's correct
 
         Returns:
             Formatted string ready for LLM context injection as anti-pattern
@@ -732,7 +741,15 @@ Please provide a comprehensive response addressing the user's specific question.
             lines.append(truncated_response)
             lines.append("```")
             lines.append("")
-            lines.append("DIRECTIVE: Do NOT repeat this mistake. Provide the factually correct answer.")
+            
+            # Add user feedback if provided - this is the correction!
+            if user_feedback:
+                lines.append("✓ USER CORRECTION - What is actually correct:")
+                lines.append(f"   {user_feedback}")
+                lines.append("")
+                lines.append("DIRECTIVE: Use the USER CORRECTION above as the factually accurate information.")
+            else:
+                lines.append("DIRECTIVE: Do NOT repeat this mistake. Provide the factually correct answer.")
             lines.append("")
 
         # Add techniques as things to avoid

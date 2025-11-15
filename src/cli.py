@@ -477,7 +477,9 @@ def interactive_mode(model, verbose=False):
                         "       /load ./docs/api_spec.md\n"
                         "       /load @docs/api_spec.md api \"REST API specification\"\n"
                         "       /load @docs/ (loads all files in directory)\n"
-                        "       /load ./docs/coding_standards.md standards \"Python coding standards\""
+                        "       /load ./docs/coding_standards.md standards \"Python coding standards\"\n"
+                        "\n"
+                        "Note: For descriptions with spaces, use quotes (handled by shell)"
             )
 
         file_path = args[0]

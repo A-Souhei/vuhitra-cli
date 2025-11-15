@@ -1,0 +1,164 @@
+# Prompt Injection Shortcuts
+# These are powerful phrases to improve LLM responses
+# Use : + TAB to quickly inject these into your prompts
+
+prompt_injections:
+  # 🧠 Improve reasoning and accuracy
+  reasoning:
+    emoji: "🧠"
+    description: "Improve reasoning and accuracy"
+    phrases:
+      - "Think step by step before answering."
+      - "Show your complete reasoning process."
+      - "Explain the logic behind your solution."
+      - "Break this into smaller, manageable steps."
+      - "Walk through your thought process clearly."
+      - "Analyze each component systematically."
+      - "Consider edge cases and potential issues."
+      - "Verify your assumptions before proceeding."
+      - "Double-check the logic at each step."
+      - "Identify the core problem first."
+
+  # 🔍 Fix or improve incorrect answers
+  correction:
+    emoji: "🔍"
+    description: "Fix or improve incorrect answers"
+    phrases:
+      - "Review your previous response for any errors."
+      - "Identify and correct any logical inconsistencies."
+      - "Re-evaluate your answer with fresh perspective."
+      - "Check for mistakes and provide corrections."
+      - "Reassess your reasoning and refine the solution."
+      - "Find any flaws in the previous approach."
+      - "Verify the accuracy of each claim made."
+      - "Cross-check your work against the requirements."
+      - "Look for overlooked details or assumptions."
+      - "Improve upon the initial solution."
+
+  # ✨ Improve quality and clarity
+  clarity:
+    emoji: "✨"
+    description: "Improve quality and clarity"
+    phrases:
+      - "Explain this clearly and concisely."
+      - "Use simple, straightforward language."
+      - "Structure your response with clear sections."
+      - "Prioritize the most important points first."
+      - "Remove unnecessary complexity."
+      - "Make the explanation more accessible."
+      - "Organize using bullet points or numbered lists."
+      - "Highlight the key takeaways."
+      - "Use concrete examples to illustrate."
+      - "Keep sentences short and direct."
+
+  # 🎯 Control output format
+  format:
+    emoji: "🎯"
+    description: "Control output format"
+    phrases:
+      - "Respond using only valid JSON format."
+      - "Provide the answer as a numbered list."
+      - "Format this as a markdown table."
+      - "Structure the response in exactly 3 sections."
+      - "Return results in bullet points only."
+      - "Use code blocks for technical content."
+      - "Follow this exact template structure."
+      - "Output as comma-separated values."
+      - "Format as YAML configuration."
+      - "Present findings in a comparison table."
+
+  # 🎭 Adjust tone and expertise
+  tone:
+    emoji: "🎭"
+    description: "Adjust tone and expertise level"
+    phrases:
+      - "Explain as if I'm a complete beginner."
+      - "Answer with senior engineer expertise."
+      - "Use a neutral, professional tone."
+      - "Approach this as a domain expert would."
+      - "Keep the explanation beginner-friendly."
+      - "Write for an intermediate skill level."
+      - "Use technical terminology appropriately."
+      - "Explain like teaching a colleague."
+      - "Adopt a teaching-focused approach."
+      - "Balance technical depth with accessibility."
+
+  # 🛠️ Improve reliability and reduce errors
+  reliability:
+    emoji: "🛠️"
+    description: "Improve reliability and reduce hallucinations"
+    phrases:
+      - "State 'I'm not certain' if unsure about anything."
+      - "Use only verified, factual information."
+      - "List all assumptions you're making."
+      - "Ask clarifying questions if needed."
+      - "Acknowledge limitations in your knowledge."
+      - "Cite specific sources when possible."
+      - "Distinguish facts from informed speculation."
+      - "Validate critical claims before stating them."
+      - "Be explicit about confidence levels."
+      - "Flag any uncertain or estimated values."
+
+  # 💻 Code-specific improvements
+  code:
+    emoji: "💻"
+    description: "Code quality and correctness"
+    phrases:
+      - "Review the code for bugs and security issues."
+      - "Follow best practices and design patterns."
+      - "Add comprehensive error handling."
+      - "Include helpful comments and documentation."
+      - "Optimize for readability and maintainability."
+      - "Consider performance implications."
+      - "Write defensive, production-ready code."
+      - "Check for edge cases and boundary conditions."
+      - "Ensure type safety and validation."
+      - "Follow the project's coding standards."
+
+  # 🔬 Analysis and deep dive
+  analysis:
+    emoji: "🔬"
+    description: "Deep analysis and thorough investigation"
+    phrases:
+      - "Provide a comprehensive analysis."
+      - "Examine all relevant factors and trade-offs."
+      - "Compare different approaches systematically."
+      - "Identify pros and cons for each option."
+      - "Consider both short-term and long-term impacts."
+      - "Analyze root causes, not just symptoms."
+      - "Evaluate against multiple criteria."
+      - "Look at this from different perspectives."
+      - "Perform a thorough risk assessment."
+      - "Examine the broader context and implications."
+
+  # ⚡ Quick and efficient responses
+  efficiency:
+    emoji: "⚡"
+    description: "Quick, efficient responses"
+    phrases:
+      - "Provide just the essential information."
+      - "Skip explanations, give direct answers only."
+      - "Summarize in 2-3 sentences maximum."
+      - "Focus on actionable insights only."
+      - "Be as concise as possible."
+      - "Get straight to the point."
+      - "Omit background, provide solution directly."
+      - "Answer in the most efficient way."
+      - "Minimize verbosity without losing clarity."
+      - "Prioritize speed and brevity."
+
+  # 🚀 Combined power prompts
+  combo:
+    emoji: "🚀"
+    description: "Powerful combined prompts"
+    phrases:
+      - "Think step by step and explain your reasoning clearly."
+      - "Review for errors, then provide a corrected response."
+      - "Analyze the problem, identify mistakes, then generate an improved solution."
+      - "Review the code for errors, then rewrite a corrected version."
+      - "Explain with simple words, short sentences, and clear examples."
+      - "Break down the problem, show your work, and verify the solution."
+      - "State assumptions, work through the logic, and validate your answer."
+      - "Think carefully, organize clearly, and present concisely."
+      - "Analyze thoroughly, consider alternatives, and recommend the best approach."
+      - "Research the topic, verify facts, and present findings systematically."

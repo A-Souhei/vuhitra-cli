@@ -91,6 +91,7 @@ class ElasticSearchClient:
                         "code_purpose": {"type": "text"},
                         "response_word_count": {"type": "integer"},
                         "rating": {"type": "integer"},
+                        "user_feedback": {"type": "text"},
                         "timestamp": {"type": "date"},
                         "processed_at": {"type": "date"},
                         "execution_time_ms": {"type": "long"},

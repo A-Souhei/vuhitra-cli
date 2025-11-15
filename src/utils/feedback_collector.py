@@ -38,6 +38,7 @@ class FeedbackCollector:
     def collect_feedback(self, prompt: str, response: str) -> Optional[Dict]:
         """
         Collect user satisfaction rating for the LLM response.
+        For low ratings (0-2), asks follow-up question for context.
 
         Args:
             prompt: The user's original prompt
@@ -45,7 +46,7 @@ class FeedbackCollector:
 
         Returns:
             Optional[Dict]: Feedback data dictionary if valid rating provided, None otherwise.
-                           Dictionary contains: prompt, response, rating, timestamp
+                           Dictionary contains: prompt, response, rating, timestamp, user_feedback (optional)
         """
         if not self.is_enabled():
             return None
@@ -61,11 +62,11 @@ class FeedbackCollector:
             if not user_input:
                 return None
 
-            # Validate and get rating
+            # Validate rating (simple integer now)
             rating = self._validate_rating(user_input)
 
             if rating is None:
-                print("Skipping feedback.")
+                print("Invalid rating. Skipping feedback.")
                 return None
 
             # Create feedback data structure for ElasticSearch
@@ -79,7 +80,23 @@ class FeedbackCollector:
                 # "prompt_sentiment": "",  # Will be added by sentiment analysis service
             }
 
-            print("Thank you for your feedback!")
+            # For low ratings, ask for optional context
+            feedback_text = None
+            if rating <= 2:
+                print("Can you provide context to help improve? (e.g., 'dogs are omnivorous', or Enter to skip): ", end="", flush=True)
+                try:
+                    feedback_text = input().strip()
+                except (EOFError, KeyboardInterrupt):
+                    # User cancelled, that's fine
+                    pass
+
+            # Add user feedback text if provided
+            if feedback_text:
+                feedback_data["user_feedback"] = feedback_text
+                print(f"Thank you for your feedback! Context: '{feedback_text}'")
+            else:
+                print("Thank you for your feedback!")
+
             return feedback_data
 
         except (EOFError, KeyboardInterrupt):
@@ -89,7 +106,7 @@ class FeedbackCollector:
 
     def _validate_rating(self, user_input: str) -> Optional[int]:
         """
-        Validate user input for rating.
+        Validate user input for rating (simple integer).
 
         Args:
             user_input: The raw user input string

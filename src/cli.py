@@ -191,13 +191,17 @@ def send_feedback_to_sandbox(feedback_data, verbose=False):
         endpoint = f"{sandbox_url}/analyze/feedback"
 
         if verbose:
-            print_debug("Feedback Submission", {
+            debug_info = {
                 "endpoint": endpoint,
                 "rating": feedback_data.get('rating'),
                 "prompt_length": len(feedback_data.get('prompt', '')),
                 "response_length": len(feedback_data.get('response', '')),
                 "execution_time_ms": feedback_data.get('execution_time_ms')
-            })
+            }
+            # Show user feedback if provided
+            if 'user_feedback' in feedback_data and feedback_data['user_feedback']:
+                debug_info["user_feedback"] = feedback_data['user_feedback']
+            print_debug("Feedback Submission", debug_info)
 
         # Add verbose flag to request payload
         request_payload = feedback_data.copy()
@@ -708,6 +712,44 @@ def interactive_mode(model, verbose=False):
         # Return original prompt (keep @ references in the text), loaded sparks, and errors
         return prompt_text, loaded_sparks, errors
 
+    def process_prompt_injections(prompt_text: str) -> str:
+        """Process :category shortcuts and replace with random phrases.
+
+        Args:
+            prompt_text: The user's prompt text
+
+        Returns:
+            Modified prompt with :category replaced by random phrases with emojis
+        """
+        import re
+        from src.utils.prompt_injection_completer import PromptInjectionCompleter
+
+        # Check if there are any :category patterns
+        pattern = r':(\w+)'
+        if not re.search(pattern, prompt_text):
+            return prompt_text
+
+        # Initialize the completer to get phrases
+        completer = PromptInjectionCompleter()
+
+        def replace_with_phrase(match):
+            """Replace :category with random phrase from that category."""
+            category = match.group(1)
+            phrase = completer.get_random_phrase(category)
+            emoji = completer.get_category_emoji(category)
+
+            if phrase:
+                # Add emoji before the phrase
+                return f"{emoji} {phrase}"
+            else:
+                # Keep original if category not found
+                return match.group(0)
+
+        # Replace all :category with phrases
+        modified_prompt = re.sub(pattern, replace_with_phrase, prompt_text)
+
+        return modified_prompt
+
     if verbose:
         history_count = prompt_manager.get_history_count()
         print_info(f"Prompt history loaded: {history_count} previous prompts available")
@@ -731,6 +773,9 @@ def interactive_mode(model, verbose=False):
 
             if not prompt.strip():
                 continue
+
+            # Replace :category shortcuts with random phrases
+            prompt = process_prompt_injections(prompt)
 
             # Check if this is a command
             if command_handler.is_command(prompt):
@@ -821,8 +866,9 @@ def interactive_mode(model, verbose=False):
                         })
 
                 # Retrieve relevant conversation history if enabled
+                # SKIP during auto-iteration retries to avoid corrupting heuristic learning
                 conversation_context = ""
-                if conversation_history.is_enabled():
+                if conversation_history.is_enabled() and iteration_number == 0:
                     top_k = heuristics_config.get_conversation_history_top_k()
                     min_similarity = heuristics_config.get_conversation_history_min_similarity()
                     include_in_context = heuristics_config.get_conversation_history_include_in_context()
@@ -841,6 +887,8 @@ def interactive_mode(model, verbose=False):
                             })
 
                         conversation_context = conversation_history.format_history_for_context(relevant_history)
+                elif conversation_history.is_enabled() and iteration_number > 0 and verbose:
+                    print_info("🔇 Conversation history disabled during auto-iteration (heuristics-only mode)")
 
                 # Fetch similar heuristic to enhance context (with boost if iterating)
                 heuristic_context, heuristic_data = fetch_similar_heuristic(
@@ -884,6 +932,31 @@ def interactive_mode(model, verbose=False):
                             "iteration": iteration_number,
                             "negative_weight_boost": negative_weight_boost
                         })
+
+                # Inject reasoning prompt for auto-iteration retries (the cherry on top!)
+                # When iteration_number > 0, it means we got rating=0 and are retrying
+                # SKIP if we have user_feedback - we want LLM to follow the correction, not overthink it
+                user_feedback_value = (
+                    heuristic_data.get('matched_heuristic', {}).get('user_feedback', '')
+                    if heuristic_data else ''
+                )
+                has_user_feedback = bool(user_feedback_value and user_feedback_value.strip())
+
+                if iteration_number > 0 and not has_user_feedback:
+                    from src.utils.prompt_injection_completer import PromptInjectionCompleter
+                    completer = PromptInjectionCompleter()
+                    reasoning_phrase = completer.get_random_phrase('reasoning')
+                    reasoning_emoji = completer.get_category_emoji('reasoning')
+
+                    if reasoning_phrase:
+                        # Inject the reasoning instruction into the prompt
+                        reasoning_injection = f"{reasoning_emoji} {reasoning_phrase}"
+                        enhanced_prompt = f"{enhanced_prompt}\n\n{reasoning_injection}"
+
+                        if verbose:
+                            print_info(f"🍒 Auto-iteration boost: Added reasoning prompt - '{reasoning_phrase}'")
+                elif iteration_number > 0 and has_user_feedback and verbose:
+                    print_info("🎯 Skipping reasoning boost - user correction provided (follow directive, don't overthink)")
 
                 # Check token limit before generating (proactive warning)
                 token_manager = get_token_limit_manager()

@@ -1,7 +1,5 @@
 """Tests for auto-iteration reasoning boost feature."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 from src.utils.prompt_injection_completer import PromptInjectionCompleter
 
 

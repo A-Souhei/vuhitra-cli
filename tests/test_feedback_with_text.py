@@ -1,7 +1,6 @@
 """Tests for feedback collector with custom text input via follow-up question."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from src.utils.feedback_collector import FeedbackCollector
 
 

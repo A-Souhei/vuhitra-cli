@@ -1,7 +1,5 @@
 """Tests for prompt injection feature."""
 
-import pytest
-import os
 import re
 from src.utils.prompt_injection_completer import PromptInjectionCompleter
 

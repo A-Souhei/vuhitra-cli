@@ -1,7 +1,6 @@
 """Tests using sample data files from data/ directory."""
 
 import sys
-import os
 from pathlib import Path
 from unittest.mock import Mock, patch
 

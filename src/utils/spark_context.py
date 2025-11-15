@@ -8,7 +8,6 @@ variant of ephemeral context. Sparks are:
 - Ideal for quick, temporary context injection
 """
 
-import os
 import requests
 import numpy as np
 from typing import List, Dict, Optional, Tuple
@@ -88,6 +87,10 @@ class SparkContextManager:
         self.chunking_enabled = chunking_config.get('enabled', True)
         self.chunk_size = chunking_config.get('chunk_size', 1000)
         self.chunk_overlap = chunking_config.get('overlap', 200)
+        
+        # Validate chunking configuration
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(f"chunk_overlap ({self.chunk_overlap}) must be less than chunk_size ({self.chunk_size})")
 
         # Get transformer service URL
         self.transformer_url = self._get_transformer_url()
@@ -286,7 +289,7 @@ class SparkContextManager:
                 msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB, {len(spark.chunks)} chunks, {len(spark.chunk_embeddings)} embeddings) from {file_path}"
             else:
                 embedding_status = "embedding generated" if spark.embedding is not None else "no embedding"
-                msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB, 1 chunk, {embedding_status}) from {file_path}"
+                msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB, {embedding_status}) from {file_path}"
         else:
             msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB) from {file_path}"
         

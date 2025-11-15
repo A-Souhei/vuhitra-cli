@@ -30,7 +30,7 @@ def test_at_prefix_pattern_detection():
         ("Compare @file1.txt and @file2.txt", ["file1.txt", "file2.txt"]),
         ("Check @docs/api.md for details", ["docs/api.md"]),
         ("No references here", []),
-        ("Email test@example.com should not match", ["example.com"]),  # @ without leading space
+        ("Email test@example.com will match", ["example.com"]),  # @ without leading space - pattern matches emails too
         ("@file.txt @another.py @third.md", ["file.txt", "another.py", "third.md"]),
         # Note: Punctuation is included in match - this is expected behavior
         # The CLI or path resolver should handle stripping punctuation if needed

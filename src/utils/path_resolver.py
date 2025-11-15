@@ -7,6 +7,7 @@ relative to the working directory.
 import os
 from pathlib import Path
 from typing import Tuple, List
+from src.errors_handler import handle_exception
 
 
 class PathResolver:
@@ -125,9 +126,21 @@ class PathResolver:
         try:
             files = [str(f) for f in path.iterdir() if f.is_file()]
             return True, files, ""
-        except PermissionError:
+        except PermissionError as e:
+            handle_exception(e, context={
+                'function': 'get_directory_files',
+                'dir_path': dir_path,
+                'resolved_path': resolved_path,
+                'error_type': 'PermissionError'
+            })
             return False, [], f"Permission denied: {dir_path}"
         except Exception as e:
+            handle_exception(e, context={
+                'function': 'get_directory_files',
+                'dir_path': dir_path,
+                'resolved_path': resolved_path,
+                'error_type': 'GeneralException'
+            })
             return False, [], f"Error reading directory: {str(e)}"
 
 

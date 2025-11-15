@@ -62,6 +62,32 @@ services:
     networks:
       - vuhitra-network
 
+  # Transformer service - NLP service for code recognition, context compaction, and sentiment analysis
+  # Start with: docker compose --profile app up -d
+  transformer:
+    build:
+      context: ..
+      dockerfile: services/transformer/Dockerfile
+    image: vuhitra-transformer:latest
+    container_name: vuhitra-transformer
+    profiles:
+      - app
+    ports:
+      - "15050:5050"     # Transformer service port
+    environment:
+      - FLASK_DEBUG=false
+      - ENVIRONMENT=${ENVIRONMENT:-DEV}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Longer start period for model loading
+    restart: unless-stopped
+    networks:
+      - vuhitra-network
+
   # Spark services (optional - use profile to enable)
   # Start with: docker compose --profile spark up -d
   spark:

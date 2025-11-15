@@ -147,7 +147,7 @@ class ConversationHistoryManager:
             vec2: Second vector
 
         Returns:
-            Cosine similarity score (0-1)
+            Cosine similarity score (-1 to 1, where 1 is identical, 0 is orthogonal, -1 is opposite)
         """
         dot_product = np.dot(vec1, vec2)
         norm1 = np.linalg.norm(vec1)

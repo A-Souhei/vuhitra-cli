@@ -6,7 +6,7 @@ When a model hits its token limit, we store that limit in Redis for future use.
 
 import logging
 import redis
-from typing import Optional
+from typing import Optional, Union
 from src.utils.config_loader import ConfigLoader
 from src.errors_handler import handle_exception
 
@@ -73,14 +73,14 @@ class TokenLimitManager:
         """
         return f"model_token_limit:{model}"
 
-    def get_limit(self, model: str) -> float:
+    def get_limit(self, model: str) -> Union[int, float]:
         """Get the discovered token limit for a model.
 
         Args:
             model: Model name
 
         Returns:
-            Token limit (float('inf') if not yet discovered)
+            Token limit as int if discovered, float('inf') if not yet discovered
         """
         if not self.redis_client:
             return DEFAULT_TOKEN_LIMIT
@@ -92,7 +92,7 @@ class TokenLimitManager:
             if limit:
                 discovered_limit = int(limit)
                 logger.debug(f"TokenLimitManager: Retrieved limit for {model}: {discovered_limit}")
-                return float(discovered_limit)
+                return discovered_limit
 
             return DEFAULT_TOKEN_LIMIT
 

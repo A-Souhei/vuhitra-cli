@@ -1,7 +1,6 @@
 """Tests for conversation history management."""
 
 import sys
-import os
 from pathlib import Path
 
 # Add src to path

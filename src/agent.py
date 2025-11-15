@@ -43,7 +43,7 @@ def generate(model, prompt):
             try:
                 error_data = e.response.json()
                 error_message = error_data.get('error', str(e))
-            except:
+            except Exception:
                 error_message = str(e)
 
             # Check if error is related to token/context limits

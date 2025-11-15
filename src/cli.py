@@ -2,6 +2,7 @@ import sys
 import logging
 import requests
 import time
+from pathlib import Path
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
 from src.errors_handler import handle_exception, capture_message, get_error_handler
@@ -18,6 +19,10 @@ from src.utils.prompt_history import PromptHistoryManager
 from src.utils.conversation_history import ConversationHistoryManager
 from src.utils.command_handler import CommandHandler, CommandResult
 from src.utils.token_limit_manager import get_token_limit_manager
+
+# Add sandbox service to path for heuristics config
+sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "src"))
+from heuristics_config_loader import HeuristicsConfigLoader
 
 # Maximum prompt length to prevent DoS through excessive payload sizes
 # Note: This is now dynamic - will use discovered model limits from Redis
@@ -257,6 +262,9 @@ def interactive_mode(model, verbose=False):
     # Initialize conversation history manager
     conversation_history = ConversationHistoryManager()
 
+    # Initialize heuristics config (used for conversation history settings)
+    heuristics_config = HeuristicsConfigLoader()
+
     # Initialize command handler
     command_handler = CommandHandler()
 
@@ -392,12 +400,6 @@ def interactive_mode(model, verbose=False):
                 # Retrieve relevant conversation history if enabled
                 conversation_context = ""
                 if conversation_history.is_enabled():
-                    from pathlib import Path
-                    import sys
-                    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "services" / "sandbox" / "src"))
-                    from heuristics_config_loader import HeuristicsConfigLoader
-                    heuristics_config = HeuristicsConfigLoader()
-
                     top_k = heuristics_config.get_conversation_history_top_k()
                     min_similarity = heuristics_config.get_conversation_history_min_similarity()
                     include_in_context = heuristics_config.get_conversation_history_include_in_context()

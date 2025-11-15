@@ -9,11 +9,14 @@ variant of ephemeral context. Sparks are:
 """
 
 import os
+import requests
+import numpy as np
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
 from src.utils.config_loader import ConfigLoader
+from src.errors_handler import handle_exception
 
 
 @dataclass
@@ -24,6 +27,9 @@ class SparkContext:
     file_path: str  # Original file path
     content: str  # Full text content
     timestamp: str  # ISO format timestamp when loaded
+    embedding: Optional[np.ndarray] = None  # Full document embedding
+    chunks: List[str] = field(default_factory=list)  # Chunks if content is large
+    chunk_embeddings: List[np.ndarray] = field(default_factory=list)  # Per-chunk embeddings
 
     def get_size_bytes(self) -> int:
         """Get size of content in bytes."""
@@ -33,13 +39,19 @@ class SparkContext:
         """Get size of content in KB."""
         return self.get_size_bytes() / 1024
 
+    def is_chunked(self) -> bool:
+        """Check if content was chunked."""
+        return len(self.chunks) > 0
+
     def to_dict(self) -> Dict:
-        """Convert to dictionary representation."""
+        """Convert to dictionary representation (without embeddings)."""
         return {
             'label': self.label,
             'file_path': self.file_path,
             'content_size': self.get_size_bytes(),
             'timestamp': self.timestamp,
+            'is_chunked': self.is_chunked(),
+            'num_chunks': len(self.chunks)
         }
 
 
@@ -66,6 +78,82 @@ class SparkContextManager:
         spark_config = self.config.get('spark_context', default={})
         self.max_file_size_mb = spark_config.get('max_file_size_mb', 10)
         self.max_contexts = spark_config.get('max_contexts', 20)
+        
+        # Embedding configuration
+        embed_config = spark_config.get('embed', {})
+        self.embed_enabled = embed_config.get('enabled', True)
+        
+        # Chunking configuration (for large files)
+        chunking_config = spark_config.get('chunking', {})
+        self.chunking_enabled = chunking_config.get('enabled', True)
+        self.chunk_size = chunking_config.get('chunk_size', 1000)
+        self.chunk_overlap = chunking_config.get('overlap', 200)
+
+        # Get transformer service URL
+        self.transformer_url = self._get_transformer_url()
+
+    def _get_transformer_url(self) -> str:
+        """Get transformer service URL from config with fallback to sandbox health check."""
+        try:
+            # Primary: Use config
+            transformer_url = self.config.get_transformer_url()
+            if transformer_url:
+                return transformer_url
+
+            # Fallback: Try to get from sandbox health endpoint
+            sandbox_url = self.config.get_sandbox_url()
+            health_endpoint = f"{sandbox_url}/health"
+            response = requests.get(health_endpoint, timeout=2)
+            
+            if response.status_code == 200:
+                data = response.json()
+                retriever = data.get('retriever', {})
+                transformer_health = retriever.get('transformer', {})
+                transformer_url = transformer_health.get('url')
+                if transformer_url:
+                    return transformer_url
+            
+            # Default fallback
+            return "http://localhost:16050"
+        except Exception as e:
+            handle_exception(e, context={
+                'function': '_get_transformer_url',
+                'error_type': 'TransformerURLResolution'
+            })
+            return "http://localhost:16050"
+
+    def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
+        """Generate embedding for text using transformer service.
+
+        Args:
+            text: Text to embed
+
+        Returns:
+            Numpy array of embedding vector, or None if failed
+        """
+        if not self.embed_enabled:
+            return None
+
+        try:
+            endpoint = f"{self.transformer_url}/api/generate-embedding"
+            response = requests.post(
+                endpoint,
+                json={'text': text},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                embedding = data.get('embedding')
+                if embedding:
+                    return np.array(embedding, dtype=np.float32)
+            return None
+        except Exception as e:
+            handle_exception(e, context={
+                'function': '_generate_embedding',
+                'error_type': 'EmbeddingGeneration'
+            })
+            return None
 
     def is_enabled(self) -> bool:
         """Check if Spark context is enabled."""
@@ -107,7 +195,7 @@ class SparkContextManager:
         return chunks
 
     def load_file(self, file_path: str, label: Optional[str] = None) -> Tuple[bool, str]:
-        """Load a file as Spark context.
+        """Load a file as Spark context with embedding generation.
 
         Args:
             file_path: Path to file to load
@@ -161,11 +249,48 @@ class SparkContextManager:
             timestamp=datetime.now().isoformat()
         )
 
+        # Generate embeddings if enabled
+        if self.embed_enabled:
+            try:
+                # Check if chunking is needed
+                if self.chunking_enabled and len(content) > self.chunk_size:
+                    # Chunk the content
+                    spark.chunks = self._chunk_content(content, self.chunk_size, self.chunk_overlap)
+                    
+                    # Generate embeddings for each chunk
+                    for chunk in spark.chunks:
+                        embedding = self._generate_embedding(chunk)
+                        if embedding is not None:
+                            spark.chunk_embeddings.append(embedding)
+                else:
+                    # Single chunk - generate full embedding
+                    embedding = self._generate_embedding(content)
+                    if embedding is not None:
+                        spark.embedding = embedding
+            except Exception as e:
+                handle_exception(e, context={
+                    'function': 'load_file',
+                    'file_path': file_path,
+                    'label': label,
+                    'error_type': 'EmbeddingGeneration'
+                })
+
         # Add to contexts
         self.contexts.append(spark)
 
         size_kb = spark.get_size_kb()
-        return True, f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB) from {file_path}"
+        
+        # Build success message with embedding info
+        if self.embed_enabled:
+            if spark.is_chunked():
+                msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB, {len(spark.chunks)} chunks, {len(spark.chunk_embeddings)} embeddings) from {file_path}"
+            else:
+                embedding_status = "embedding generated" if spark.embedding is not None else "no embedding"
+                msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB, 1 chunk, {embedding_status}) from {file_path}"
+        else:
+            msg = f"✓ Loaded Spark '{label}' ({size_kb:.1f}KB) from {file_path}"
+        
+        return True, msg
 
     def load_directory(self, dir_path: str, label_prefix: Optional[str] = None) -> Tuple[bool, str]:
         """Load all files in a directory as Spark contexts.
@@ -322,3 +447,30 @@ class SparkContextManager:
             Number of contexts
         """
         return len(self.contexts)
+
+    def get_embeddings(self) -> List[np.ndarray]:
+        """Return all embeddings (for advanced semantic operations).
+
+        Returns:
+            List of embedding arrays
+        """
+        if not self.embed_enabled:
+            return []
+
+        try:
+            embeddings = []
+            for ctx in self.contexts:
+                # Add full document embedding if it exists
+                if ctx.embedding is not None:
+                    embeddings.append(ctx.embedding)
+                # Add chunk embeddings if they exist
+                elif ctx.chunk_embeddings:
+                    embeddings.extend(ctx.chunk_embeddings)
+
+            return embeddings
+        except Exception as e:
+            handle_exception(e, context={
+                'function': 'get_embeddings',
+                'error_type': 'EmbeddingRetrieval'
+            })
+            return []

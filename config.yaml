@@ -157,3 +157,14 @@ spark_context:
   max_file_size_mb: 10
   # Maximum number of Spark contexts (in-memory only, higher limit than ephemeral)
   max_contexts: 20
+  # Embedding configuration
+  embed:
+    # Enable/disable embedding generation for Spark contexts
+    enabled: true
+  # Text chunking configuration (for large files)
+  chunking:
+    enabled: true
+    # Chunk size in characters
+    chunk_size: 1000
+    # Overlap between chunks in characters
+    overlap: 200

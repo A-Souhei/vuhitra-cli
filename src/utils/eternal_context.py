@@ -12,7 +12,6 @@ eternal context is:
 
 import json
 import requests
-import numpy as np
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from pathlib import Path

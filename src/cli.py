@@ -326,7 +326,7 @@ def interactive_mode(model, verbose=False):
             if len(args) < 2:
                 return CommandResult(
                     success=False,
-                    message="Usage: /clear ephemeral <label> - Clear specific context\n"
+                    message="Usage: /clear ephemeral <label> - Clear specific ephemeral context\n"
                             "       /clear ephemeral --all - Clear all ephemeral contexts"
                 )
 

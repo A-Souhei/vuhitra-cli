@@ -1,6 +1,8 @@
-# Ephemeral Context: Session-Scoped RAG Dimension
+# Ephemeral Context (Session-Scoped): Deep Dive
 
 ## Overview
+
+> **Note:** This document provides a focused deep dive into the *ephemeral context* feature. For a comprehensive overview of all context dimensions (including both ephemeral and eternal/persistent context), see [context-dimensions.md](./context-dimensions.md).
 
 Ephemeral Context is a new dimension in the vuhitra-cli RAG (Retrieval-Augmented Generation) system that provides session-scoped, file-based context injection. Unlike the existing conversation history (dynamic, incremental) and heuristics (cross-session, retrieved), ephemeral context is:
 
@@ -11,7 +13,7 @@ Ephemeral Context is a new dimension in the vuhitra-cli RAG (Retrieval-Augmented
 
 ## Architecture
 
-### Three-Layer RAG Context
+### Four-Layer RAG Context
 
 ```
 ┌─────────────────────────────────────────────────────────┐

@@ -401,7 +401,8 @@ def test_storage_directory_creation():
         storage_path = Path(temp_dir) / "nested" / "storage"
         assert not storage_path.exists()
 
-        manager = EternalContextManager(enabled=True, storage_dir=str(storage_path))
+        # Create manager to trigger storage directory creation
+        _ = EternalContextManager(enabled=True, storage_dir=str(storage_path))
         assert storage_path.exists(), "Storage directory should be created"
         assert storage_path.is_dir()
 

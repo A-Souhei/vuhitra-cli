@@ -133,10 +133,19 @@ def print_context_verbose(heuristic_data: dict):
     scoring = heuristic_data.get('scoring_breakdown', {})
     if scoring:
         score_branch = tree.add("📊 [cyan]Scoring Breakdown[/cyan]")
-        score_branch.add(f"[yellow]Keyword Score:[/yellow] {scoring.get('keyword_score', 0):.3f}")
-        score_branch.add(f"[yellow]Levenshtein Score:[/yellow] {scoring.get('levenshtein_score', 0):.3f}")
-        score_branch.add(f"[yellow]Semantic Score:[/yellow] {scoring.get('semantic_score', 0):.3f}")
-        score_branch.add(f"[yellow]Final Score:[/yellow] {scoring.get('final_score', 0):.3f}")
+        
+        # New embedding-based scoring (pure similarity)
+        if 'embedding_similarity' in scoring:
+            score_branch.add(f"[yellow]Embedding Similarity:[/yellow] {scoring.get('embedding_similarity', 0):.1%}")
+            boost = scoring.get('negative_weight_boost_applied', 0)
+            if boost > 0:
+                score_branch.add(f"[yellow]Negative Boost Applied:[/yellow] {boost:.3f}")
+        # Legacy scoring (backward compatibility)
+        else:
+            score_branch.add(f"[yellow]Keyword Score:[/yellow] {scoring.get('keyword_score', 0):.3f}")
+            score_branch.add(f"[yellow]Levenshtein Score:[/yellow] {scoring.get('levenshtein_score', 0):.3f}")
+            score_branch.add(f"[yellow]Semantic Score:[/yellow] {scoring.get('semantic_score', 0):.3f}")
+            score_branch.add(f"[yellow]Final Score:[/yellow] {scoring.get('final_score', 0):.3f}")
 
     console.print(tree)
     console.print()

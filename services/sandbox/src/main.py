@@ -44,9 +44,14 @@ es_client_instance = ElasticSearchClient(
 retriever = HeuristicsRetriever(
     es_client=es_client_instance.es,
     index_name=os.getenv('ELASTICSEARCH_INDEX', 'llm_feedback'),
-    es_client_wrapper=es_client_instance
+    es_client_wrapper=es_client_instance,
+    transformer_host=os.getenv('TRANSFORMER_HOST', 'transformer'),
+    transformer_port=int(os.getenv('TRANSFORMER_PORT', '5050'))
 )
-insight_extractor = InsightExtractor(nlp_model=retriever.nlp)
+# InsightExtractor loads its own spaCy model for NLP tasks (e.g., entity extraction, linguistic analysis).
+# Note: The retriever no longer depends on spaCy; it uses transformer embeddings for semantic similarity.
+# Only InsightExtractor requires spaCy for text analysis and insight formatting.
+insight_extractor = InsightExtractor()
 
 # Initialize heuristics pruner
 config_loader = HeuristicsConfigLoader()

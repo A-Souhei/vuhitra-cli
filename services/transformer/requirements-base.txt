@@ -1,0 +1,3 @@
+# Base dependencies that are required by heavy packages
+# Install these first to avoid cache invalidation
+numpy>=1.21.0,<2.0.0

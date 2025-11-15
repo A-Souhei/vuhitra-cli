@@ -14,7 +14,7 @@ class FeedbackCollector:
     """Collects user satisfaction ratings after LLM responses."""
 
     SENTIMENT_LABELS = {
-        0: "Disappointed",
+        0: "Irrelevant",
         1: "Very dissatisfied",
         2: "Dissatisfied",
         3: "Neutral",

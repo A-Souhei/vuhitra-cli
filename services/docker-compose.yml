@@ -74,6 +74,8 @@ services:
       - app
     ports:
       - "15050:5050"     # Transformer service port
+    volumes:
+      - transformer_models:/root/.cache/huggingface  # Cache HuggingFace models
     environment:
       - FLASK_DEBUG=false
       - ENVIRONMENT=${ENVIRONMENT:-DEV}
@@ -279,6 +281,8 @@ volumes:
   elasticsearch_logs:
     driver: local
   ollama_data:
+    driver: local
+  transformer_models:
     driver: local
 
 networks:

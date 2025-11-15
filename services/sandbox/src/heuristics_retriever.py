@@ -103,7 +103,7 @@ class HeuristicsRetriever:
         if self.es:
             try:
                 health['elasticsearch'] = self.es.ping()
-            except:
+            except Exception:
                 pass
         
         # Check transformer service
@@ -113,7 +113,7 @@ class HeuristicsRetriever:
                 timeout=2
             )
             health['transformer_service'] = response.status_code == 200
-        except:
+        except Exception:
             pass
         
         health['overall'] = health['elasticsearch'] and health['transformer_service']
@@ -361,7 +361,6 @@ class HeuristicsRetriever:
                 if similarity_score < self.MIN_SIMILARITY:
                     continue
                 
-                rating = doc.get('rating', 2)
                 # Use ONLY embedding similarity (no rating weighting)
                 # For negative heuristics, rating is kept for filtering only
                 

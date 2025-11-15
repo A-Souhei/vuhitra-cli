@@ -48,7 +48,9 @@ retriever = HeuristicsRetriever(
     transformer_host=os.getenv('TRANSFORMER_HOST', 'transformer'),
     transformer_port=int(os.getenv('TRANSFORMER_PORT', '5050'))
 )
-# InsightExtractor will load its own spaCy model
+# InsightExtractor loads its own spaCy model for NLP tasks (e.g., entity extraction, linguistic analysis).
+# Note: The retriever no longer depends on spaCy; it uses transformer embeddings for semantic similarity.
+# Only InsightExtractor requires spaCy for text analysis and insight formatting.
 insight_extractor = InsightExtractor()
 
 # Initialize heuristics pruner

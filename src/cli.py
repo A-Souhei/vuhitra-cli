@@ -113,7 +113,7 @@ def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
         response = requests.post(
             endpoint,
             json=request_json,
-            timeout=15  # Increased timeout for transformer model loading on first request
+            timeout=15  # Increased timeout for embedding generation and potential network latency
         )
         response.raise_for_status()
         data = response.json()

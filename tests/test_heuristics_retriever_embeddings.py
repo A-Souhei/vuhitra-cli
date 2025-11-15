@@ -4,7 +4,7 @@ Tests for the embedding-based HeuristicsRetriever.
 These tests work without requiring Docker containers by mocking the transformer service.
 """
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from services.sandbox.src.heuristics_retriever import HeuristicsRetriever
 from tests.mocks.mock_transformer_service import MockTransformerService, MockResponse, mock_generate_embedding_request
 

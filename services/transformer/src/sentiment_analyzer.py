@@ -6,7 +6,7 @@ Provides more accurate contextual sentiment analysis compared to rule-based appr
 """
 
 from transformers import pipeline
-from typing import Dict, Optional
+from typing import Dict
 import logging
 
 logger = logging.getLogger(__name__)

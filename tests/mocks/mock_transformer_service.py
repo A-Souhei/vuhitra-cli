@@ -5,7 +5,7 @@ This mock provides fake embeddings for testing the heuristics retriever
 without needing the actual transformer service running.
 """
 import numpy as np
-from typing import List, Optional
+from typing import List
 
 
 class MockTransformerService:

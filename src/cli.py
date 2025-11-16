@@ -3,6 +3,8 @@ import os
 import logging
 import requests
 import time
+import zipfile
+import tempfile
 from pathlib import Path
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
@@ -859,9 +861,6 @@ def interactive_mode(model, verbose=False):
 
             elif subcommand == "revert+sync":
                 # Sync changes from sandbox mirror back to host
-                import zipfile
-                import tempfile
-
                 # First, get the file list to understand what we're downloading
                 metadata_response = requests.post(
                     f"{sandbox_url}/revert-sync",

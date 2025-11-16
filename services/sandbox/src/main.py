@@ -830,11 +830,11 @@ def download_mirror(target_name):
         # If target is a directory, create a zip archive
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for file_path in target_path.rglob('*'):
-                if file_path.is_file():
+            for item_path in target_path.rglob('*'):
+                if item_path.is_file():
                     # Get path relative to the mirror directory
-                    arcname = file_path.relative_to(target_path)
-                    zf.write(file_path, arcname=str(arcname))
+                    arcname = item_path.relative_to(target_path)
+                    zf.write(item_path, arcname=str(arcname))
 
         memory_file.seek(0)
 

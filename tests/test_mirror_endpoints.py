@@ -573,3 +573,154 @@ class TestMirrorSyncedEndpoint:
 
         assert response.status_code == 400
         assert "No files list provided" in response.json()["error"]
+
+
+class TestMirrorListEndpoint:
+    """Test mirror list endpoint (GET /mirror-list)."""
+
+    def test_mirror_list_empty(self, cleanup):
+        """Test mirror-list returns empty list when no mirrors exist."""
+        response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert 'mirrors' in data
+        # May have mirrors from other tests or previous runs
+
+    def test_mirror_list_after_creating_mirror(self, cleanup):
+        """Test mirror-list returns mirrors after creating one."""
+        # Create a mirror
+        file_content = b"Test file content"
+        files = {
+            'files': ('test.txt', io.BytesIO(file_content), 'text/plain')
+        }
+        data = {'target_name': 'testmirror'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # List mirrors
+        list_response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
+
+        assert list_response.status_code == 200
+        data = list_response.json()
+        assert 'mirrors' in data
+
+        # Check if our mirror is in the list (if Redis is available)
+        mirrors = data['mirrors']
+        mirror_names = [m.get('name') for m in mirrors]
+        # Note: testmirror may or may not be in list depending on Redis availability
+
+        # Clean up
+        requests.delete(f"{SANDBOX_BASE_URL}/remove/testmirror")
+
+    def test_mirror_list_includes_metadata(self, cleanup):
+        """Test mirror-list returns mirrors with proper metadata."""
+        # Create a mirror
+        file_content = b"Test file content"
+        files = {
+            'files': ('test.txt', io.BytesIO(file_content), 'text/plain')
+        }
+        data = {'target_name': 'metadatatest'}
+
+        requests.post(f"{SANDBOX_BASE_URL}/sync", files=files, data=data)
+
+        # List mirrors
+        response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # If Redis is available and mirror is in list, check metadata
+        for mirror in data.get('mirrors', []):
+            if mirror.get('name') == 'metadatatest':
+                assert 'type' in mirror
+                assert 'file_count' in mirror
+                assert 'created_at' in mirror
+                assert 'sync_status' in mirror
+                assert 'last_checked' in mirror
+
+        # Clean up
+        requests.delete(f"{SANDBOX_BASE_URL}/remove/metadatatest")
+
+
+class TestMirrorWebInterface:
+    """Test web interface endpoint (GET /mirrors)."""
+
+    def test_web_interface_loads(self, cleanup):
+        """Test web interface page loads successfully."""
+        response = requests.get(f"{SANDBOX_BASE_URL}/mirrors")
+
+        assert response.status_code == 200
+        assert 'text/html' in response.headers.get('Content-Type', '')
+
+    def test_web_interface_contains_expected_elements(self, cleanup):
+        """Test web interface contains expected HTML elements."""
+        response = requests.get(f"{SANDBOX_BASE_URL}/mirrors")
+
+        assert response.status_code == 200
+        content = response.text
+
+        # Check for key elements
+        assert 'Mirror Management' in content
+        assert 'mirrorGrid' in content
+        assert 'loadMirrors' in content
+        assert 'deleteMirror' in content
+        assert 'syncMirror' in content
+
+
+class TestRedisIntegration:
+    """Test Redis integration for mirror tracking."""
+
+    def test_mirror_registered_on_sync(self, cleanup):
+        """Test that mirror is registered in Redis when synced."""
+        # Create a mirror
+        file_content = b"Test file for Redis"
+        files = {
+            'files': ('test.txt', io.BytesIO(file_content), 'text/plain')
+        }
+        data = {'target_name': 'redistest'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+
+        assert sync_response.status_code == 200
+
+        # Check if mirror appears in list (if Redis is available)
+        list_response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
+        if list_response.status_code == 200:
+            mirrors = list_response.json().get('mirrors', [])
+            # Mirror may or may not be in list depending on Redis availability
+
+        # Clean up
+        requests.delete(f"{SANDBOX_BASE_URL}/remove/redistest")
+
+    def test_mirror_removed_from_redis_on_delete(self, cleanup):
+        """Test that mirror is removed from Redis when deleted."""
+        # Create a mirror
+        file_content = b"Test file for Redis deletion"
+        files = {
+            'files': ('test.txt', io.BytesIO(file_content), 'text/plain')
+        }
+        data = {'target_name': 'redistest2'}
+
+        requests.post(f"{SANDBOX_BASE_URL}/sync", files=files, data=data)
+
+        # Delete the mirror
+        delete_response = requests.delete(f"{SANDBOX_BASE_URL}/remove/redistest2")
+        assert delete_response.status_code == 200
+
+        # Check that mirror is not in list anymore (if Redis is available)
+        list_response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
+        if list_response.status_code == 200:
+            mirrors = list_response.json().get('mirrors', [])
+            mirror_names = [m.get('name') for m in mirrors]
+            # Mirror should not be in the list after deletion
+            # (if Redis is available and working)

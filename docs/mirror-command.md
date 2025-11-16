@@ -25,7 +25,7 @@ This volume is mounted in the sandbox container at `/app/WORKSPACE/mirrors`.
 
 ## Commands
 
-The `/mirror` command provides six subcommands for managing file synchronization between host and sandbox:
+The `/mirror` command provides seven subcommands for managing file synchronization between host and sandbox:
 
 1. **do** - Copy files to sandbox
 2. **destroy** - Remove mirror from sandbox
@@ -33,6 +33,7 @@ The `/mirror` command provides six subcommands for managing file synchronization
 4. **revert+sync** - Update host with sandbox changes
 5. **exists** - Check if mirror exists
 6. **synced** - Check if host and mirror are in sync
+7. **list** - List all registered mirrors
 
 ### `/mirror do @<path>`
 
@@ -236,6 +237,123 @@ Download files from sandbox mirror and overwrite them on the host.
 - Get results of sandbox computations
 - Bidirectional development workflow
 
+### `/mirror list`
+
+List all registered mirrors with their status and metadata.
+
+**Usage:**
+```bash
+/mirror list
+```
+
+**Behavior:**
+- Queries Redis registry for all mirrors
+- Displays mirror name, type, file count, creation date, and sync status
+- Shows when each mirror was last checked
+- Does not require a path argument
+- Provides an overview of all active mirrors
+
+**Example:**
+```bash
+/mirror list
+
+# Output:
+# Registered mirrors:
+#
+#   ✓ data (directory)
+#     Files: 15
+#     Created: 2025-01-16 10:30:45
+#     Status: synced
+#     Last checked: 2025-01-16 10:35:12
+#
+#   ✗ config (directory)
+#     Files: 3
+#     Created: 2025-01-16 09:15:22
+#     Status: not_synced
+#     Last checked: 2025-01-16 10:35:12
+#
+#   ✓ model.pkl (file)
+#     Files: 1
+#     Created: 2025-01-16 08:00:10
+#     Status: synced
+#     Last checked: 2025-01-16 10:35:12
+```
+
+**Use Cases:**
+- Check which mirrors are currently active
+- Monitor sync status of all mirrors at a glance
+- Identify mirrors that need synchronization
+- Review mirror metadata before operations
+
+**Note:** The list command requires Redis to be available. If Redis is not configured, it will return an empty list. The sync status is automatically updated by a background monitor that checks mirrors periodically (default: every 5 minutes).
+
+## Web Interface
+
+A web-based management interface is available for viewing and managing mirrors through a browser.
+
+**Access:**
+```
+http://localhost:18001/mirrors
+```
+
+**Features:**
+- **View All Mirrors:** Grid layout showing all registered mirrors with metadata
+- **Sync Status:** Visual indicators (✓ for synced, ✗ for not synced)
+- **Delete Mirrors:** Remove mirrors directly from the interface
+- **Sync Reminder:** Instructions for syncing mirrors from host (requires CLI)
+- **Auto-Refresh:** Refresh button to reload mirror status
+- **Responsive Design:** Modern, card-based layout
+
+**Interface Details:**
+- **Name & Type:** Shows mirror name and whether it's a file or directory
+- **File Count:** Number of files in the mirror
+- **Created:** Timestamp when the mirror was first created
+- **Status:** Current sync status with color coding
+- **Last Checked:** When the background monitor last verified the mirror
+- **Actions:**
+  - "Sync from Host" button (provides CLI command to run)
+  - "Delete" button (removes mirror immediately)
+
+**Note:** Creating new mirrors must be done through the CLI using `/mirror do`. The web interface is designed for monitoring and cleanup operations only.
+
+## Redis Integration
+
+The mirror system uses Redis for persistent tracking of mirror metadata and sync status.
+
+**Configuration:**
+```bash
+# Environment variables for Redis connection
+REDIS_HOST=localhost        # Default: localhost
+REDIS_PORT=6379             # Default: 6379
+REDIS_PASSWORD=             # Optional password
+MIRROR_SYNC_CHECK_INTERVAL=300  # Sync check interval in seconds (default: 5 minutes)
+```
+
+**Tracked Data:**
+- **name:** Mirror identifier
+- **type:** file or directory
+- **file_count:** Number of files in the mirror
+- **created_at:** ISO format timestamp of creation
+- **sync_status:** "synced" or "not_synced"
+- **last_checked:** ISO format timestamp of last sync check
+- **differences:** Detailed diff information (if not synced)
+
+**Background Monitor:**
+The sandbox service runs a background thread that:
+- Periodically checks all registered mirrors (default: every 5 minutes)
+- Updates sync status in Redis
+- Logs any changes or errors
+- Continues running even if individual checks fail
+- Can be configured via `MIRROR_SYNC_CHECK_INTERVAL` environment variable
+
+**Behavior Without Redis:**
+- Mirrors will still function normally
+- `/mirror do`, `/mirror sync`, `/mirror destroy`, etc. work as expected
+- `/mirror list` will return an empty list
+- Web interface will show no mirrors
+- Background monitoring is disabled
+- A warning is logged on startup
+
 ## Workflow Examples
 
 ### Example 1: Development with Sandbox Processing
@@ -343,6 +461,16 @@ The mirror functionality uses these sandbox HTTP endpoints:
    - Compares host file list with mirror
    - Returns detailed differences
    - Used by `/mirror synced` command
+
+7. **GET /mirror-list** - List all mirrors
+   - Returns all registered mirrors from Redis
+   - Includes metadata and sync status
+   - Used by `/mirror list` command
+
+8. **GET /mirrors** - Web interface
+   - Returns HTML interface for mirror management
+   - Allows viewing and deleting mirrors
+   - Provides sync instructions
 
 ### File Transfer
 

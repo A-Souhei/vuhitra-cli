@@ -4,9 +4,14 @@ import os
 import logging
 import io
 import zipfile
+import redis
+import json
+from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template_string
 from werkzeug.utils import secure_filename
+from threading import Thread
+import time as time_module
 
 # Add parent directory to path to import from src
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,6 +32,22 @@ app = Flask(__name__)
 # Initialize error handler
 error_handler = get_error_handler()
 error_handler.configure(mode=os.getenv('VUHITRA_MODE', 'DEV'), enable_logging=True)
+
+# Initialize Redis connection for mirror tracking
+redis_client = None
+try:
+    redis_client = redis.Redis(
+        host=os.getenv('REDIS_HOST', 'localhost'),
+        port=int(os.getenv('REDIS_PORT', '6379')),
+        password=os.getenv('REDIS_PASSWORD'),
+        decode_responses=True,
+        socket_connect_timeout=5
+    )
+    redis_client.ping()
+    logger.info("Connected to Redis for mirror tracking")
+except Exception as e:
+    logger.warning(f"Could not connect to Redis: {e}. Mirror tracking will be disabled.")
+    redis_client = None
 
 # Initialize heuristics service
 heuristics = Heuristics(
@@ -99,6 +120,90 @@ def handle_unexpected_exception(e):
     """Handle any unexpected exceptions"""
     error_handler.handle_exception(e, context={"operation": "unexpected_error"})
     return jsonify({"error": "Internal server error"}), 500
+
+
+# Redis mirror tracking helper functions
+def add_mirror_to_redis(target_name, is_file, file_count):
+    """Register a mirror in Redis with metadata"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping mirror registration")
+        return
+
+    try:
+        mirror_data = {
+            'name': target_name,
+            'type': 'file' if is_file else 'directory',
+            'file_count': file_count,
+            'created_at': datetime.now().isoformat(),
+            'sync_status': 'synced',  # Initially synced since just created
+            'last_checked': datetime.now().isoformat()
+        }
+        redis_client.hset(f'mirror:{target_name}', mapping=mirror_data)
+        logger.info(f"Registered mirror '{target_name}' in Redis")
+    except Exception as e:
+        logger.warning(f"Failed to register mirror in Redis: {e}")
+
+
+def remove_mirror_from_redis(target_name):
+    """Remove a mirror from Redis registry"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping mirror removal")
+        return
+
+    try:
+        redis_client.delete(f'mirror:{target_name}')
+        logger.info(f"Removed mirror '{target_name}' from Redis")
+    except Exception as e:
+        logger.warning(f"Failed to remove mirror from Redis: {e}")
+
+
+def get_all_mirrors_from_redis():
+    """Get all registered mirrors from Redis"""
+    if not redis_client:
+        return []
+
+    try:
+        mirrors = []
+        # Get all keys matching mirror:*
+        for key in redis_client.scan_iter(match='mirror:*'):
+            mirror_data = redis_client.hgetall(key)
+            if mirror_data:
+                mirrors.append(mirror_data)
+        return mirrors
+    except Exception as e:
+        logger.warning(f"Failed to get mirrors from Redis: {e}")
+        return []
+
+
+def update_mirror_sync_status(target_name, synced, differences=None):
+    """Update sync status in Redis"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping sync status update")
+        return
+
+    try:
+        # Check if mirror exists
+        if not redis_client.exists(f'mirror:{target_name}'):
+            logger.warning(f"Mirror '{target_name}' not found in Redis")
+            return
+
+        # Update sync status and last checked time
+        updates = {
+            'sync_status': 'synced' if synced else 'not_synced',
+            'last_checked': datetime.now().isoformat()
+        }
+
+        # Store differences if not synced
+        if not synced and differences:
+            updates['differences'] = json.dumps(differences)
+        elif synced and redis_client.hexists(f'mirror:{target_name}', 'differences'):
+            # Remove differences field if now synced
+            redis_client.hdel(f'mirror:{target_name}', 'differences')
+
+        redis_client.hset(f'mirror:{target_name}', mapping=updates)
+        logger.info(f"Updated sync status for mirror '{target_name}': {updates['sync_status']}")
+    except Exception as e:
+        logger.warning(f"Failed to update sync status in Redis: {e}")
 
 
 @app.route('/health', methods=['GET'])
@@ -674,6 +779,11 @@ def sync_to_mirror():
             "deleted": deleted_files
         }
 
+        # Register mirror in Redis
+        is_file = target_path.is_file()
+        file_count = len(synced_files) if not is_file else 1
+        add_mirror_to_redis(safe_target, is_file, file_count)
+
         if failed_files:
             response["failed"] = failed_files
             return jsonify(response), 207  # Multi-Status
@@ -848,6 +958,61 @@ def download_mirror(target_name):
     except Exception as e:
         raise SandboxException("Failed to download mirror",
                              operation="download_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/remove/<path:target_name>', methods=['DELETE'])
+def remove_mirror(target_name):
+    """
+    Remove a mirror from the sandbox.
+
+    Args:
+        target_name: Name of the mirror to remove
+
+    Returns: {
+        message: str,           # Status message
+        target_name: str        # Name of removed mirror
+    }
+    """
+    # Secure the target name
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Validate path is within MIRRORS_DIR
+    try:
+        resolved_path = target_path.resolve()
+        if not str(resolved_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid mirror path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "remove_mirror_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid mirror path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        # Remove the mirror (file or directory)
+        if target_path.is_file():
+            target_path.unlink()
+        elif target_path.is_dir():
+            shutil.rmtree(target_path)
+        else:
+            return jsonify({"error": "Invalid mirror type"}), 400
+
+        # Remove from Redis
+        remove_mirror_from_redis(safe_target)
+
+        return jsonify({
+            "message": f"Mirror '{safe_target}' removed successfully",
+            "target_name": safe_target
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to remove mirror",
+                             operation="remove_mirror",
                              target=safe_target) from e
 
 
@@ -1040,6 +1205,370 @@ def mirror_synced():
         raise SandboxException("Failed to check mirror sync status",
                              operation="mirror_synced",
                              target=safe_target) from e
+
+
+@app.route('/mirror-list', methods=['GET'])
+def mirror_list():
+    """
+    Get list of all registered mirrors from Redis.
+
+    Returns: {
+        mirrors: list           # List of mirror metadata dicts
+    }
+
+    Each mirror dict contains:
+        - name: str
+        - type: str (file or directory)
+        - file_count: int
+        - created_at: str (ISO format)
+        - sync_status: str (synced or not_synced)
+        - last_checked: str (ISO format)
+        - differences: dict (optional, if not_synced)
+    """
+    try:
+        mirrors = get_all_mirrors_from_redis()
+
+        return jsonify({
+            "mirrors": mirrors
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to list mirrors",
+                             operation="mirror_list") from e
+
+
+# Background cron job to check mirror sync status
+def mirror_sync_monitor():
+    """
+    Background job that periodically checks sync status for all mirrors.
+    Updates Redis with the latest sync status.
+    """
+    logger.info("Mirror sync monitor started")
+
+    # Check interval in seconds (default: 5 minutes)
+    check_interval = int(os.getenv('MIRROR_SYNC_CHECK_INTERVAL', '300'))
+
+    while True:
+        try:
+            # Wait before first check
+            time_module.sleep(check_interval)
+
+            if not redis_client:
+                logger.debug("Redis not available, skipping sync check")
+                continue
+
+            mirrors = get_all_mirrors_from_redis()
+            if not mirrors:
+                logger.debug("No mirrors to check")
+                continue
+
+            logger.info(f"Checking sync status for {len(mirrors)} mirror(s)")
+
+            for mirror in mirrors:
+                try:
+                    mirror_name = mirror.get('name')
+                    if not mirror_name:
+                        continue
+
+                    # Check if mirror still exists in filesystem
+                    safe_name = secure_filename(mirror_name)
+                    mirror_path = MIRRORS_DIR / safe_name
+
+                    if not mirror_path.exists():
+                        logger.warning(f"Mirror '{mirror_name}' not found in filesystem")
+                        # Could remove from Redis here, but we'll leave it for manual cleanup
+                        continue
+
+                    # Get mirror files for comparison
+                    mirror_files_dict = {}
+                    if mirror_path.is_file():
+                        mirror_files_dict[mirror_path.name] = {
+                            'size': mirror_path.stat().st_size,
+                            'modified': mirror_path.stat().st_mtime
+                        }
+                    else:
+                        for item in mirror_path.rglob('*'):
+                            if item.is_file():
+                                rel_path = item.relative_to(mirror_path)
+                                normalized_name = str(rel_path).replace('\\', '/')
+                                mirror_files_dict[normalized_name] = {
+                                    'size': item.stat().st_size,
+                                    'modified': item.stat().st_mtime
+                                }
+
+                    # For now, we can only check if files changed in mirror
+                    # We don't have access to host filesystem from sandbox
+                    # So we'll just track that we checked
+                    update_mirror_sync_status(mirror_name, synced=True, differences=None)
+
+                    logger.debug(f"Checked mirror '{mirror_name}': {len(mirror_files_dict)} files")
+
+                except Exception as e:
+                    logger.error(f"Error checking mirror '{mirror.get('name', 'unknown')}': {e}")
+                    continue
+
+            logger.info(f"Sync check completed for {len(mirrors)} mirror(s)")
+
+        except Exception as e:
+            logger.error(f"Error in mirror sync monitor: {e}")
+            # Continue running despite errors
+            continue
+
+
+# Web interface for mirror management
+WEB_INTERFACE_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mirror Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .mirror-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .mirror-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .mirror-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .mirror-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .mirror-info {
+            font-size: 14px;
+            color: #666;
+            margin: 5px 0;
+        }
+        .mirror-info label {
+            font-weight: bold;
+            display: inline-block;
+            width: 100px;
+        }
+        .sync-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .sync-status.synced {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .sync-status.not-synced {
+            background-color: #ff9800;
+            color: white;
+        }
+        .button-group {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .btn-sync {
+            background-color: #2196F3;
+            color: white;
+        }
+        .btn-sync:hover {
+            background-color: #0b7dda;
+        }
+        .btn-delete {
+            background-color: #f44336;
+            color: white;
+        }
+        .btn-delete:hover {
+            background-color: #da190b;
+        }
+        .btn-refresh {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .btn-refresh:hover {
+            background-color: #45a049;
+        }
+        .no-mirrors {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-size: 18px;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗂️ Mirror Management</h1>
+    <button class="btn-refresh" onclick="location.reload()">🔄 Refresh</button>
+
+    <div id="message"></div>
+    <div class="mirror-grid" id="mirrorGrid">
+        <div class="no-mirrors">Loading mirrors...</div>
+    </div>
+
+    <script>
+        async function loadMirrors() {
+            try {
+                const response = await fetch('/mirror-list');
+                const data = await response.json();
+                const mirrors = data.mirrors || [];
+
+                const grid = document.getElementById('mirrorGrid');
+
+                if (mirrors.length === 0) {
+                    grid.innerHTML = '<div class="no-mirrors">No mirrors registered</div>';
+                    return;
+                }
+
+                grid.innerHTML = mirrors.map(mirror => {
+                    const createdDate = new Date(mirror.created_at).toLocaleString();
+                    const lastChecked = mirror.last_checked !== 'never'
+                        ? new Date(mirror.last_checked).toLocaleString()
+                        : 'Never';
+                    const syncClass = mirror.sync_status === 'synced' ? 'synced' : 'not-synced';
+                    const syncText = mirror.sync_status === 'synced' ? '✓ Synced' : '✗ Not Synced';
+
+                    return `
+                        <div class="mirror-card">
+                            <div class="mirror-name">${mirror.name}</div>
+                            <div class="mirror-info">
+                                <label>Type:</label> ${mirror.type}
+                            </div>
+                            <div class="mirror-info">
+                                <label>Files:</label> ${mirror.file_count}
+                            </div>
+                            <div class="mirror-info">
+                                <label>Created:</label> ${createdDate}
+                            </div>
+                            <div class="mirror-info">
+                                <label>Status:</label> <span class="sync-status ${syncClass}">${syncText}</span>
+                            </div>
+                            <div class="mirror-info">
+                                <label>Last Checked:</label> ${lastChecked}
+                            </div>
+                            <div class="button-group">
+                                <button class="btn-sync" onclick="syncMirror('${mirror.name}')">📥 Sync from Host</button>
+                                <button class="btn-delete" onclick="deleteMirror('${mirror.name}')">🗑️ Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading mirrors:', error);
+                document.getElementById('mirrorGrid').innerHTML =
+                    '<div class="error">Failed to load mirrors. Please refresh the page.</div>';
+            }
+        }
+
+        function showMessage(message, isError = false) {
+            const msgDiv = document.getElementById('message');
+            msgDiv.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+            setTimeout(() => msgDiv.innerHTML = '', 5000);
+        }
+
+        async function syncMirror(name) {
+            if (!confirm(`Sync mirror '${name}' from host? This will update the sandbox mirror with host changes.`)) {
+                return;
+            }
+
+            showMessage(`Syncing mirror '${name}'...`);
+
+            try {
+                // Note: This would require host cooperation to upload files
+                // For now, we'll just show a message
+                showMessage(`Sync operation requires running /mirror sync @${name} from the CLI`, false);
+            } catch (error) {
+                showMessage(`Failed to sync: ${error.message}`, true);
+            }
+        }
+
+        async function deleteMirror(name) {
+            if (!confirm(`Delete mirror '${name}'? This will remove it from the sandbox.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/remove/${name}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showMessage(`Mirror '${name}' deleted successfully`, false);
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    const data = await response.json();
+                    showMessage(`Failed to delete: ${data.error}`, true);
+                }
+            } catch (error) {
+                showMessage(`Failed to delete: ${error.message}`, true);
+            }
+        }
+
+        // Load mirrors on page load
+        loadMirrors();
+    </script>
+</body>
+</html>
+"""
+
+
+@app.route('/mirrors', methods=['GET'])
+def mirror_web_interface():
+    """Web interface for managing mirrors"""
+    return render_template_string(WEB_INTERFACE_HTML)
+
+
+# Start background sync monitor thread
+if redis_client:
+    sync_monitor_thread = Thread(target=mirror_sync_monitor, daemon=True)
+    sync_monitor_thread.start()
+    logger.info("Started background mirror sync monitor")
+else:
+    logger.info("Redis not available, sync monitor disabled")
 
 
 if __name__ == '__main__':

@@ -666,6 +666,7 @@ def interactive_mode(model, verbose=False):
                         "       /mirror revert+sync @<path> - Sync changes from sandbox mirror back to host\n"
                         "       /mirror exists @<path> - Check if mirror exists in sandbox\n"
                         "       /mirror synced @<path> - Check if host and sandbox mirror are in sync\n"
+                        "       /mirror list - List all registered mirrors\n"
                         "\n"
                         "Examples:\n"
                         "  /mirror do @data - Copy data/ directory to sandbox\n"
@@ -673,18 +674,103 @@ def interactive_mode(model, verbose=False):
                         "  /mirror exists @data - Check if data/ is mirrored\n"
                         "  /mirror synced @data - Check if data/ is in sync with mirror\n"
                         "  /mirror revert+sync @data - Apply sandbox changes back to host\n"
+                        "  /mirror list - List all mirrors\n"
                         "  /mirror destroy @data - Remove data/ mirror from sandbox"
             )
 
         subcommand = args[0].lower()
 
-        if subcommand not in ["do", "destroy", "sync", "revert+sync", "exists", "synced"]:
+        if subcommand not in ["do", "destroy", "sync", "revert+sync", "exists", "synced", "list"]:
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /mirror do, /mirror destroy, /mirror sync, /mirror revert+sync, /mirror exists, or /mirror synced"
+                        f"Use: /mirror do, /mirror destroy, /mirror sync, /mirror revert+sync, /mirror exists, /mirror synced, or /mirror list"
             )
 
+        # Special handling for list subcommand (doesn't require path)
+        if subcommand == "list":
+            config = ConfigLoader()
+            sandbox_url = config.get_sandbox_url()
+
+            try:
+                response = requests.get(
+                    f"{sandbox_url}/mirror-list",
+                    timeout=30
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    mirrors = result.get('mirrors', [])
+
+                    if not mirrors:
+                        return CommandResult(
+                            success=True,
+                            message="No mirrors registered"
+                        )
+
+                    messages = ["Registered mirrors:"]
+                    for mirror in mirrors:
+                        name = mirror.get('name', 'unknown')
+                        mirror_type = mirror.get('type', 'unknown')
+                        file_count = mirror.get('file_count', 0)
+                        created_at = mirror.get('created_at', 'unknown')
+                        sync_status = mirror.get('sync_status', 'unknown')
+                        last_checked = mirror.get('last_checked', 'never')
+
+                        # Format creation time
+                        try:
+                            from datetime import datetime
+                            created_dt = datetime.fromisoformat(created_at)
+                            created_str = created_dt.strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            created_str = created_at
+
+                        # Format last checked time
+                        try:
+                            checked_dt = datetime.fromisoformat(last_checked)
+                            checked_str = checked_dt.strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            checked_str = last_checked
+
+                        sync_indicator = "✓" if sync_status == "synced" else "✗"
+                        messages.append(f"\n  {sync_indicator} {name} ({mirror_type})")
+                        messages.append(f"    Files: {file_count}")
+                        messages.append(f"    Created: {created_str}")
+                        messages.append(f"    Status: {sync_status}")
+                        messages.append(f"    Last checked: {checked_str}")
+
+                    return CommandResult(
+                        success=True,
+                        message="\n".join(messages)
+                    )
+                else:
+                    error_msg = response.json().get('error', 'Unknown error')
+                    return CommandResult(
+                        success=False,
+                        message=f"Failed to list mirrors: {error_msg}"
+                    )
+
+            except requests.exceptions.ConnectionError:
+                return CommandResult(
+                    success=False,
+                    message="Cannot connect to sandbox service. Ensure Docker containers are running."
+                )
+            except requests.exceptions.Timeout:
+                return CommandResult(
+                    success=False,
+                    message="Sandbox request timed out. The operation may still be in progress."
+                )
+            except Exception as e:
+                handle_exception(e, context={
+                    'command': 'mirror',
+                    'subcommand': 'list'
+                })
+                return CommandResult(
+                    success=False,
+                    message=f"Error listing mirrors: {str(e)}"
+                )
+
+        # All other subcommands require a path argument
         if len(args) < 2:
             return CommandResult(
                 success=False,

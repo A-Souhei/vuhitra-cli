@@ -24,13 +24,11 @@ packages <- c(
   # Environment and dependency management
   "renv",
 
-  # Core tidyverse and data manipulation
+  # Core tidyverse meta-package
+  # Note: tidyverse includes dplyr, ggplot2, tibble, tidyr, readr, purrr, stringr, forcats, lubridate
   "tidyverse",
-  "lubridate",
-  "tidyr",
-  "readr",
-  "dplyr",
-  "tibble",
+
+  # Additional data manipulation (not in tidyverse)
   "glue",
   "here",
   "zoo",
@@ -39,8 +37,7 @@ packages <- c(
   "DBI",
   "RPostgres",
 
-  # Visualization
-  "ggplot2",
+  # Visualization (not in tidyverse)
   "reshape",
   "reshape2",
   "gridExtra",

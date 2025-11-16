@@ -3,9 +3,6 @@
 # Use official PostgreSQL image as base
 FROM postgres:16-alpine
 
-# Set working directory
-WORKDIR /app
-
 # Set environment variables for PostgreSQL
 ENV POSTGRES_DB=vuhitra \
     POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=C" \

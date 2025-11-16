@@ -12,7 +12,7 @@ services:
     profiles:
       - app
     ports:
-      - "15432:5432"     # PostgreSQL port
+      - "127.0.0.1:15432:5432"     # PostgreSQL port (localhost only for security)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
@@ -20,7 +20,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
       - POSTGRES_DB=${POSTGRES_DB:-vuhitra}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vuhitra} -d ${POSTGRES_DB:-vuhitra}"]
+      test: ["CMD-SHELL", "pg_isready -U vuhitra -d vuhitra"]
       interval: 10s
       timeout: 3s
       retries: 5

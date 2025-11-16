@@ -83,10 +83,11 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     pip install --break-system-packages -r requirements.txt
 
 # Install R packages with proper cache mount for R's package download location
-# R downloads packages to a temporary directory, we'll cache that
+# R uses TMPDIR for package downloads, which we set to our cache directory
 RUN --mount=type=cache,target=/tmp/R_pkg_cache,sharing=shared \
-    R -e "options(repos = list(CRAN = 'https://cloud.r-project.org')); install.packages('lintr', quiet = TRUE)" && \
-    Rscript /tmp/install_r_packages.R && \
+    mkdir -p /tmp/R_pkg_cache && \
+    TMPDIR=/tmp/R_pkg_cache R -e "options(repos = list(CRAN = 'https://cloud.r-project.org')); install.packages('lintr', quiet = TRUE)" && \
+    TMPDIR=/tmp/R_pkg_cache Rscript /tmp/install_r_packages.R && \
     rm /tmp/install_r_packages.R
 
 # Copy and install spaCy large model from local wheel (if exists), otherwise download

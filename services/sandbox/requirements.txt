@@ -34,22 +34,22 @@ SQLAlchemy>=2.0.0
 psycopg2-binary>=2.9.0  # PostgreSQL adapter
 
 # Development and linting tools
-ruff>=0.6.0  # Fast Python linter and formatter
-pylint>=3.0.0
-flake8>=7.0.0
-black>=24.0.0
-mypy>=1.8.0
-isort>=5.13.0
-autopep8>=2.0.0
+ruff>=0.6.0,<1.0.0  # Fast Python linter and formatter
+pylint>=3.0.0,<4.0.0
+flake8>=7.0.0,<8.0.0
+black>=24.0.0,<25.0.0
+mypy>=1.8.0,<2.0.0
+isort>=5.13.0,<6.0.0
+autopep8>=2.0.0,<3.0.0
 
 # Testing tools
-pytest>=8.0.0
-pytest-cov>=4.1.0  # Code coverage for pytest
-pytest-asyncio>=0.23.0  # Async test support
+pytest>=8.0.0,<9.0.0
+pytest-cov>=4.1.0,<5.0.0  # Code coverage for pytest
+pytest-asyncio>=0.23.0,<1.0.0  # Async test support
 
 # Security scanning tools
-bandit>=1.7.0  # Security issue scanner
-safety>=3.0.0  # Dependency vulnerability checker
+bandit>=1.7.0,<2.0.0  # Security issue scanner
+safety>=3.0.0,<4.0.0  # Dependency vulnerability checker
 
 # Jupyter for interactive data analysis
 jupyter>=1.0.0

@@ -40,6 +40,7 @@ services:
       - "18001:8000"     # App port
     volumes:
       - workspace:/app/WORKSPACE
+      - mirrors:/app/WORKSPACE/mirrors
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -273,6 +274,8 @@ volumes:
   redis_data:
     driver: local
   workspace:
+    driver: local
+  mirrors:
     driver: local
   spark-data:
     driver: local

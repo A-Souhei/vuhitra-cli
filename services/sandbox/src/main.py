@@ -65,6 +65,8 @@ pruner = HeuristicsPruner(
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+MIRRORS_DIR = Path("/app/WORKSPACE/mirrors")
+MIRRORS_DIR.mkdir(parents=True, exist_ok=True)
 
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
 MAX_PROMPT_LENGTH = 5000  # Maximum prompt length to prevent memory exhaustion
@@ -576,6 +578,186 @@ def prune_heuristics():
     except Exception as e:
         raise SandboxException("Failed to prune heuristics",
                              operation="prune_heuristics") from e
+
+
+@app.route('/sync', methods=['POST'])
+def sync_to_mirror():
+    """
+    Synchronize files from host to sandbox mirror.
+
+    Expects multipart/form-data with:
+        - files: Multiple files to sync
+        - target_name: Target directory/file name in mirrors
+
+    This will:
+    - Update existing files
+    - Add new files
+    - Delete files in mirror that don't exist in source
+
+    Returns: {
+        message: str,           # Status message
+        target_name: str,       # Name of mirrored directory/file
+        synced: list,          # List of synced files
+        deleted: list          # List of deleted files
+    }
+    """
+    if 'files' not in request.files:
+        return jsonify({"error": "No files provided"}), 400
+
+    target_name = request.form.get('target_name')
+    if not target_name:
+        return jsonify({"error": "No target_name provided"}), 400
+
+    # Secure the target name
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    files = request.files.getlist('files')
+    if not files or all(f.filename == '' for f in files):
+        return jsonify({"error": "No valid files provided"}), 400
+
+    synced_files = []
+    failed_files = []
+
+    try:
+        # Create target directory if it doesn't exist
+        target_path.mkdir(parents=True, exist_ok=True)
+
+        # Track uploaded file names
+        uploaded_names = set()
+
+        # Upload/update files
+        for file in files:
+            if file.filename == '':
+                continue
+
+            # Preserve relative paths
+            filename = file.filename
+            uploaded_names.add(filename)
+            filepath = target_path / filename
+
+            try:
+                # Create subdirectories if needed
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                file.save(str(filepath))
+                synced_files.append(filename)
+            except Exception as e:
+                error_handler.handle_exception(e, context={
+                    "operation": "sync_to_mirror",
+                    "filename": filename,
+                    "target": safe_target
+                })
+                failed_files.append({"filename": filename, "error": "Failed to save file"})
+
+        # Delete files in mirror that weren't uploaded (they were deleted from source)
+        deleted_files = []
+        for item in target_path.rglob('*'):
+            if item.is_file():
+                rel_path = item.relative_to(target_path)
+                if str(rel_path) not in uploaded_names:
+                    try:
+                        item.unlink()
+                        deleted_files.append(str(rel_path))
+                    except Exception as e:
+                        error_handler.handle_exception(e, context={
+                            "operation": "sync_delete_orphaned",
+                            "filename": str(rel_path),
+                            "target": safe_target
+                        })
+
+        response = {
+            "message": f"Synced {len(synced_files)} file(s), deleted {len(deleted_files)} orphaned file(s)",
+            "target_name": safe_target,
+            "synced": synced_files,
+            "deleted": deleted_files
+        }
+
+        if failed_files:
+            response["failed"] = failed_files
+            return jsonify(response), 207  # Multi-Status
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to sync to mirror",
+                             operation="sync_to_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/revert-sync', methods=['POST'])
+def revert_sync_from_mirror():
+    """
+    Synchronize files from sandbox mirror back to requestor.
+
+    Expects JSON: {
+        target_name: str  # Name of mirrored directory/file
+    }
+
+    Returns: {
+        message: str,           # Status message
+        target_name: str,       # Name of mirrored directory/file
+        file_count: int,        # Number of files
+        files: list            # List of file info dicts
+    }
+    """
+    data = request.get_json()
+    if not data or 'target_name' not in data:
+        return jsonify({"error": "No target_name provided"}), 400
+
+    target_name = data['target_name']
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "revert_sync_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        files_info = []
+
+        if target_path.is_file():
+            # Single file
+            files_info.append({
+                "name": target_path.name,
+                "size": target_path.stat().st_size,
+                "modified": target_path.stat().st_mtime,
+                "is_file": True
+            })
+        else:
+            # Directory - get all files recursively
+            for item in target_path.rglob('*'):
+                if item.is_file():
+                    rel_path = item.relative_to(target_path)
+                    files_info.append({
+                        "name": str(rel_path),
+                        "size": item.stat().st_size,
+                        "modified": item.stat().st_mtime,
+                        "is_file": True
+                    })
+
+        return jsonify({
+            "message": "Mirror contents retrieved successfully",
+            "target_name": safe_target,
+            "file_count": len(files_info),
+            "files": files_info,
+            "mirror_path": str(target_path)
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to revert-sync from mirror",
+                             operation="revert_sync_from_mirror",
+                             target=safe_target) from e
 
 
 if __name__ == '__main__':

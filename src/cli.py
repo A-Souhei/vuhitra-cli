@@ -722,14 +722,14 @@ def interactive_mode(model, verbose=False):
                             from datetime import datetime
                             created_dt = datetime.fromisoformat(created_at)
                             created_str = created_dt.strftime('%Y-%m-%d %H:%M:%S')
-                        except:
+                        except (ValueError, TypeError):
                             created_str = created_at
 
                         # Format last checked time
                         try:
                             checked_dt = datetime.fromisoformat(last_checked)
                             checked_str = checked_dt.strftime('%Y-%m-%d %H:%M:%S')
-                        except:
+                        except (ValueError, TypeError):
                             checked_str = last_checked
 
                         sync_indicator = "✓" if sync_status == "synced" else "✗"
@@ -822,29 +822,40 @@ def interactive_mode(model, verbose=False):
                         )
                 else:
                     # Upload directory
-                    files_to_upload = []
-                    for file_path in resolved.rglob('*'):
-                        if file_path.is_file():
-                            rel_path = file_path.relative_to(resolved)
-                            with open(file_path, 'rb') as f:
-                                content = f.read()
-                                files_to_upload.append(
-                                    ('files', (str(rel_path), content, 'application/octet-stream'))
-                                )
+                    # Collect file paths first
+                    file_paths = [(fp, fp.relative_to(resolved)) for fp in resolved.rglob('*') if fp.is_file()]
 
-                    if not files_to_upload:
+                    if not file_paths:
                         return CommandResult(
                             success=False,
                             message=f"No files found in directory: {resolved_path}"
                         )
 
-                    data = {'target_name': target_name}
-                    response = requests.post(
-                        f"{sandbox_url}/sync",
-                        files=files_to_upload,
-                        data=data,
-                        timeout=60
-                    )
+                    # Open all files for streaming (requests library will read them lazily)
+                    files_to_upload = []
+                    file_handles = []
+                    try:
+                        for file_path, rel_path in file_paths:
+                            fh = open(file_path, 'rb')
+                            file_handles.append(fh)
+                            files_to_upload.append(
+                                ('files', (str(rel_path), fh, 'application/octet-stream'))
+                            )
+
+                        data = {'target_name': target_name}
+                        response = requests.post(
+                            f"{sandbox_url}/sync",
+                            files=files_to_upload,
+                            data=data,
+                            timeout=60
+                        )
+                    finally:
+                        # Close all file handles
+                        for fh in file_handles:
+                            try:
+                                fh.close()
+                            except Exception:
+                                pass
 
                 if response.status_code in [200, 207]:
                     result = response.json()
@@ -908,29 +919,40 @@ def interactive_mode(model, verbose=False):
                         )
                 else:
                     # Sync directory
-                    files_to_upload = []
-                    for file_path in resolved.rglob('*'):
-                        if file_path.is_file():
-                            rel_path = file_path.relative_to(resolved)
-                            with open(file_path, 'rb') as f:
-                                content = f.read()
-                                files_to_upload.append(
-                                    ('files', (str(rel_path), content, 'application/octet-stream'))
-                                )
+                    # Collect file paths first
+                    file_paths = [(fp, fp.relative_to(resolved)) for fp in resolved.rglob('*') if fp.is_file()]
 
-                    if not files_to_upload:
+                    if not file_paths:
                         return CommandResult(
                             success=False,
                             message=f"No files found in directory: {resolved_path}"
                         )
 
-                    data = {'target_name': target_name}
-                    response = requests.post(
-                        f"{sandbox_url}/sync",
-                        files=files_to_upload,
-                        data=data,
-                        timeout=60
-                    )
+                    # Open all files for streaming (requests library will read them lazily)
+                    files_to_upload = []
+                    file_handles = []
+                    try:
+                        for file_path, rel_path in file_paths:
+                            fh = open(file_path, 'rb')
+                            file_handles.append(fh)
+                            files_to_upload.append(
+                                ('files', (str(rel_path), fh, 'application/octet-stream'))
+                            )
+
+                        data = {'target_name': target_name}
+                        response = requests.post(
+                            f"{sandbox_url}/sync",
+                            files=files_to_upload,
+                            data=data,
+                            timeout=60
+                        )
+                    finally:
+                        # Close all file handles
+                        for fh in file_handles:
+                            try:
+                                fh.close()
+                            except Exception:
+                                pass
 
                 if response.status_code in [200, 207]:
                     result = response.json()
@@ -1049,7 +1071,8 @@ def interactive_mode(model, verbose=False):
                             # Clean up temp file
                             try:
                                 os.unlink(temp_zip_path)
-                            except:
+                            except OSError:
+                                # Ignore cleanup errors (file may not exist or already deleted)
                                 pass
 
                     else:

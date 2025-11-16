@@ -609,10 +609,6 @@ class TestMirrorListEndpoint:
         assert list_response.status_code == 200
         data = list_response.json()
         assert 'mirrors' in data
-
-        # Check if our mirror is in the list (if Redis is available)
-        mirrors = data['mirrors']
-        mirror_names = [m.get('name') for m in mirrors]
         # Note: testmirror may or may not be in list depending on Redis availability
 
         # Clean up
@@ -695,9 +691,7 @@ class TestRedisIntegration:
 
         # Check if mirror appears in list (if Redis is available)
         list_response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
-        if list_response.status_code == 200:
-            mirrors = list_response.json().get('mirrors', [])
-            # Mirror may or may not be in list depending on Redis availability
+        # Mirror may or may not be in list depending on Redis availability
 
         # Clean up
         requests.delete(f"{SANDBOX_BASE_URL}/remove/redistest")
@@ -719,8 +713,5 @@ class TestRedisIntegration:
 
         # Check that mirror is not in list anymore (if Redis is available)
         list_response = requests.get(f"{SANDBOX_BASE_URL}/mirror-list")
-        if list_response.status_code == 200:
-            mirrors = list_response.json().get('mirrors', [])
-            mirror_names = [m.get('name') for m in mirrors]
-            # Mirror should not be in the list after deletion
-            # (if Redis is available and working)
+        # Mirror should not be in the list after deletion
+        # (if Redis is available and working)

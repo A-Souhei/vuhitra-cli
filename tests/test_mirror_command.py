@@ -9,7 +9,6 @@ Unit testing the mirror command handler would require significant refactoring
 of the CLI code to make the command handler accessible outside of interactive_mode().
 For now, the integration tests provide sufficient coverage.
 """
-import pytest
 
 
 class TestMirrorCommandDocumentation:

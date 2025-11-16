@@ -27,6 +27,42 @@ from heuristics_config_loader import HeuristicsConfigLoader
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
+def sanitize_path(path_str):
+    """
+    Sanitize path to prevent directory traversal while preserving directory structure.
+
+    Args:
+        path_str: Path string to sanitize
+
+    Returns:
+        Sanitized path string safe for use in file operations
+
+    Removes:
+        - Leading/trailing slashes
+        - '..' parent directory references
+        - Absolute paths (leading '/')
+
+    Preserves:
+        - Directory separators (/)
+        - File and folder names
+    """
+    # Remove leading/trailing whitespace and slashes
+    path_str = path_str.strip().strip('/')
+
+    # Split into parts and filter out dangerous components
+    parts = []
+    for part in path_str.split('/'):
+        # Skip empty parts, '.', and '..'
+        if part and part != '.' and part != '..':
+            # Sanitize each component individually to prevent special characters
+            safe_part = secure_filename(part)
+            if safe_part:  # Only add if sanitization didn't remove everything
+                parts.append(safe_part)
+
+    # Rejoin with forward slashes
+    return '/'.join(parts) if parts else ''
+
 # Configure Flask app with template and static folders
 app = Flask(__name__, 
             template_folder='/app/templates',
@@ -737,8 +773,10 @@ def sync_to_mirror():
     if not target_name:
         return jsonify({"error": "No target_name provided"}), 400
 
-    # Secure the target name
-    safe_target = secure_filename(target_name)
+    # Sanitize the target name while preserving directory structure
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
     target_path = MIRRORS_DIR / safe_target
 
     files = request.files.getlist('files')
@@ -842,7 +880,9 @@ def revert_sync_from_mirror():
         return jsonify({"error": "No target_name provided"}), 400
 
     target_name = data['target_name']
-    safe_target = secure_filename(target_name)
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
     target_path = MIRRORS_DIR / safe_target
 
     # Ensure the path is within MIRRORS_DIR
@@ -872,16 +912,16 @@ def revert_sync_from_mirror():
                 "is_file": True
             })
         else:
-            # Directory - get all files recursively
+            # Directory - get all files and directories recursively
             for item in target_path.rglob('*'):
-                if item.is_file():
-                    rel_path = item.relative_to(target_path)
-                    files_info.append({
-                        "name": str(rel_path),
-                        "size": item.stat().st_size,
-                        "modified": item.stat().st_mtime,
-                        "is_file": True
-                    })
+                rel_path = item.relative_to(target_path)
+                is_file = item.is_file()
+                files_info.append({
+                    "name": str(rel_path),
+                    "size": item.stat().st_size if is_file else 0,
+                    "modified": item.stat().st_mtime,
+                    "is_file": is_file
+                })
 
         return jsonify({
             "message": "Mirror contents retrieved successfully",
@@ -914,7 +954,9 @@ def download_mirror(target_name):
     Returns:
         File download or zip archive
     """
-    safe_target = secure_filename(target_name)
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
     target_path = MIRRORS_DIR / safe_target
 
     # Get optional file_path parameter for downloading specific files
@@ -999,8 +1041,10 @@ def remove_mirror(target_name):
         target_name: str        # Name of removed mirror
     }
     """
-    # Secure the target name
-    safe_target = secure_filename(target_name)
+    # Sanitize the target name while preserving directory structure
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
     target_path = MIRRORS_DIR / safe_target
 
     # Validate path is within MIRRORS_DIR
@@ -1270,8 +1314,19 @@ def mirror_sync_monitor():
     """
     logger.info("Mirror sync monitor started")
 
-    # Check interval in seconds (default: 5 seconds for responsive updates)
-    check_interval = int(os.getenv('MIRROR_SYNC_CHECK_INTERVAL', '5'))
+    # Check interval in seconds (default: 10 seconds, minimum: 10, maximum: 3600)
+    try:
+        check_interval = int(os.getenv('MIRROR_SYNC_CHECK_INTERVAL', '10'))
+        # Validate bounds: minimum 10 seconds, maximum 1 hour
+        if check_interval < 10:
+            logger.warning(f"MIRROR_SYNC_CHECK_INTERVAL too low ({check_interval}s), using minimum 10s")
+            check_interval = 10
+        elif check_interval > 3600:
+            logger.warning(f"MIRROR_SYNC_CHECK_INTERVAL too high ({check_interval}s), using maximum 3600s")
+            check_interval = 3600
+    except ValueError:
+        logger.warning("Invalid MIRROR_SYNC_CHECK_INTERVAL, using default 10s")
+        check_interval = 10
 
     while True:
         try:
@@ -1296,7 +1351,10 @@ def mirror_sync_monitor():
                         continue
 
                     # Check if mirror still exists in filesystem
-                    safe_name = secure_filename(mirror_name)
+                    safe_name = sanitize_path(mirror_name)
+                    if not safe_name:
+                        logger.warning(f"Invalid mirror name: {mirror_name}")
+                        continue
                     mirror_path = MIRRORS_DIR / safe_name
 
                     if not mirror_path.exists():

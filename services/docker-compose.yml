@@ -1,6 +1,33 @@
 version: '3.8'
 
 services:
+  # PostgreSQL service - Built from Dockerfile
+  # Part of app profile (needed by sandbox for data analysis)
+  postgres:
+    build:
+      context: ..
+      dockerfile: services/postgres/Dockerfile
+    image: vuhitra-postgres:latest
+    container_name: vuhitra-postgres
+    profiles:
+      - app
+    ports:
+      - "127.0.0.1:15432:5432"     # PostgreSQL port (localhost only for security)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-vuhitra}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
+      - POSTGRES_DB=${POSTGRES_DB:-vuhitra}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vuhitra -d vuhitra"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - vuhitra-network
+
   # Redis service - Built from Dockerfile
   # Part of app profile (needed by sandbox)
   redis:
@@ -47,6 +74,11 @@ services:
       - ELASTICSEARCH_HOST=elasticsearch
       - ELASTICSEARCH_PORT=9200
       - ELASTICSEARCH_INDEX=llm_feedback
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-vuhitra}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
+      - POSTGRES_DB=${POSTGRES_DB:-vuhitra}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -54,6 +86,8 @@ services:
       retries: 3
       start_period: 5s
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       elasticsearch:
@@ -270,6 +304,8 @@ services:
     restart: "no"
 
 volumes:
+  postgres_data:
+    driver: local
   redis_data:
     driver: local
   workspace:

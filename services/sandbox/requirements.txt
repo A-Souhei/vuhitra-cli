@@ -3,14 +3,61 @@ Flask==3.0.0
 Werkzeug==3.0.1
 PyYAML==6.0.3
 sentry-sdk==2.0.0
+
+# Data analysis and manipulation
 pandas>=2.0.0,<3.0.0
 numpy>=1.24.0,<2.0.0
+scipy>=1.11.0,<2.0.0
+openpyxl>=3.1.0  # Excel file support
+xlrd>=2.0.0  # Legacy Excel file support
+
+# Visualization
 matplotlib>=3.7.0,<4.0.0
 seaborn>=0.12.0,<1.0.0
+plotly>=5.18.0
+bokeh>=3.3.0
+
+# Machine Learning
 scikit-learn>=1.3.0,<2.0.0
+statsmodels>=0.14.0
+
+# NLP
 spacy>=3.7.0,<4.0.0
-redis>=5.0.0,<6.0.0
-elasticsearch>=8.0.0,<9.0.0
 vaderSentiment>=3.3.2
 nltk>=3.8.0
 rapidfuzz>=3.0.0,<4.0.0
+
+# Database and storage
+redis>=5.0.0,<6.0.0
+elasticsearch>=8.0.0,<9.0.0
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.0  # PostgreSQL adapter
+
+# Development and linting tools
+ruff>=0.6.0,<1.0.0  # Fast Python linter and formatter
+pylint>=3.0.0,<4.0.0
+flake8>=7.0.0,<8.0.0
+black>=24.0.0,<25.0.0
+mypy>=1.8.0,<2.0.0
+isort>=5.13.0,<6.0.0
+autopep8>=2.0.0,<3.0.0
+
+# Testing tools
+pytest>=8.0.0,<9.0.0
+pytest-cov>=4.1.0,<5.0.0  # Code coverage for pytest
+pytest-asyncio>=0.23.0,<1.0.0  # Async test support
+
+# Security scanning tools
+bandit>=1.7.0,<2.0.0  # Security issue scanner
+safety>=3.0.0,<4.0.0  # Dependency vulnerability checker
+
+# Jupyter for interactive data analysis
+jupyter>=1.0.0
+ipykernel>=6.29.0
+ipywidgets>=8.1.0
+
+# Utilities
+requests>=2.31.0
+python-dateutil>=2.8.0
+pytz>=2024.1
+tqdm>=4.66.0  # Progress bars

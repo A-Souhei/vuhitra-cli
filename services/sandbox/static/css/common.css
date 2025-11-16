@@ -1,0 +1,231 @@
+/* Common styles for all context management pages */
+
+html {
+    height: 100%;
+}
+
+body {
+    background: white;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+/* Navigation Bar */
+.navbar-custom {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.navbar-custom .navbar-brand {
+    color: white !important;
+    font-weight: 700;
+    font-size: 1.5rem;
+}
+
+.navbar-custom .nav-link {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 500;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.3s ease;
+}
+
+.navbar-custom .nav-link:hover {
+    color: white !important;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.navbar-custom .nav-link.active {
+    color: white !important;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    padding: 20px 0;
+}
+
+.container-custom {
+    background: white;
+    padding: 30px;
+}
+
+.header-title {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+/* Tables */
+.table-hover tbody tr:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+/* Badges */
+.badge-eternal {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.badge-pillar {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.badge-ephemeral {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.badge-vanisher {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.badge-file {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.badge-directory {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.context-badge {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+}
+
+/* Buttons */
+.btn-action {
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    margin: 0 2px;
+}
+
+.btn-outline-purple {
+    color: #764ba2;
+    border-color: #764ba2;
+}
+
+.btn-outline-purple:hover {
+    color: white;
+    background-color: #764ba2;
+    border-color: #764ba2;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    opacity: 0.3;
+}
+
+/* CLI Hints */
+.cli-hint {
+    background: #f8f9fa;
+    border-left: 4px solid #667eea;
+    padding: 12px 15px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    margin-top: 3px;
+}
+
+/* Footer */
+.footer {
+    margin-top: 40px;
+    padding: 20px 0;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.footer a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
+
+/* Home Page Specific */
+.feature-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+.feature-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.feature-card.eternal {
+    border-top: 4px solid #667eea;
+}
+
+.feature-card.pillar {
+    border-top: 4px solid #f5576c;
+}
+
+.feature-card.ephemeral {
+    border-top: 4px solid #00f2fe;
+}
+
+.feature-card.vanisher {
+    border-top: 4px solid #fee140;
+}
+
+.feature-card.mirror {
+    border-top: 4px solid #764ba2;
+}
+
+/* Stats Cards */
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.stat-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .navbar-custom .nav-link {
+        padding: 0.5rem !important;
+    }
+
+    .container-custom {
+        padding: 15px;
+    }
+}

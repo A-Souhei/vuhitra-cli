@@ -249,6 +249,121 @@ class TestMirrorEndpoints:
         assert "subdir/workflow3.txt" in file_names or "subdir\\workflow3.txt" in file_names  # OS path separator
 
 
+class TestMirrorDownloadEndpoint:
+    """Test download-mirror endpoint for bidirectional sync."""
+
+    def test_download_single_file_mirror(self, cleanup):
+        """Test downloading a single file from mirror."""
+        # Create a mirror with single file
+        file_content = b"Download test content"
+        files = [('files', ('single.txt', io.BytesIO(file_content), 'text/plain'))]
+        data = {'target_name': 'single_file'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Download the file
+        download_response = requests.get(
+            f"{SANDBOX_BASE_URL}/download-mirror/single_file"
+        )
+
+        assert download_response.status_code == 200
+        assert download_response.content == file_content
+
+    def test_download_directory_as_zip(self, cleanup):
+        """Test downloading a directory mirror as zip archive."""
+        # Create mirror with multiple files
+        files = [
+            ('files', ('file1.txt', io.BytesIO(b"Content 1"), 'text/plain')),
+            ('files', ('file2.txt', io.BytesIO(b"Content 2"), 'text/plain')),
+            ('files', ('subdir/file3.txt', io.BytesIO(b"Content 3"), 'text/plain'))
+        ]
+        data = {'target_name': 'test_dir'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Download as zip
+        download_response = requests.get(
+            f"{SANDBOX_BASE_URL}/download-mirror/test_dir"
+        )
+
+        assert download_response.status_code == 200
+        assert 'application/zip' in download_response.headers.get('content-type', '')
+
+        # Verify it's a valid zip file
+        import zipfile
+        import io as io_module
+        zip_data = io_module.BytesIO(download_response.content)
+        with zipfile.ZipFile(zip_data, 'r') as zf:
+            file_list = zf.namelist()
+            assert 'file1.txt' in file_list
+            assert 'file2.txt' in file_list
+            # Path separator might be different
+            assert any('file3.txt' in name for name in file_list)
+
+    def test_download_nonexistent_mirror(self, cleanup):
+        """Test downloading a mirror that doesn't exist."""
+        response = requests.get(
+            f"{SANDBOX_BASE_URL}/download-mirror/nonexistent"
+        )
+
+        assert response.status_code == 404
+        assert "Mirror not found" in response.json()["error"]
+
+    def test_download_specific_file_from_mirror(self, cleanup):
+        """Test downloading a specific file from a directory mirror."""
+        # Create mirror with multiple files
+        files = [
+            ('files', ('file1.txt', io.BytesIO(b"Content 1"), 'text/plain')),
+            ('files', ('file2.txt', io.BytesIO(b"Content 2"), 'text/plain'))
+        ]
+        data = {'target_name': 'multi_dir'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Download specific file
+        download_response = requests.get(
+            f"{SANDBOX_BASE_URL}/download-mirror/multi_dir?file_path=file1.txt"
+        )
+
+        assert download_response.status_code == 200
+        assert download_response.content == b"Content 1"
+
+    def test_download_invalid_file_path(self, cleanup):
+        """Test downloading with invalid file_path parameter."""
+        # Create a mirror first
+        files = [('files', ('test.txt', io.BytesIO(b"Test"), 'text/plain'))]
+        data = {'target_name': 'test_mirror'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Try to download non-existent file
+        download_response = requests.get(
+            f"{SANDBOX_BASE_URL}/download-mirror/test_mirror?file_path=nonexistent.txt"
+        )
+
+        assert download_response.status_code == 404
+
+
 class TestMirrorErrorHandling:
     """Test error handling for mirror endpoints."""
 
@@ -275,6 +390,18 @@ class TestMirrorErrorHandling:
         response = requests.post(
             f"{SANDBOX_BASE_URL}/revert-sync",
             json={'target_name': 'nonexistent'}
+        )
+
+        assert response.status_code == 404
+        result = response.json()
+        assert "error" in result
+        # Should NOT expose internal exception details
+        assert "Traceback" not in str(result)
+
+    def test_download_mirror_uses_error_handler(self, cleanup):
+        """Test that download-mirror endpoint integrates with error handler."""
+        response = requests.get(
+            f"{SANDBOX_BASE_URL}/download-mirror/nonexistent"
         )
 
         assert response.status_code == 404

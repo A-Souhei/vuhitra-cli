@@ -111,7 +111,7 @@ Synchronize changes from host to sandbox mirror.
 
 ### `/mirror revert+sync @<path>`
 
-Retrieve information about sandbox mirror contents.
+Download files from sandbox mirror and overwrite them on the host.
 
 **Usage:**
 ```bash
@@ -119,28 +119,36 @@ Retrieve information about sandbox mirror contents.
 ```
 
 **Behavior:**
-- Queries the sandbox for mirror contents
-- Displays list of files in the mirror
-- Shows file sizes and modification times
-- **Note:** Currently returns metadata only; full file download is pending implementation
+- Downloads all files from the sandbox mirror
+- Overwrites existing files on the host
+- Adds new files that exist in mirror but not on host
+- Deletes files from host that no longer exist in mirror
+- Provides true bidirectional synchronization
 
 **Example:**
 ```bash
+# Initial state:
+# Host data/: file1.txt, file2.txt, file3.txt
+# Sandbox modifies mirror: updates file1.txt, adds file4.txt, deletes file2.txt
+
 /mirror revert+sync @data
 
+# Result on host data/:
+# - file1.txt (updated from sandbox)
+# - file3.txt (unchanged)
+# - file4.txt (added from sandbox)
+# - file2.txt (deleted, no longer in mirror)
+
 # Output:
-# ✓ Mirror 'data' contains 3 file(s)
-# Files in sandbox mirror:
-#   - file1.txt (1234 bytes)
-#   - file2.txt (5678 bytes)
-#   - subdir/file3.txt (910 bytes)
+# ✓ Synced 3 file(s) from sandbox to host '/path/to/data'
+#   Files deleted from host: 1
 ```
 
-**Future Enhancement:**
-The full implementation will download files from sandbox and apply changes back to the host, enabling:
-- Retrieving processed/modified files from sandbox
-- Applying sandbox changes to host directory
-- Bidirectional synchronization
+**Use Cases:**
+- Retrieve processed data from sandbox
+- Apply sandbox modifications to host code
+- Get results of sandbox computations
+- Bidirectional development workflow
 
 ## Workflow Examples
 
@@ -151,12 +159,14 @@ The full implementation will download files from sandbox and apply changes back 
 /mirror do @data
 
 # Work in sandbox, process data...
-# (sandbox modifies files)
+# (sandbox modifies files, adds outputs, removes temp files)
 
-# Retrieve processed data information
+# Retrieve processed data back to host
 /mirror revert+sync @data
 
-# Clean up when done
+# Host now has all sandbox modifications!
+
+# Clean up sandbox mirror when done
 /mirror destroy @data
 ```
 
@@ -206,20 +216,32 @@ The mirror functionality uses these sandbox HTTP endpoints:
    - Supports directory structure
    - Deletes orphaned files
 
-2. **POST /revert-sync** - Retrieve mirror information
-   - Returns file metadata
+2. **POST /revert-sync** - Retrieve mirror metadata
+   - Returns file list with metadata
    - Lists all files in mirror
 
-3. **DELETE /remove/<name>** - Remove mirror
+3. **GET /download-mirror/<name>** - Download mirror files
+   - Returns single file directly
+   - Returns directory as ZIP archive
+   - Supports specific file download via query parameter
+
+4. **DELETE /remove/<name>** - Remove mirror
    - Deletes mirror directory/file
    - Validates path safety
 
 ### File Transfer
 
-- Files are transferred using HTTP multipart/form-data
+**Upload (host → sandbox):**
+- Files transferred using HTTP multipart/form-data
 - Large files supported (up to 100MB configured limit)
 - Binary files handled correctly
 - Directory structure preserved
+
+**Download (sandbox → host):**
+- Single files returned directly
+- Directories packaged as ZIP archives
+- Files extracted maintaining directory structure
+- Orphaned files on host deleted for true sync
 
 ### Error Handling
 
@@ -237,18 +259,25 @@ All operations use the project's error handler:
 
 ## Limitations
 
-1. **Current Implementation:**
-   - `/mirror revert+sync` returns metadata only
-   - Full file download not yet implemented
+1. **Performance:**
    - No progress indication for large transfers
+   - Large ZIP extraction may take time
+   - No streaming/chunked downloads
 
 2. **Size Constraints:**
    - Max file size: 100MB (configurable)
    - Large directories may timeout (60s limit)
+   - ZIP memory usage scales with directory size
 
 3. **Concurrency:**
    - No locking mechanism for concurrent access
    - Multiple syncs to same mirror may conflict
+   - Race conditions possible with simultaneous operations
+
+4. **File Deletion:**
+   - `/mirror revert+sync` deletes host files not in mirror
+   - No backup or confirmation prompt
+   - Deletions are permanent
 
 ## Requirements
 

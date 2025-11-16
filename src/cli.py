@@ -859,52 +859,135 @@ def interactive_mode(model, verbose=False):
 
             elif subcommand == "revert+sync":
                 # Sync changes from sandbox mirror back to host
-                response = requests.post(
+                import zipfile
+                import tempfile
+
+                # First, get the file list to understand what we're downloading
+                metadata_response = requests.post(
                     f"{sandbox_url}/revert-sync",
                     json={'target_name': target_name},
                     timeout=30
                 )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    mirror_path = Path(result.get('mirror_path', ''))
-
-                    # Download files from sandbox and write to host
-                    resolved = Path(resolved_path)
-                    resolved.mkdir(parents=True, exist_ok=True)
-
-                    files_info = result.get('files', [])
-                    if not files_info:
-                        return CommandResult(
-                            success=True,
-                            message=f"No files to sync from sandbox mirror '{target_name}'"
-                        )
-
-                    # Note: This is a metadata-only response. In a full implementation,
-                    # we would need an additional endpoint to download the actual file contents.
-                    # For now, we just report what's available in the mirror.
-                    messages = [
-                        f"✓ Mirror '{target_name}' contains {len(files_info)} file(s)",
-                        f"Files in sandbox mirror:"
-                    ]
-                    for file_info in files_info[:10]:  # Show first 10 files
-                        messages.append(f"  - {file_info['name']} ({file_info['size']} bytes)")
-                    if len(files_info) > 10:
-                        messages.append(f"  ... and {len(files_info) - 10} more files")
-
-                    messages.append(f"\nNote: Full file download feature pending implementation")
-
-                    return CommandResult(success=True, message="\n".join(messages))
-                elif response.status_code == 404:
+                if metadata_response.status_code == 404:
                     return CommandResult(
                         success=False,
                         message=f"Mirror '{target_name}' not found in sandbox"
                     )
-                else:
-                    error_msg = response.json().get('error', 'Unknown error')
+                elif metadata_response.status_code != 200:
+                    error_msg = metadata_response.json().get('error', 'Unknown error')
                     return CommandResult(
                         success=False,
-                        message=f"Failed to revert-sync from sandbox: {error_msg}"
+                        message=f"Failed to get mirror info: {error_msg}"
+                    )
+
+                result = metadata_response.json()
+                files_info = result.get('files', [])
+
+                if not files_info:
+                    return CommandResult(
+                        success=True,
+                        message=f"No files to sync from sandbox mirror '{target_name}'"
+                    )
+
+                # Download the mirror content
+                download_response = requests.get(
+                    f"{sandbox_url}/download-mirror/{target_name}",
+                    timeout=60
+                )
+
+                if download_response.status_code != 200:
+                    return CommandResult(
+                        success=False,
+                        message=f"Failed to download mirror from sandbox"
+                    )
+
+                # Prepare the host directory
+                resolved = Path(resolved_path)
+
+                # Track which files we're downloading from the mirror
+                mirror_files = {file_info['name'] for file_info in files_info}
+
+                try:
+                    # Check if it's a zip file (directory) or single file
+                    content_type = download_response.headers.get('content-type', '')
+
+                    if 'application/zip' in content_type:
+                        # Handle directory as zip archive
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
+                            temp_zip.write(download_response.content)
+                            temp_zip_path = temp_zip.name
+
+                        try:
+                            # Extract zip to host directory
+                            resolved.mkdir(parents=True, exist_ok=True)
+
+                            with zipfile.ZipFile(temp_zip_path, 'r') as zf:
+                                zf.extractall(resolved)
+
+                            updated_files = list(mirror_files)
+
+                            # Delete files on host that don't exist in the mirror (true sync)
+                            deleted_files = []
+                            if resolved.is_dir():
+                                for host_file in resolved.rglob('*'):
+                                    if host_file.is_file():
+                                        rel_path = str(host_file.relative_to(resolved))
+                                        # Normalize path separators for comparison
+                                        rel_path_normalized = rel_path.replace('\\', '/')
+                                        mirror_files_normalized = {f.replace('\\', '/') for f in mirror_files}
+
+                                        if rel_path_normalized not in mirror_files_normalized:
+                                            try:
+                                                host_file.unlink()
+                                                deleted_files.append(rel_path)
+                                            except Exception as e:
+                                                handle_exception(e, context={
+                                                    'command': 'mirror',
+                                                    'subcommand': 'revert+sync',
+                                                    'operation': 'delete_orphaned',
+                                                    'file': rel_path
+                                                })
+
+                            messages = [
+                                f"✓ Synced {len(updated_files)} file(s) from sandbox to host '{resolved_path}'"
+                            ]
+                            if deleted_files:
+                                messages.append(f"  Files deleted from host: {len(deleted_files)}")
+
+                            return CommandResult(success=True, message="\n".join(messages))
+                        finally:
+                            # Clean up temp file
+                            try:
+                                os.unlink(temp_zip_path)
+                            except:
+                                pass
+
+                    else:
+                        # Handle single file
+                        resolved.parent.mkdir(parents=True, exist_ok=True)
+                        with open(resolved, 'wb') as f:
+                            f.write(download_response.content)
+
+                        return CommandResult(
+                            success=True,
+                            message=f"✓ Downloaded file from sandbox to '{resolved_path}'"
+                        )
+
+                except zipfile.BadZipFile:
+                    return CommandResult(
+                        success=False,
+                        message="Failed to extract mirror archive (corrupted zip file)"
+                    )
+                except Exception as e:
+                    handle_exception(e, context={
+                        'command': 'mirror',
+                        'subcommand': 'revert+sync',
+                        'target': target_name
+                    })
+                    return CommandResult(
+                        success=False,
+                        message=f"Error downloading/extracting mirror: {str(e)}"
                     )
 
         except requests.exceptions.ConnectionError:

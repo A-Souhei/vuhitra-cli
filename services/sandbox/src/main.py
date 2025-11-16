@@ -2,8 +2,10 @@ import shutil
 import sys
 import os
 import logging
+import io
+import zipfile
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 
 # Add parent directory to path to import from src
@@ -757,6 +759,95 @@ def revert_sync_from_mirror():
     except Exception as e:
         raise SandboxException("Failed to revert-sync from mirror",
                              operation="revert_sync_from_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/download-mirror/<path:target_name>', methods=['GET'])
+def download_mirror(target_name):
+    """
+    Download files from a sandbox mirror.
+
+    For single files: Returns the file directly
+    For directories: Returns a zip archive containing all files
+
+    Args:
+        target_name: Name of the mirror to download
+
+    Query parameters:
+        file_path: Optional specific file path within the mirror (for single file download)
+
+    Returns:
+        File download or zip archive
+    """
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Get optional file_path parameter for downloading specific files
+    file_path = request.args.get('file_path')
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "download_mirror_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        # If file_path is specified, download that specific file
+        if file_path:
+            file_to_download = target_path / file_path
+            file_to_download = file_to_download.resolve()
+
+            # Ensure the file is within the mirror directory
+            if not str(file_to_download).startswith(str(target_path)):
+                return jsonify({"error": "Invalid file path"}), 400
+
+            if not file_to_download.exists() or not file_to_download.is_file():
+                return jsonify({"error": "File not found"}), 404
+
+            return send_file(
+                str(file_to_download),
+                as_attachment=True,
+                download_name=file_to_download.name
+            )
+
+        # If target is a single file, return it directly
+        if target_path.is_file():
+            return send_file(
+                str(target_path),
+                as_attachment=True,
+                download_name=target_path.name
+            )
+
+        # If target is a directory, create a zip archive
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file_path in target_path.rglob('*'):
+                if file_path.is_file():
+                    # Get path relative to the mirror directory
+                    arcname = file_path.relative_to(target_path)
+                    zf.write(file_path, arcname=str(arcname))
+
+        memory_file.seek(0)
+
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f"{safe_target}.zip"
+        )
+
+    except Exception as e:
+        raise SandboxException("Failed to download mirror",
+                             operation="download_mirror",
                              target=safe_target) from e
 
 

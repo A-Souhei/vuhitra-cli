@@ -12,7 +12,7 @@ class ArgumentParser:
         p.add_argument('-m', '--model', default=self.default_model, help='Model to use')
         p.add_argument('-p', '--prompt', help='Prompt to send (omit for interactive mode)')
         p.add_argument('-v', '--verbose', action='store_true', help='Enable verbose mode with detailed debugging output')
-        p.add_argument('--coding', action='store_true', help='Enable coding mode (disables eternals/ephemerals/auto-iteration, enables pillars/vanishers)')
+        p.add_argument('--coding', action='store_true', help='Enable coding mode - only works in interactive mode (disables eternals/ephemerals/auto-iteration, enables pillars/vanishers)')
         return p
     
     def parse_args(self):

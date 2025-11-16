@@ -684,7 +684,7 @@ python -m pytest tests/
 
 ---
 
-## 14. Key Design Patterns
+## 15. Key Design Patterns
 
 1. **Manager Pattern**: EternalContextManager, EphemeralContextManager, SparkContextManager
    - Encapsulate context lifecycle
@@ -713,7 +713,7 @@ python -m pytest tests/
 
 ---
 
-## 15. Important Configuration Notes
+## 16. Important Configuration Notes
 
 1. **Embedding Service**: Transformer service at `/generate-embedding` endpoint
 2. **Heuristic Service**: Sandbox service at `/retrieve/similar` endpoint
@@ -722,4 +722,179 @@ python -m pytest tests/
 5. **Error Handling**: All exceptions logged via error_handler
    - Includes function name, operation, and relevant context
    - Sends to Sentry if DSN configured
+
+
+---
+
+## 14. Coding Mode - Pillars and Vanishers
+
+**Enabled with:** `./start.sh --coding`
+
+Coding mode is a specialized mode for software development workflows that replaces eternals/ephemerals with pillars/vanishers.
+
+### Key Differences
+
+| Feature | Normal Mode | Coding Mode |
+|---------|-------------|-------------|
+| **Eternals** | ✅ Enabled | ❌ Disabled |
+| **Ephemerals** | ✅ Enabled | ❌ Disabled |
+| **Pillars** | ❌ Disabled | ✅ Enabled + Auto-load |
+| **Vanishers** | ❌ Disabled | ✅ Enabled |
+| **Sparks** | ✅ Enabled | ✅ Enabled |
+| **Auto-iteration (rating=0)** | ✅ Enabled | ❌ Disabled |
+
+### Pillar Context Manager
+
+**File:** `/home/user/vuhitra-cli/src/utils/pillar_context.py`
+
+Pillars are the coding mode equivalent of eternals - persistent cross-session contexts.
+
+**Key Features:**
+1. **Persistent Storage**: Saved in `.vuhitra/pillar_contexts/`
+2. **Auto-loading**: Files in `pillars/` directory are automatically loaded on startup
+3. **Semantic Filtering**: Only relevant pillars are injected based on prompt similarity
+4. **Duplicate Prevention**: Checks both auto-loaded and manually loaded contexts
+5. **Label Collision Handling**: Auto-generates unique labels with counters
+
+**Auto-Load Process:**
+```python
+# On CLI startup in coding mode:
+1. Scan pillars/ directory recursively
+2. Skip hidden files (starting with '.')
+3. Check if file already loaded (by file_path, not just auto_loaded_files)
+4. Generate label from relative path using hyphens (e.g., "docs-api-spec")
+5. Handle collisions by appending counter (e.g., "api-spec-1", "api-spec-2")
+6. Load and embed each new file
+7. Track in auto_loaded_files set to skip on subsequent scans
+```
+
+**Label Validation:**
+- Path separator rejection: Labels cannot contain `/` or `\`
+- Maximum length: 64 characters
+- Path traversal prevention: Validates storage path stays within storage_dir
+- Sanitization: Non-alphanumeric chars (except `-` and `_`) replaced with `_`
+
+**Configuration (config.yaml):**
+```yaml
+pillar_context:
+  enabled: true  # Overridden by --coding flag
+  storage_dir: .vuhitra/pillar_contexts
+  pillars_dir: pillars
+  max_file_size_mb: 10
+  max_contexts: 20
+  semantic_filtering:
+    enabled: true
+    similarity_threshold: 0.5
+  chunking:
+    enabled: true
+    chunk_size: 1000
+    overlap: 200
+```
+
+### Vanisher Context Manager
+
+**File:** `/home/user/vuhitra-cli/src/utils/vanisher_context.py`
+
+Vanishers are the coding mode equivalent of ephemerals - session-scoped contexts.
+
+**Key Features:**
+1. **Mirror Requirement**: Can only load files that are mirrored in sandbox
+2. **Session-scoped**: Cleared when session ends (no persistence)
+3. **Semantic Filtering**: Only relevant vanishers are injected
+4. **Mirror Verification**: Checks `/mirror-exists/{mirror_name}` endpoint
+
+**Mirror Check Process:**
+```python
+def _check_mirror_exists(mirror_name):
+    # Uses short timeout for quick existence check
+    response = requests.get(
+        f"{sandbox_url}/mirror-exists/{mirror_name}",
+        timeout=(2, 2)  # (connect_timeout, read_timeout)
+    )
+    return (exists, mirror_info)
+```
+
+**Error Handling:**
+- Shows full file path in error messages (not just filename)
+- Example: `Cannot load vanisher: 'config' is not mirrored. Use '/mirror do @path/to/config.json' first to mirror it.`
+
+**Configuration (config.yaml):**
+```yaml
+vanisher_context:
+  enabled: true  # Overridden by --coding flag
+  max_file_size_mb: 10
+  max_contexts: 10
+  semantic_filtering:
+    enabled: true
+    similarity_threshold: 0.5
+  chunking:
+    enabled: true
+    chunk_size: 1000
+    overlap: 200
+```
+
+### Context Injection Order (Coding Mode)
+
+When coding mode is enabled, contexts are injected in this order:
+
+```
+1. Pillar Context (persistent coding references)
+2. Vanisher Context (session-scoped mirrored files)
+3. Spark Context (in-memory ephemeral)
+4. Conversation History (relevant previous turns)
+5. Heuristics (retrieved similar patterns)
+6. User Prompt
+```
+
+### CLI Command Handlers
+
+**Pillar Commands:**
+- `/pillar load @file` - Load file as pillar (coding mode only)
+- `/pillar load @dir/` - Load all files from directory with unique labels
+- `/show pillar` - Display loaded pillars
+- `/clear pillar <label>` - Remove specific pillar
+- `/clear pillar --all` - Remove all pillars
+
+**Vanisher Commands:**
+- `/vanisher load @file` - Load mirrored file as vanisher (coding mode only)
+- `/show vanisher` - Display loaded vanishers
+- `/clear vanisher <label>` - Remove specific vanisher
+- `/clear vanisher --all` - Remove all vanishers
+
+**Directory Loading:**
+When loading a directory, unique labels are auto-generated:
+- If label provided: `{label}-{filename}` (e.g., `api-spec`, `api-types`)
+- If no label: `{filename}` (e.g., `spec`, `types`)
+
+### Coding Mode Initialization
+
+**File:** `/home/user/vuhitra-cli/src/cli.py` (interactive_mode function)
+
+```python
+if coding:
+    # Coding mode: disable eternals/ephemerals, enable pillars/vanishers
+    ephemeral_context = EphemeralContextManager(enabled=False)
+    eternal_context = EternalContextManager(enabled=False)
+    pillar_context = PillarContextManager(enabled=True)
+    vanisher_context = VanisherContextManager(enabled=True)
+
+    # Auto-load pillars from pillars/ directory
+    loaded_count, loaded_files = pillar_context.auto_load_from_pillars_directory(verbose=verbose)
+    if loaded_count > 0:
+        print_success(f"✓ Auto-loaded {loaded_count} pillar(s) from pillars/ directory")
+else:
+    # Normal mode: enable eternals/ephemerals, disable pillars/vanishers
+    ephemeral_context = EphemeralContextManager()
+    eternal_context = EternalContextManager()
+    pillar_context = PillarContextManager(enabled=False)
+    vanisher_context = VanisherContextManager(enabled=False)
+```
+
+### Non-Interactive Mode Limitation
+
+Coding mode only works in interactive mode. When `--coding` is used with `-p` flag:
+- Warning displayed: "⚠️  Coding mode is only available in interactive mode. Use ./start.sh --coding without -p flag."
+- Falls back to normal non-interactive behavior
+
+---
 

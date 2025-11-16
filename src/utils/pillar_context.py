@@ -217,10 +217,38 @@ class PillarContextManager(EmbeddingCacheMixin):
 
         Returns:
             Path to storage file
+
+        Raises:
+            ValueError: If label contains path separators or is too long
         """
+        # Validate label doesn't contain path separators
+        if '/' in label or '\\' in label:
+            raise ValueError(f"Label cannot contain path separators: {label}")
+
+        # Enforce maximum label length (64 chars)
+        if len(label) > 64:
+            raise ValueError(f"Label too long (max 64 chars): {label}")
+
         # Sanitize label for filename
         safe_label = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in label)
-        return self.storage_dir / f"{safe_label}.json"
+
+        # Construct storage path
+        storage_path = self.storage_dir / f"{safe_label}.json"
+
+        # Validate path stays within storage directory (prevent path traversal)
+        # Use os.path.commonpath for Python < 3.9 compatibility
+        try:
+            import os
+            common = os.path.commonpath([str(self.storage_dir.resolve()), str(storage_path.resolve())])
+            if common != str(self.storage_dir.resolve()):
+                raise ValueError(f"Invalid storage path (path traversal detected): {storage_path}")
+        except ValueError as e:
+            if "path traversal" in str(e):
+                raise
+            # Different drives on Windows or other path issues
+            raise ValueError(f"Invalid storage path: {storage_path}")
+
+        return storage_path
 
     def _save_to_storage(self, context: PillarContext) -> bool:
         """Save a context to persistent storage.
@@ -345,19 +373,28 @@ class PillarContextManager(EmbeddingCacheMixin):
                 if file_path.name.startswith('.'):
                     continue
 
-                # Check if file was already loaded
+                # Check if file was already loaded (check both auto-loaded and manually loaded)
                 file_path_str = str(file_path.resolve())
-                if file_path_str in self.auto_loaded_files:
+                # Check against all loaded contexts, not just auto-loaded
+                if any(ctx.file_path == file_path_str for ctx in self.contexts.values()):
                     continue
 
-                # Generate label from relative path
+                # Generate label from relative path using hyphens (not underscores)
                 try:
                     rel_path = file_path.relative_to(self.pillars_dir)
-                    label = str(rel_path).replace('/', '_').replace('\\', '_')
+                    # Use hyphens instead of underscores to avoid collisions
+                    label = str(rel_path).replace('/', '-').replace('\\', '-')
                     if label.endswith(file_path.suffix):
                         label = label[:-len(file_path.suffix)]
                 except ValueError:
                     label = file_path.stem
+
+                # Handle label collisions by appending counter
+                original_label = label
+                counter = 1
+                while label in self.contexts:
+                    label = f"{original_label}-{counter}"
+                    counter += 1
 
                 # Load the file
                 success, message = self.load_file(

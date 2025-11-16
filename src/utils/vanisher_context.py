@@ -180,7 +180,7 @@ class VanisherContextManager(EmbeddingCacheMixin):
             sandbox_url = self.config.get_sandbox_url()
             response = requests.get(
                 f"{sandbox_url}/mirror-exists/{mirror_name}",
-                timeout=10
+                timeout=(2, 2)  # (connect_timeout, read_timeout)
             )
 
             if response.status_code == 200:
@@ -231,7 +231,7 @@ class VanisherContextManager(EmbeddingCacheMixin):
             # Check if file is mirrored
             is_mirrored, mirror_info = self._check_mirror_exists(mirror_name)
             if not is_mirrored:
-                return False, f"Cannot load vanisher: '{mirror_name}' is not mirrored. Use '/mirror do @{path.name}' first to mirror it."
+                return False, f"Cannot load vanisher: '{mirror_name}' is not mirrored. Use '/mirror do @{file_path}' first to mirror it."
 
             # Check file size
             file_size_mb = path.stat().st_size / (1024 * 1024)

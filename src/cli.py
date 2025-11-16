@@ -672,7 +672,15 @@ def interactive_mode(model, verbose=False, coding=False):
             loaded = []
             failed = []
             for file in files:
-                file_label = label if label else None
+                # Generate unique labels for each file in directory
+                # Use provided label as prefix, or filename if no label
+                if label:
+                    # Use label as prefix with filename
+                    file_label = f"{label}-{Path(file).stem}"
+                else:
+                    # Use filename (without extension) as label
+                    file_label = Path(file).stem
+
                 file_success, file_message = eternal_context.load_file(file, file_label, description)
                 if file_success:
                     loaded.append(os.path.basename(file))
@@ -749,7 +757,15 @@ def interactive_mode(model, verbose=False, coding=False):
                 loaded = []
                 failed = []
                 for file in files:
-                    file_label = label if label else None
+                    # Generate unique labels for each file in directory
+                    # Use provided label as prefix, or filename if no label
+                    if label:
+                        # Use label as prefix with filename
+                        file_label = f"{label}-{Path(file).stem}"
+                    else:
+                        # Use filename (without extension) as label
+                        file_label = Path(file).stem
+
                     file_success, file_message = pillar_context.load_file(file, file_label, description)
                     if file_success:
                         loaded.append(os.path.basename(file))
@@ -2079,10 +2095,14 @@ def non_interactive_mode(model, prompt, verbose=False, coding=False):
         model: The LLM model to use
         prompt: The prompt to process
         verbose: Enable verbose debugging output
-        coding: Enable coding mode (currently has no effect in non-interactive mode)
+        coding: Coding mode flag (ignored in non-interactive mode)
     """
     # Set global verbose mode
     set_verbose_mode(verbose)
+
+    # Show warning if coding mode was requested
+    if coding:
+        print_warning("⚠️  Coding mode is only available in interactive mode. Use ./start.sh --coding without -p flag.")
 
     try:
         if verbose:

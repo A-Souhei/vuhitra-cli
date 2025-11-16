@@ -187,6 +187,52 @@ data <- read_csv('data.csv')
 ggplot(data, aes(x=column1, y=column2)) + geom_point()
 ```
 
+### PostgreSQL Connection
+
+The sandbox has direct access to a PostgreSQL database for data analysis:
+
+#### Python with SQLAlchemy
+```python
+import os
+from sqlalchemy import create_engine
+import pandas as pd
+
+# Create database connection
+db_url = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
+engine = create_engine(db_url)
+
+# Read data from database
+df = pd.read_sql_query("SELECT * FROM my_table", engine)
+
+# Write data to database
+df.to_sql('my_table', engine, schema='analytics', if_exists='replace', index=False)
+```
+
+#### R with DBI/RPostgres
+```r
+library(DBI)
+library(RPostgres)
+
+# Create connection
+con <- dbConnect(
+  RPostgres::Postgres(),
+  host = Sys.getenv("POSTGRES_HOST"),
+  port = as.integer(Sys.getenv("POSTGRES_PORT")),
+  user = Sys.getenv("POSTGRES_USER"),
+  password = Sys.getenv("POSTGRES_PASSWORD"),
+  dbname = Sys.getenv("POSTGRES_DB")
+)
+
+# Query data
+df <- dbReadTable(con, "my_table")
+
+# Write data
+dbWriteTable(con, "my_table", mtcars, overwrite = TRUE)
+
+# Close connection
+dbDisconnect(con)
+```
+
 ### Linting
 ```bash
 # Python

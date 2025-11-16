@@ -664,21 +664,25 @@ def interactive_mode(model, verbose=False):
                         "       /mirror destroy @<path> - Remove mirror from sandbox\n"
                         "       /mirror sync @<path> - Sync changes from host to sandbox mirror\n"
                         "       /mirror revert+sync @<path> - Sync changes from sandbox mirror back to host\n"
+                        "       /mirror exists @<path> - Check if mirror exists in sandbox\n"
+                        "       /mirror synced @<path> - Check if host and sandbox mirror are in sync\n"
                         "\n"
                         "Examples:\n"
                         "  /mirror do @data - Copy data/ directory to sandbox\n"
                         "  /mirror sync @data - Update sandbox mirror with host changes\n"
+                        "  /mirror exists @data - Check if data/ is mirrored\n"
+                        "  /mirror synced @data - Check if data/ is in sync with mirror\n"
                         "  /mirror revert+sync @data - Apply sandbox changes back to host\n"
                         "  /mirror destroy @data - Remove data/ mirror from sandbox"
             )
 
         subcommand = args[0].lower()
 
-        if subcommand not in ["do", "destroy", "sync", "revert+sync"]:
+        if subcommand not in ["do", "destroy", "sync", "revert+sync", "exists", "synced"]:
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /mirror do, /mirror destroy, /mirror sync, or /mirror revert+sync"
+                        f"Use: /mirror do, /mirror destroy, /mirror sync, /mirror revert+sync, /mirror exists, or /mirror synced"
             )
 
         if len(args) < 2:
@@ -987,6 +991,127 @@ def interactive_mode(model, verbose=False):
                     return CommandResult(
                         success=False,
                         message=f"Error downloading/extracting mirror: {str(e)}"
+                    )
+
+            elif subcommand == "exists":
+                # Check if mirror exists in sandbox
+                response = requests.get(
+                    f"{sandbox_url}/mirror-exists/{target_name}",
+                    timeout=10
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('exists'):
+                        is_file = result.get('is_file', False)
+                        file_count = result.get('file_count', 0)
+                        type_str = "file" if is_file else "directory"
+
+                        messages = [f"✓ Mirror '{target_name}' exists in sandbox ({type_str})"]
+                        if not is_file:
+                            messages.append(f"  Contains {file_count} file(s)")
+
+                        return CommandResult(success=True, message="\n".join(messages))
+                    else:
+                        return CommandResult(
+                            success=True,
+                            message=f"Mirror '{target_name}' does not exist in sandbox"
+                        )
+                else:
+                    error_msg = response.json().get('error', 'Unknown error')
+                    return CommandResult(
+                        success=False,
+                        message=f"Failed to check mirror existence: {error_msg}"
+                    )
+
+            elif subcommand == "synced":
+                # Check if host and sandbox mirror are in sync
+                resolved = Path(resolved_path)
+
+                if not resolved.exists():
+                    return CommandResult(
+                        success=False,
+                        message=f"Path not found: {resolved_path}"
+                    )
+
+                # Build file list from host
+                host_files = []
+                if resolved.is_file():
+                    host_files.append({
+                        'name': resolved.name,
+                        'size': resolved.stat().st_size,
+                        'modified': resolved.stat().st_mtime
+                    })
+                else:
+                    for file_path in resolved.rglob('*'):
+                        if file_path.is_file():
+                            rel_path = file_path.relative_to(resolved)
+                            host_files.append({
+                                'name': str(rel_path),
+                                'size': file_path.stat().st_size,
+                                'modified': file_path.stat().st_mtime
+                            })
+
+                response = requests.post(
+                    f"{sandbox_url}/mirror-synced",
+                    json={
+                        'target_name': target_name,
+                        'files': host_files
+                    },
+                    timeout=30
+                )
+
+                if response.status_code == 404:
+                    return CommandResult(
+                        success=False,
+                        message=f"Mirror '{target_name}' not found in sandbox"
+                    )
+                elif response.status_code == 200:
+                    result = response.json()
+                    if result.get('synced'):
+                        return CommandResult(
+                            success=True,
+                            message=f"✓ Host and sandbox mirror '{target_name}' are in sync"
+                        )
+                    else:
+                        differences = result.get('differences', {})
+                        messages = [f"✗ Host and sandbox mirror '{target_name}' are NOT in sync:"]
+
+                        only_in_host = differences.get('only_in_host', [])
+                        only_in_mirror = differences.get('only_in_mirror', [])
+                        different_size = differences.get('different_size', [])
+                        different_modified = differences.get('different_modified', [])
+
+                        if only_in_host:
+                            messages.append(f"  Files only in host: {len(only_in_host)}")
+                            for f in only_in_host[:5]:
+                                messages.append(f"    - {f}")
+                            if len(only_in_host) > 5:
+                                messages.append(f"    ... and {len(only_in_host) - 5} more")
+
+                        if only_in_mirror:
+                            messages.append(f"  Files only in mirror: {len(only_in_mirror)}")
+                            for f in only_in_mirror[:5]:
+                                messages.append(f"    - {f}")
+                            if len(only_in_mirror) > 5:
+                                messages.append(f"    ... and {len(only_in_mirror) - 5} more")
+
+                        if different_size:
+                            messages.append(f"  Files with different sizes: {len(different_size)}")
+                            for diff in different_size[:5]:
+                                messages.append(f"    - {diff['name']} (host: {diff['host_size']}, mirror: {diff['mirror_size']})")
+                            if len(different_size) > 5:
+                                messages.append(f"    ... and {len(different_size) - 5} more")
+
+                        if different_modified:
+                            messages.append(f"  Files with different timestamps: {len(different_modified)}")
+
+                        return CommandResult(success=False, message="\n".join(messages))
+                else:
+                    error_msg = response.json().get('error', 'Unknown error')
+                    return CommandResult(
+                        success=False,
+                        message=f"Failed to check sync status: {error_msg}"
                     )
 
         except requests.exceptions.ConnectionError:

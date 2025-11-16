@@ -25,6 +25,15 @@ This volume is mounted in the sandbox container at `/app/WORKSPACE/mirrors`.
 
 ## Commands
 
+The `/mirror` command provides six subcommands for managing file synchronization between host and sandbox:
+
+1. **do** - Copy files to sandbox
+2. **destroy** - Remove mirror from sandbox
+3. **sync** - Update sandbox with host changes
+4. **revert+sync** - Update host with sandbox changes
+5. **exists** - Check if mirror exists
+6. **synced** - Check if host and mirror are in sync
+
 ### `/mirror do @<path>`
 
 Copy a file or directory to the sandbox mirror.
@@ -109,6 +118,83 @@ Synchronize changes from host to sandbox mirror.
 - Keeping sandbox data in sync with development changes
 - Efficient updates without re-uploading entire directory
 
+### `/mirror exists @<path>`
+
+Check if a file or directory has been mirrored to the sandbox.
+
+**Usage:**
+```bash
+/mirror exists @data
+/mirror exists @config.json
+```
+
+**Behavior:**
+- Queries the sandbox to check if the mirror exists
+- Returns information about the mirror type (file or directory)
+- Shows file count for directories
+- Does not modify anything
+
+**Example:**
+```bash
+/mirror exists @data
+
+# If exists:
+# ✓ Mirror 'data' exists in sandbox (directory)
+#   Contains 15 file(s)
+
+# If doesn't exist:
+# Mirror 'data' does not exist in sandbox
+```
+
+**Use Cases:**
+- Check if mirroring is needed before running `/mirror do`
+- Verify mirror creation was successful
+- Conditional logic in scripts or workflows
+
+### `/mirror synced @<path>`
+
+Check if the host and sandbox mirror are exactly in sync.
+
+**Usage:**
+```bash
+/mirror synced @data
+```
+
+**Behavior:**
+- Compares files between host and sandbox mirror
+- Checks file names, sizes, and modification times
+- Reports differences in detail
+- Does not modify anything
+
+**Example - When Synced:**
+```bash
+/mirror synced @data
+
+# Output:
+# ✓ Host and sandbox mirror 'data' are in sync
+```
+
+**Example - When Not Synced:**
+```bash
+/mirror synced @data
+
+# Output:
+# ✗ Host and sandbox mirror 'data' are NOT in sync:
+#   Files only in host: 2
+#     - new_file1.txt
+#     - new_file2.txt
+#   Files only in mirror: 1
+#     - old_file.txt
+#   Files with different sizes: 1
+#     - modified.txt (host: 1234, mirror: 1000)
+```
+
+**Use Cases:**
+- Verify synchronization before critical operations
+- Check if `/mirror sync` or `/mirror revert+sync` is needed
+- Monitor data consistency between host and sandbox
+- Debugging sync issues
+
 ### `/mirror revert+sync @<path>`
 
 Download files from sandbox mirror and overwrite them on the host.
@@ -155,16 +241,35 @@ Download files from sandbox mirror and overwrite them on the host.
 ### Example 1: Development with Sandbox Processing
 
 ```bash
+# Check if already mirrored
+/mirror exists @data
+# Mirror 'data' does not exist in sandbox
+
 # Initial setup: Copy project data to sandbox
 /mirror do @data
+# ✓ Mirrored 'data' to sandbox
+
+# Verify it exists
+/mirror exists @data
+# ✓ Mirror 'data' exists in sandbox (directory)
+#   Contains 10 file(s)
 
 # Work in sandbox, process data...
 # (sandbox modifies files, adds outputs, removes temp files)
 
+# Check if changes were made
+/mirror synced @data
+# ✗ Host and sandbox mirror 'data' are NOT in sync:
+#   Files only in mirror: 2
+#   Files with different sizes: 3
+
 # Retrieve processed data back to host
 /mirror revert+sync @data
+# ✓ Synced 8 file(s) from sandbox to host
 
-# Host now has all sandbox modifications!
+# Verify sync
+/mirror synced @data
+# ✓ Host and sandbox mirror 'data' are in sync
 
 # Clean up sandbox mirror when done
 /mirror destroy @data
@@ -228,6 +333,16 @@ The mirror functionality uses these sandbox HTTP endpoints:
 4. **DELETE /remove/<name>** - Remove mirror
    - Deletes mirror directory/file
    - Validates path safety
+
+5. **GET /mirror-exists/<name>** - Check mirror existence
+   - Returns whether mirror exists
+   - Provides file count and type information
+   - Fast operation (no file transfer)
+
+6. **POST /mirror-synced** - Check sync status
+   - Compares host file list with mirror
+   - Returns detailed differences
+   - Used by `/mirror synced` command
 
 ### File Transfer
 

@@ -851,5 +851,196 @@ def download_mirror(target_name):
                              target=safe_target) from e
 
 
+@app.route('/mirror-exists/<path:target_name>', methods=['GET'])
+def mirror_exists(target_name):
+    """
+    Check if a mirror exists in the sandbox.
+
+    Args:
+        target_name: Name of the mirror to check
+
+    Returns: {
+        exists: bool,           # Whether the mirror exists
+        target_name: str,       # Name of the mirror
+        is_file: bool,          # True if it's a file, False if directory (only if exists)
+        file_count: int         # Number of files (only for directories)
+    }
+    """
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "mirror_exists_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({
+            "exists": False,
+            "target_name": safe_target
+        }), 200
+
+    try:
+        is_file = target_path.is_file()
+        file_count = 0
+
+        if not is_file:
+            # Count files in directory
+            file_count = sum(1 for item in target_path.rglob('*') if item.is_file())
+
+        return jsonify({
+            "exists": True,
+            "target_name": safe_target,
+            "is_file": is_file,
+            "file_count": file_count if not is_file else 1
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to check mirror existence",
+                             operation="mirror_exists",
+                             target=safe_target) from e
+
+
+@app.route('/mirror-synced', methods=['POST'])
+def mirror_synced():
+    """
+    Check if host files are in sync with sandbox mirror.
+
+    Expects JSON: {
+        target_name: str,       # Name of the mirror
+        files: list             # List of file info dicts with 'name', 'size', 'modified'
+    }
+
+    Returns: {
+        synced: bool,           # Whether files are in sync
+        target_name: str,       # Name of the mirror
+        differences: dict       # Details about differences (if not synced)
+    }
+    """
+    data = request.get_json()
+    if not data or 'target_name' not in data:
+        return jsonify({"error": "No target_name provided"}), 400
+
+    if 'files' not in data:
+        return jsonify({"error": "No files list provided"}), 400
+
+    target_name = data['target_name']
+    host_files = data['files']
+
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "mirror_synced_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        # Build a dict of host files for comparison
+        host_files_dict = {}
+        for file_info in host_files:
+            name = file_info.get('name', '')
+            # Normalize path separators
+            normalized_name = name.replace('\\', '/')
+            host_files_dict[normalized_name] = {
+                'size': file_info.get('size', 0),
+                'modified': file_info.get('modified', 0)
+            }
+
+        # Get mirror files
+        mirror_files_dict = {}
+        if target_path.is_file():
+            mirror_files_dict[target_path.name] = {
+                'size': target_path.stat().st_size,
+                'modified': target_path.stat().st_mtime
+            }
+        else:
+            for item in target_path.rglob('*'):
+                if item.is_file():
+                    rel_path = item.relative_to(target_path)
+                    normalized_name = str(rel_path).replace('\\', '/')
+                    mirror_files_dict[normalized_name] = {
+                        'size': item.stat().st_size,
+                        'modified': item.stat().st_mtime
+                    }
+
+        # Compare files
+        only_in_host = []
+        only_in_mirror = []
+        different_size = []
+        different_modified = []
+
+        # Check files in host
+        for name, info in host_files_dict.items():
+            if name not in mirror_files_dict:
+                only_in_host.append(name)
+            else:
+                mirror_info = mirror_files_dict[name]
+                if info['size'] != mirror_info['size']:
+                    different_size.append({
+                        'name': name,
+                        'host_size': info['size'],
+                        'mirror_size': mirror_info['size']
+                    })
+                # Note: We're being lenient with modification times (allowing small differences)
+                # because file transfers can slightly change mtimes
+                elif abs(info['modified'] - mirror_info['modified']) > 2:
+                    different_modified.append({
+                        'name': name,
+                        'host_modified': info['modified'],
+                        'mirror_modified': mirror_info['modified']
+                    })
+
+        # Check files only in mirror
+        for name in mirror_files_dict:
+            if name not in host_files_dict:
+                only_in_mirror.append(name)
+
+        # Determine if synced
+        synced = (
+            len(only_in_host) == 0 and
+            len(only_in_mirror) == 0 and
+            len(different_size) == 0 and
+            len(different_modified) == 0
+        )
+
+        response = {
+            "synced": synced,
+            "target_name": safe_target
+        }
+
+        if not synced:
+            response["differences"] = {
+                "only_in_host": only_in_host,
+                "only_in_mirror": only_in_mirror,
+                "different_size": different_size,
+                "different_modified": different_modified
+            }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to check mirror sync status",
+                             operation="mirror_synced",
+                             target=safe_target) from e
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)

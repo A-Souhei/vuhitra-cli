@@ -409,3 +409,167 @@ class TestMirrorErrorHandling:
         assert "error" in result
         # Should NOT expose internal exception details
         assert "Traceback" not in str(result)
+
+
+class TestMirrorExistsEndpoint:
+    """Test mirror-exists endpoint for checking mirror existence."""
+
+    def test_mirror_exists_true_for_directory(self, cleanup):
+        """Test that mirror-exists returns true for existing directory mirror."""
+        # Create a mirror first
+        files = [
+            ('files', ('file1.txt', io.BytesIO(b"Content 1"), 'text/plain')),
+            ('files', ('file2.txt', io.BytesIO(b"Content 2"), 'text/plain'))
+        ]
+        data = {'target_name': 'exists_dir'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Check if it exists
+        response = requests.get(
+            f"{SANDBOX_BASE_URL}/mirror-exists/exists_dir"
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["exists"] is True
+        assert result["target_name"] == "exists_dir"
+        assert result["is_file"] is False
+        assert result["file_count"] == 2
+
+    def test_mirror_exists_true_for_file(self, cleanup):
+        """Test that mirror-exists returns true for existing file mirror."""
+        # Create a single file mirror
+        files = [('files', ('single.txt', io.BytesIO(b"Content"), 'text/plain'))]
+        data = {'target_name': 'exists_file'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Check if it exists
+        response = requests.get(
+            f"{SANDBOX_BASE_URL}/mirror-exists/exists_file"
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["exists"] is True
+        assert result["is_file"] is True
+        assert result["file_count"] == 1
+
+    def test_mirror_exists_false(self, cleanup):
+        """Test that mirror-exists returns false for non-existent mirror."""
+        response = requests.get(
+            f"{SANDBOX_BASE_URL}/mirror-exists/nonexistent"
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["exists"] is False
+        assert result["target_name"] == "nonexistent"
+
+
+class TestMirrorSyncedEndpoint:
+    """Test mirror-synced endpoint for checking sync status."""
+
+    def test_mirror_synced_true(self, cleanup):
+        """Test that mirror-synced returns true when files match."""
+        # Create a mirror
+        files = [
+            ('files', ('sync1.txt', io.BytesIO(b"Content 1"), 'text/plain')),
+            ('files', ('sync2.txt', io.BytesIO(b"Content 2"), 'text/plain'))
+        ]
+        data = {'target_name': 'synced_test'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Get mirror info to build file list
+        mirror_response = requests.post(
+            f"{SANDBOX_BASE_URL}/revert-sync",
+            json={'target_name': 'synced_test'}
+        )
+        assert mirror_response.status_code == 200
+        mirror_files = mirror_response.json()['files']
+
+        # Check sync status with same files
+        check_response = requests.post(
+            f"{SANDBOX_BASE_URL}/mirror-synced",
+            json={
+                'target_name': 'synced_test',
+                'files': mirror_files
+            }
+        )
+
+        assert check_response.status_code == 200
+        result = check_response.json()
+        assert result["synced"] is True
+
+    def test_mirror_synced_false_different_files(self, cleanup):
+        """Test that mirror-synced returns false when files differ."""
+        # Create a mirror
+        files = [
+            ('files', ('sync1.txt', io.BytesIO(b"Content 1"), 'text/plain')),
+            ('files', ('sync2.txt', io.BytesIO(b"Content 2"), 'text/plain'))
+        ]
+        data = {'target_name': 'not_synced'}
+
+        sync_response = requests.post(
+            f"{SANDBOX_BASE_URL}/sync",
+            files=files,
+            data=data
+        )
+        assert sync_response.status_code == 200
+
+        # Check with different file list
+        check_response = requests.post(
+            f"{SANDBOX_BASE_URL}/mirror-synced",
+            json={
+                'target_name': 'not_synced',
+                'files': [
+                    {'name': 'sync1.txt', 'size': 9, 'modified': 1234567890},
+                    {'name': 'different.txt', 'size': 10, 'modified': 1234567891}
+                ]
+            }
+        )
+
+        assert check_response.status_code == 200
+        result = check_response.json()
+        assert result["synced"] is False
+        assert "differences" in result
+
+    def test_mirror_synced_mirror_not_found(self, cleanup):
+        """Test mirror-synced returns 404 when mirror doesn't exist."""
+        response = requests.post(
+            f"{SANDBOX_BASE_URL}/mirror-synced",
+            json={
+                'target_name': 'nonexistent',
+                'files': [{'name': 'test.txt', 'size': 10, 'modified': 1234567890}]
+            }
+        )
+
+        assert response.status_code == 404
+        assert "Mirror not found" in response.json()["error"]
+
+    def test_mirror_synced_no_files_provided(self, cleanup):
+        """Test mirror-synced returns error when files list not provided."""
+        response = requests.post(
+            f"{SANDBOX_BASE_URL}/mirror-synced",
+            json={'target_name': 'test'}
+        )
+
+        assert response.status_code == 400
+        assert "No files list provided" in response.json()["error"]

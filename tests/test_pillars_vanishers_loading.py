@@ -57,11 +57,13 @@ try:
     context_count = pillar_mgr.get_context_count()
     print(f"\n  Total contexts in memory: {context_count}")
 
+    # Initialize embedded_count
+    embedded_count = 0
+
     # Test embedding generation
     if context_count > 0:
         print(f"\n🔍 Checking embeddings...")
         all_contexts = pillar_mgr.contexts.values()
-        embedded_count = 0
         for ctx in all_contexts:
             if ctx.description_embedding is not None:
                 embedded_count += 1

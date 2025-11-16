@@ -2,9 +2,16 @@ import shutil
 import sys
 import os
 import logging
+import io
+import zipfile
+import redis
+import json
+from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, render_template
 from werkzeug.utils import secure_filename
+from threading import Thread
+import time as time_module
 
 # Add parent directory to path to import from src
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,11 +27,66 @@ from heuristics_config_loader import HeuristicsConfigLoader
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-app = Flask(__name__)
+
+def sanitize_path(path_str):
+    """
+    Sanitize path to prevent directory traversal while preserving directory structure.
+
+    Args:
+        path_str: Path string to sanitize
+
+    Returns:
+        Sanitized path string safe for use in file operations
+
+    Removes:
+        - Leading/trailing slashes
+        - '..' parent directory references
+        - Absolute paths (leading '/')
+
+    Preserves:
+        - Directory separators (/)
+        - File and folder names
+    """
+    # Remove leading/trailing whitespace and slashes
+    path_str = path_str.strip().strip('/')
+
+    # Split into parts and filter out dangerous components
+    parts = []
+    for part in path_str.split('/'):
+        # Skip empty parts, '.', and '..'
+        if part and part != '.' and part != '..':
+            # Sanitize each component individually to prevent special characters
+            safe_part = secure_filename(part)
+            if safe_part:  # Only add if sanitization didn't remove everything
+                parts.append(safe_part)
+
+    # Rejoin with forward slashes
+    return '/'.join(parts) if parts else ''
+
+# Configure Flask app with template and static folders
+app = Flask(__name__, 
+            template_folder='/app/templates',
+            static_folder='/app/static')
 
 # Initialize error handler
 error_handler = get_error_handler()
 error_handler.configure(mode=os.getenv('VUHITRA_MODE', 'DEV'), enable_logging=True)
+
+# Initialize Redis connection for mirror tracking
+redis_client = None
+try:
+    redis_client = redis.Redis(
+        host=os.getenv('REDIS_HOST', 'localhost'),
+        port=int(os.getenv('REDIS_PORT', '6379')),
+        password=os.getenv('REDIS_PASSWORD'),
+        decode_responses=True,
+        socket_connect_timeout=5
+    )
+    redis_client.ping()
+    logger.info("Connected to Redis for mirror tracking")
+except Exception as e:
+    logger.warning(f"Could not connect to Redis: {e}. Mirror tracking will be disabled.")
+    redis_client = None
 
 # Initialize heuristics service
 heuristics = Heuristics(
@@ -65,6 +127,8 @@ pruner = HeuristicsPruner(
 # Configuration
 WORKSPACE_DIR = Path("/app/WORKSPACE")
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+MIRRORS_DIR = Path("/app/WORKSPACE/mirrors")
+MIRRORS_DIR.mkdir(parents=True, exist_ok=True)
 
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
 MAX_PROMPT_LENGTH = 5000  # Maximum prompt length to prevent memory exhaustion
@@ -95,6 +159,109 @@ def handle_unexpected_exception(e):
     """Handle any unexpected exceptions"""
     error_handler.handle_exception(e, context={"operation": "unexpected_error"})
     return jsonify({"error": "Internal server error"}), 500
+
+
+# Redis mirror tracking helper functions
+def add_mirror_to_redis(target_name, is_file, file_count):
+    """Register a mirror in Redis with metadata"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping mirror registration")
+        return
+
+    try:
+        mirror_data = {
+            'name': target_name,
+            'type': 'file' if is_file else 'directory',
+            'file_count': file_count,
+            'created_at': datetime.now().isoformat(),
+            'sync_status': 'synced',  # Initially synced since just created
+            'last_checked': datetime.now().isoformat()
+        }
+        redis_client.hset(f'mirror:{target_name}', mapping=mirror_data)
+        logger.info(f"Registered mirror '{target_name}' in Redis")
+    except Exception as e:
+        logger.warning(f"Failed to register mirror in Redis: {e}")
+
+
+def remove_mirror_from_redis(target_name):
+    """Remove a mirror from Redis registry"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping mirror removal")
+        return
+
+    try:
+        redis_client.delete(f'mirror:{target_name}')
+        logger.info(f"Removed mirror '{target_name}' from Redis")
+    except Exception as e:
+        logger.warning(f"Failed to remove mirror from Redis: {e}")
+
+
+def get_all_mirrors_from_redis():
+    """Get all registered mirrors from Redis"""
+    if not redis_client:
+        return []
+
+    try:
+        mirrors = []
+        # Get all keys matching mirror:*
+        for key in redis_client.scan_iter(match='mirror:*'):
+            mirror_data = redis_client.hgetall(key)
+            if mirror_data:
+                mirrors.append(mirror_data)
+        return mirrors
+    except Exception as e:
+        logger.warning(f"Failed to get mirrors from Redis: {e}")
+        return []
+
+
+def update_mirror_last_checked(target_name):
+    """Update only the last_checked timestamp in Redis (for cron monitoring)"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping last_checked update")
+        return
+
+    try:
+        # Check if mirror exists
+        if not redis_client.exists(f'mirror:{target_name}'):
+            logger.warning(f"Mirror '{target_name}' not found in Redis")
+            return
+
+        # Only update last checked time, do NOT touch sync_status
+        redis_client.hset(f'mirror:{target_name}', 'last_checked', datetime.now().isoformat())
+        logger.debug(f"Updated last_checked for mirror '{target_name}'")
+    except Exception as e:
+        logger.warning(f"Failed to update last_checked in Redis: {e}")
+
+
+def update_mirror_sync_status(target_name, synced, differences=None):
+    """Update sync status in Redis (called by CLI after actual sync comparison)"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping sync status update")
+        return
+
+    try:
+        # Check if mirror exists
+        if not redis_client.exists(f'mirror:{target_name}'):
+            logger.warning(f"Mirror '{target_name}' not found in Redis")
+            return
+
+        # Update sync status and last checked time
+        updates = {
+            'sync_status': 'synced' if synced else 'not_synced',
+            'last_checked': datetime.now().isoformat()
+        }
+
+        # Store differences if not synced
+        if not synced and differences:
+            updates['differences'] = json.dumps(differences)
+        elif synced and redis_client.hexists(f'mirror:{target_name}', 'differences'):
+            # Remove differences field if now synced
+            redis_client.hdel(f'mirror:{target_name}', 'differences')
+
+        redis_client.hset(f'mirror:{target_name}', mapping=updates)
+        logger.info(f"Updated sync status for mirror '{target_name}': {updates['sync_status']}")
+    except Exception as e:
+        logger.warning(f"Failed to update sync status in Redis: {e}")
 
 
 @app.route('/health', methods=['GET'])
@@ -576,6 +743,671 @@ def prune_heuristics():
     except Exception as e:
         raise SandboxException("Failed to prune heuristics",
                              operation="prune_heuristics") from e
+
+
+@app.route('/sync', methods=['POST'])
+def sync_to_mirror():
+    """
+    Synchronize files from host to sandbox mirror.
+
+    Expects multipart/form-data with:
+        - files: Multiple files to sync
+        - target_name: Target directory/file name in mirrors
+
+    This will:
+    - Update existing files
+    - Add new files
+    - Delete files in mirror that don't exist in source
+
+    Returns: {
+        message: str,           # Status message
+        target_name: str,       # Name of mirrored directory/file
+        synced: list,          # List of synced files
+        deleted: list          # List of deleted files
+    }
+    """
+    if 'files' not in request.files:
+        return jsonify({"error": "No files provided"}), 400
+
+    target_name = request.form.get('target_name')
+    if not target_name:
+        return jsonify({"error": "No target_name provided"}), 400
+
+    # Sanitize the target name while preserving directory structure
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
+    target_path = MIRRORS_DIR / safe_target
+
+    files = request.files.getlist('files')
+    if not files or all(f.filename == '' for f in files):
+        return jsonify({"error": "No valid files provided"}), 400
+
+    synced_files = []
+    failed_files = []
+
+    try:
+        # Create target directory if it doesn't exist
+        target_path.mkdir(parents=True, exist_ok=True)
+
+        # Track uploaded file names
+        uploaded_names = set()
+
+        # Upload/update files
+        for file in files:
+            if file.filename == '':
+                continue
+
+            # Preserve relative paths
+            filename = file.filename
+            uploaded_names.add(filename)
+            filepath = target_path / filename
+
+            try:
+                # Create subdirectories if needed
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                file.save(str(filepath))
+                synced_files.append(filename)
+            except Exception as e:
+                error_handler.handle_exception(e, context={
+                    "operation": "sync_to_mirror",
+                    "filename": filename,
+                    "target": safe_target
+                })
+                failed_files.append({"filename": filename, "error": "Failed to save file"})
+
+        # Delete files in mirror that weren't uploaded (they were deleted from source)
+        deleted_files = []
+        for item in target_path.rglob('*'):
+            if item.is_file():
+                rel_path = item.relative_to(target_path)
+                if str(rel_path) not in uploaded_names:
+                    try:
+                        item.unlink()
+                        deleted_files.append(str(rel_path))
+                    except Exception as e:
+                        error_handler.handle_exception(e, context={
+                            "operation": "sync_delete_orphaned",
+                            "filename": str(rel_path),
+                            "target": safe_target
+                        })
+
+        response = {
+            "message": f"Synced {len(synced_files)} file(s), deleted {len(deleted_files)} orphaned file(s)",
+            "target_name": safe_target,
+            "synced": synced_files,
+            "deleted": deleted_files
+        }
+
+        # Register mirror in Redis
+        # Check if this is a single-file mirror (directory with only one file and no subdirectories)
+        all_files = list(target_path.rglob('*'))
+        files_only = [f for f in all_files if f.is_file()]
+        is_file = len(files_only) == 1 and len(all_files) == 1
+        file_count = len(synced_files)
+        add_mirror_to_redis(safe_target, is_file, file_count)
+
+        if failed_files:
+            response["failed"] = failed_files
+            return jsonify(response), 207  # Multi-Status
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to sync to mirror",
+                             operation="sync_to_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/revert-sync', methods=['POST'])
+def revert_sync_from_mirror():
+    """
+    Synchronize files from sandbox mirror back to requestor.
+
+    Expects JSON: {
+        target_name: str  # Name of mirrored directory/file
+    }
+
+    Returns: {
+        message: str,           # Status message
+        target_name: str,       # Name of mirrored directory/file
+        file_count: int,        # Number of files
+        files: list            # List of file info dicts
+    }
+    """
+    data = request.get_json()
+    if not data or 'target_name' not in data:
+        return jsonify({"error": "No target_name provided"}), 400
+
+    target_name = data['target_name']
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
+    target_path = MIRRORS_DIR / safe_target
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "revert_sync_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        files_info = []
+
+        if target_path.is_file():
+            # Single file
+            files_info.append({
+                "name": target_path.name,
+                "size": target_path.stat().st_size,
+                "modified": target_path.stat().st_mtime,
+                "is_file": True
+            })
+        else:
+            # Directory - get all files and directories recursively
+            for item in target_path.rglob('*'):
+                rel_path = item.relative_to(target_path)
+                is_file = item.is_file()
+                files_info.append({
+                    "name": str(rel_path),
+                    "size": item.stat().st_size if is_file else 0,
+                    "modified": item.stat().st_mtime,
+                    "is_file": is_file
+                })
+
+        return jsonify({
+            "message": "Mirror contents retrieved successfully",
+            "target_name": safe_target,
+            "file_count": len(files_info),
+            "files": files_info,
+            "mirror_path": str(target_path)
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to revert-sync from mirror",
+                             operation="revert_sync_from_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/download-mirror/<path:target_name>', methods=['GET'])
+def download_mirror(target_name):
+    """
+    Download files from a sandbox mirror.
+
+    For single files: Returns the file directly
+    For directories: Returns a zip archive containing all files
+
+    Args:
+        target_name: Name of the mirror to download
+
+    Query parameters:
+        file_path: Optional specific file path within the mirror (for single file download)
+
+    Returns:
+        File download or zip archive
+    """
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
+    target_path = MIRRORS_DIR / safe_target
+
+    # Get optional file_path parameter for downloading specific files
+    file_path = request.args.get('file_path')
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "download_mirror_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        # If file_path is specified, download that specific file
+        if file_path:
+            file_to_download = target_path / file_path
+            file_to_download = file_to_download.resolve()
+
+            # Ensure the file is within the mirror directory
+            if not str(file_to_download).startswith(str(target_path)):
+                return jsonify({"error": "Invalid file path"}), 400
+
+            if not file_to_download.exists() or not file_to_download.is_file():
+                return jsonify({"error": "File not found"}), 404
+
+            return send_file(
+                str(file_to_download),
+                as_attachment=True,
+                download_name=file_to_download.name
+            )
+
+        # If target is a single file, return it directly
+        if target_path.is_file():
+            return send_file(
+                str(target_path),
+                as_attachment=True,
+                download_name=target_path.name
+            )
+
+        # If target is a directory, create a zip archive
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for item_path in target_path.rglob('*'):
+                if item_path.is_file():
+                    # Get path relative to the mirror directory
+                    arcname = item_path.relative_to(target_path)
+                    zf.write(item_path, arcname=str(arcname))
+
+        memory_file.seek(0)
+
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f"{safe_target}.zip"
+        )
+
+    except Exception as e:
+        raise SandboxException("Failed to download mirror",
+                             operation="download_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/mirrors/remove/<path:target_name>', methods=['DELETE'])
+def remove_mirror(target_name):
+    """
+    Remove a mirror from the sandbox.
+
+    Args:
+        target_name: Name of the mirror to remove
+
+    Returns: {
+        message: str,           # Status message
+        target_name: str        # Name of removed mirror
+    }
+    """
+    # Sanitize the target name while preserving directory structure
+    safe_target = sanitize_path(target_name)
+    if not safe_target:
+        return jsonify({"error": "Invalid target_name"}), 400
+    target_path = MIRRORS_DIR / safe_target
+
+    # Validate path is within MIRRORS_DIR
+    try:
+        resolved_path = target_path.resolve()
+        if not str(resolved_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid mirror path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "remove_mirror_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid mirror path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        # Remove the mirror (file or directory)
+        if target_path.is_file():
+            target_path.unlink()
+        elif target_path.is_dir():
+            shutil.rmtree(target_path)
+        else:
+            return jsonify({"error": "Invalid mirror type"}), 400
+
+        # Remove from Redis
+        remove_mirror_from_redis(safe_target)
+
+        return jsonify({
+            "message": f"Mirror '{safe_target}' removed successfully",
+            "target_name": safe_target
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to remove mirror",
+                             operation="remove_mirror",
+                             target=safe_target) from e
+
+
+@app.route('/mirror-exists/<path:target_name>', methods=['GET'])
+def mirror_exists(target_name):
+    """
+    Check if a mirror exists in the sandbox.
+
+    Args:
+        target_name: Name of the mirror to check
+
+    Returns: {
+        exists: bool,           # Whether the mirror exists
+        target_name: str,       # Name of the mirror
+        is_file: bool,          # True if it's a file, False if directory (only if exists)
+        file_count: int         # Number of files (only for directories)
+    }
+    """
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "mirror_exists_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({
+            "exists": False,
+            "target_name": safe_target
+        }), 200
+
+    try:
+        is_file = target_path.is_file()
+        file_count = 0
+
+        if not is_file:
+            # Count files in directory
+            file_count = sum(1 for item in target_path.rglob('*') if item.is_file())
+
+        return jsonify({
+            "exists": True,
+            "target_name": safe_target,
+            "is_file": is_file,
+            "file_count": file_count if not is_file else 1
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to check mirror existence",
+                             operation="mirror_exists",
+                             target=safe_target) from e
+
+
+@app.route('/mirror-synced', methods=['POST'])
+def mirror_synced():
+    """
+    Check if host files are in sync with sandbox mirror.
+
+    Expects JSON: {
+        target_name: str,       # Name of the mirror
+        files: list             # List of file info dicts with 'name', 'size', 'modified'
+    }
+
+    Returns: {
+        synced: bool,           # Whether files are in sync
+        target_name: str,       # Name of the mirror
+        differences: dict       # Details about differences (if not synced)
+    }
+    """
+    data = request.get_json()
+    if not data or 'target_name' not in data:
+        return jsonify({"error": "No target_name provided"}), 400
+
+    if 'files' not in data:
+        return jsonify({"error": "No files list provided"}), 400
+
+    target_name = data['target_name']
+    host_files = data['files']
+
+    safe_target = secure_filename(target_name)
+    target_path = MIRRORS_DIR / safe_target
+
+    # Ensure the path is within MIRRORS_DIR
+    try:
+        target_path = target_path.resolve()
+        if not str(target_path).startswith(str(MIRRORS_DIR.resolve())):
+            return jsonify({"error": "Invalid target path"}), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={
+            "operation": "mirror_synced_path_validation",
+            "target": safe_target
+        })
+        return jsonify({"error": "Invalid target path"}), 400
+
+    if not target_path.exists():
+        return jsonify({"error": "Mirror not found"}), 404
+
+    try:
+        # Build a dict of host files for comparison
+        host_files_dict = {}
+        for file_info in host_files:
+            name = file_info.get('name', '')
+            # Normalize path separators
+            normalized_name = name.replace('\\', '/')
+            host_files_dict[normalized_name] = {
+                'size': file_info.get('size', 0),
+                'modified': file_info.get('modified', 0)
+            }
+
+        # Get mirror files
+        mirror_files_dict = {}
+        if target_path.is_file():
+            mirror_files_dict[target_path.name] = {
+                'size': target_path.stat().st_size,
+                'modified': target_path.stat().st_mtime
+            }
+        else:
+            for item in target_path.rglob('*'):
+                if item.is_file():
+                    rel_path = item.relative_to(target_path)
+                    normalized_name = str(rel_path).replace('\\', '/')
+                    mirror_files_dict[normalized_name] = {
+                        'size': item.stat().st_size,
+                        'modified': item.stat().st_mtime
+                    }
+
+        # Compare files
+        only_in_host = []
+        only_in_mirror = []
+        different_size = []
+        different_modified = []
+
+        # Check files in host
+        for name, info in host_files_dict.items():
+            if name not in mirror_files_dict:
+                only_in_host.append(name)
+            else:
+                mirror_info = mirror_files_dict[name]
+                if info['size'] != mirror_info['size']:
+                    different_size.append({
+                        'name': name,
+                        'host_size': info['size'],
+                        'mirror_size': mirror_info['size']
+                    })
+                # Note: We're being lenient with modification times (allowing small differences)
+                # because file transfers can slightly change mtimes
+                elif abs(info['modified'] - mirror_info['modified']) > 2:
+                    different_modified.append({
+                        'name': name,
+                        'host_modified': info['modified'],
+                        'mirror_modified': mirror_info['modified']
+                    })
+
+        # Check files only in mirror
+        for name in mirror_files_dict:
+            if name not in host_files_dict:
+                only_in_mirror.append(name)
+
+        # Determine if synced
+        synced = (
+            len(only_in_host) == 0 and
+            len(only_in_mirror) == 0 and
+            len(different_size) == 0 and
+            len(different_modified) == 0
+        )
+
+        response = {
+            "synced": synced,
+            "target_name": safe_target
+        }
+
+        if not synced:
+            response["differences"] = {
+                "only_in_host": only_in_host,
+                "only_in_mirror": only_in_mirror,
+                "different_size": different_size,
+                "different_modified": different_modified
+            }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to check mirror sync status",
+                             operation="mirror_synced",
+                             target=safe_target) from e
+
+
+@app.route('/mirror-list', methods=['GET'])
+def mirror_list():
+    """
+    Get list of all registered mirrors from Redis.
+
+    Returns: {
+        mirrors: list           # List of mirror metadata dicts
+    }
+
+    Each mirror dict contains:
+        - name: str
+        - type: str (file or directory)
+        - file_count: int
+        - created_at: str (ISO format)
+        - sync_status: str (synced or not_synced)
+        - last_checked: str (ISO format)
+        - differences: dict (optional, if not_synced)
+    """
+    try:
+        mirrors = get_all_mirrors_from_redis()
+
+        return jsonify({
+            "mirrors": mirrors
+        }), 200
+
+    except Exception as e:
+        raise SandboxException("Failed to list mirrors",
+                             operation="mirror_list") from e
+
+
+# Background cron job to check mirror sync status
+def mirror_sync_monitor():
+    """
+    Background job that periodically checks sync status for all mirrors.
+    Updates Redis with the latest sync status.
+    """
+    logger.info("Mirror sync monitor started")
+
+    # Check interval in seconds (default: 10 seconds, minimum: 10, maximum: 3600)
+    try:
+        check_interval = int(os.getenv('MIRROR_SYNC_CHECK_INTERVAL', '10'))
+        # Validate bounds: minimum 10 seconds, maximum 1 hour
+        if check_interval < 10:
+            logger.warning(f"MIRROR_SYNC_CHECK_INTERVAL too low ({check_interval}s), using minimum 10s")
+            check_interval = 10
+        elif check_interval > 3600:
+            logger.warning(f"MIRROR_SYNC_CHECK_INTERVAL too high ({check_interval}s), using maximum 3600s")
+            check_interval = 3600
+    except ValueError:
+        logger.warning("Invalid MIRROR_SYNC_CHECK_INTERVAL, using default 10s")
+        check_interval = 10
+
+    while True:
+        try:
+            # Wait before first check
+            time_module.sleep(check_interval)
+
+            if not redis_client:
+                logger.debug("Redis not available, skipping sync check")
+                continue
+
+            mirrors = get_all_mirrors_from_redis()
+            if not mirrors:
+                logger.debug("No mirrors to check")
+                continue
+
+            logger.info(f"Checking sync status for {len(mirrors)} mirror(s)")
+
+            for mirror in mirrors:
+                try:
+                    mirror_name = mirror.get('name')
+                    if not mirror_name:
+                        continue
+
+                    # Check if mirror still exists in filesystem
+                    safe_name = sanitize_path(mirror_name)
+                    if not safe_name:
+                        logger.warning(f"Invalid mirror name: {mirror_name}")
+                        continue
+                    mirror_path = MIRRORS_DIR / safe_name
+
+                    if not mirror_path.exists():
+                        logger.warning(f"Mirror '{mirror_name}' not found in filesystem")
+                        # Could remove from Redis here, but we'll leave it for manual cleanup
+                        continue
+
+                    # Get mirror files for comparison
+                    mirror_files_dict = {}
+                    if mirror_path.is_file():
+                        mirror_files_dict[mirror_path.name] = {
+                            'size': mirror_path.stat().st_size,
+                            'modified': mirror_path.stat().st_mtime
+                        }
+                    else:
+                        for item in mirror_path.rglob('*'):
+                            if item.is_file():
+                                rel_path = item.relative_to(mirror_path)
+                                normalized_name = str(rel_path).replace('\\', '/')
+                                mirror_files_dict[normalized_name] = {
+                                    'size': item.stat().st_size,
+                                    'modified': item.stat().st_mtime
+                                }
+
+                    # Cron can only update last_checked timestamp
+                    # Sync status is managed by CLI after actual file comparison with host
+                    update_mirror_last_checked(mirror_name)
+
+                    logger.debug(f"Checked mirror '{mirror_name}': {len(mirror_files_dict)} files")
+
+                except Exception as e:
+                    logger.error(f"Error checking mirror '{mirror.get('name', 'unknown')}': {e}")
+                    continue
+
+            logger.info(f"Sync check completed for {len(mirrors)} mirror(s)")
+
+        except Exception as e:
+            logger.error(f"Error in mirror sync monitor: {e}")
+            # Continue running despite errors
+            continue
+
+
+@app.route('/mirrors', methods=['GET'])
+def mirror_web_interface():
+    """Web interface for managing mirrors"""
+    return render_template('mirrors.html')
+# Start background sync monitor thread
+if redis_client:
+    sync_monitor_thread = Thread(target=mirror_sync_monitor, daemon=True)
+    sync_monitor_thread.start()
+    logger.info("Started background mirror sync monitor")
+else:
+    logger.info("Redis not available, sync monitor disabled")
 
 
 if __name__ == '__main__':

@@ -1,0 +1,105 @@
+html {
+    height: 100%;
+}
+
+body {
+    background: white;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+.main-content {
+    flex: 1;
+    padding: 20px 0;
+}
+
+.container-custom {
+    background: white;
+    padding: 30px;
+}
+
+.header-title {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+.badge-file {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.badge-directory {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.btn-action {
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    margin: 0 2px;
+}
+
+.btn-outline-purple {
+    color: #764ba2;
+    border-color: #764ba2;
+}
+
+.btn-outline-purple:hover {
+    color: white;
+    background-color: #764ba2;
+    border-color: #764ba2;
+}
+
+.sync-badge {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    opacity: 0.3;
+}
+
+.cli-hint {
+    background: #f8f9fa;
+    border-left: 4px solid #667eea;
+    padding: 12px 15px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    margin-top: 3px;
+}
+
+.footer {
+    margin-top: 40px;
+    padding: 20px 0;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.footer a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}

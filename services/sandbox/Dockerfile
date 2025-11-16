@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3.12-dev python3-pip curl && \
+    python3.12 python3.12-venv python3.12-dev python3-pip curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
 # Set python3.12 as default python
@@ -44,12 +44,21 @@ RUN if [ -f /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl ]; then \
 COPY ./services/sandbox/src /app
 COPY ./src /app/src
 
+# Copy templates and static files for web UI
+COPY ./services/sandbox/templates /app/templates
+COPY ./services/sandbox/static /app/static
+
+# Copy entrypoint script
+COPY ./services/sandbox/docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create WORKSPACE directory and non-root user
 RUN useradd -m vuhitra && \
-    mkdir -p /app/WORKSPACE && \
+    mkdir -p /app/WORKSPACE/mirrors && \
     chown -R vuhitra:vuhitra /app
 
-USER vuhitra
+# Note: We start as root to fix volume permissions, then switch to vuhitra user
+# USER vuhitra will be handled by entrypoint script
 
 # Expose port (App: 8000)
 EXPOSE 8000
@@ -58,5 +67,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
 # Start the Flask application
-CMD python main.py
+CMD ["python", "main.py"]

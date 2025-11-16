@@ -864,7 +864,7 @@ def interactive_mode(model, verbose=False):
             elif subcommand == "destroy":
                 # Remove mirror from sandbox
                 response = requests.delete(
-                    f"{sandbox_url}/remove/{target_name}",
+                    f"{sandbox_url}/mirrors/remove/{target_name}",
                     timeout=30
                 )
 

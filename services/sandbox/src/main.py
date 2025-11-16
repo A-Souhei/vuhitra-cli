@@ -8,7 +8,7 @@ import redis
 import json
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, render_template_string
+from flask import Flask, request, jsonify, send_file, render_template
 from werkzeug.utils import secure_filename
 from threading import Thread
 import time as time_module
@@ -27,7 +27,10 @@ from heuristics_config_loader import HeuristicsConfigLoader
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-app = Flask(__name__)
+# Configure Flask app with template and static folders
+app = Flask(__name__, 
+            template_folder='/app/templates',
+            static_folder='/app/static')
 
 # Initialize error handler
 error_handler = get_error_handler()
@@ -175,8 +178,27 @@ def get_all_mirrors_from_redis():
         return []
 
 
+def update_mirror_last_checked(target_name):
+    """Update only the last_checked timestamp in Redis (for cron monitoring)"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping last_checked update")
+        return
+
+    try:
+        # Check if mirror exists
+        if not redis_client.exists(f'mirror:{target_name}'):
+            logger.warning(f"Mirror '{target_name}' not found in Redis")
+            return
+
+        # Only update last checked time, do NOT touch sync_status
+        redis_client.hset(f'mirror:{target_name}', 'last_checked', datetime.now().isoformat())
+        logger.debug(f"Updated last_checked for mirror '{target_name}'")
+    except Exception as e:
+        logger.warning(f"Failed to update last_checked in Redis: {e}")
+
+
 def update_mirror_sync_status(target_name, synced, differences=None):
-    """Update sync status in Redis"""
+    """Update sync status in Redis (called by CLI after actual sync comparison)"""
     if not redis_client:
         logger.debug("Redis not available, skipping sync status update")
         return
@@ -780,8 +802,11 @@ def sync_to_mirror():
         }
 
         # Register mirror in Redis
-        is_file = target_path.is_file()
-        file_count = len(synced_files) if not is_file else 1
+        # Check if this is a single-file mirror (directory with only one file and no subdirectories)
+        all_files = list(target_path.rglob('*'))
+        files_only = [f for f in all_files if f.is_file()]
+        is_file = len(files_only) == 1 and len(all_files) == 1
+        file_count = len(synced_files)
         add_mirror_to_redis(safe_target, is_file, file_count)
 
         if failed_files:
@@ -961,7 +986,7 @@ def download_mirror(target_name):
                              target=safe_target) from e
 
 
-@app.route('/remove/<path:target_name>', methods=['DELETE'])
+@app.route('/mirrors/remove/<path:target_name>', methods=['DELETE'])
 def remove_mirror(target_name):
     """
     Remove a mirror from the sandbox.
@@ -1245,8 +1270,8 @@ def mirror_sync_monitor():
     """
     logger.info("Mirror sync monitor started")
 
-    # Check interval in seconds (default: 5 minutes)
-    check_interval = int(os.getenv('MIRROR_SYNC_CHECK_INTERVAL', '300'))
+    # Check interval in seconds (default: 5 seconds for responsive updates)
+    check_interval = int(os.getenv('MIRROR_SYNC_CHECK_INTERVAL', '5'))
 
     while True:
         try:
@@ -1296,10 +1321,9 @@ def mirror_sync_monitor():
                                     'modified': item.stat().st_mtime
                                 }
 
-                    # For now, we can only check if files changed in mirror
-                    # We don't have access to host filesystem from sandbox
-                    # So we'll just track that we checked
-                    update_mirror_sync_status(mirror_name, synced=True, differences=None)
+                    # Cron can only update last_checked timestamp
+                    # Sync status is managed by CLI after actual file comparison with host
+                    update_mirror_last_checked(mirror_name)
 
                     logger.debug(f"Checked mirror '{mirror_name}': {len(mirror_files_dict)} files")
 
@@ -1315,253 +1339,10 @@ def mirror_sync_monitor():
             continue
 
 
-# Web interface for mirror management
-WEB_INTERFACE_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Mirror Management</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        h1 {
-            color: #333;
-            border-bottom: 3px solid #4CAF50;
-            padding-bottom: 10px;
-        }
-        .mirror-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .mirror-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
-        .mirror-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-        .mirror-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
-        }
-        .mirror-info {
-            font-size: 14px;
-            color: #666;
-            margin: 5px 0;
-        }
-        .mirror-info label {
-            font-weight: bold;
-            display: inline-block;
-            width: 100px;
-        }
-        .sync-status {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .sync-status.synced {
-            background-color: #4CAF50;
-            color: white;
-        }
-        .sync-status.not-synced {
-            background-color: #ff9800;
-            color: white;
-        }
-        .button-group {
-            margin-top: 15px;
-            display: flex;
-            gap: 10px;
-        }
-        button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-        .btn-sync {
-            background-color: #2196F3;
-            color: white;
-        }
-        .btn-sync:hover {
-            background-color: #0b7dda;
-        }
-        .btn-delete {
-            background-color: #f44336;
-            color: white;
-        }
-        .btn-delete:hover {
-            background-color: #da190b;
-        }
-        .btn-refresh {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            font-size: 16px;
-            margin-bottom: 20px;
-        }
-        .btn-refresh:hover {
-            background-color: #45a049;
-        }
-        .no-mirrors {
-            text-align: center;
-            color: #999;
-            padding: 40px;
-            font-size: 18px;
-        }
-        .error {
-            background-color: #ffebee;
-            color: #c62828;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        .success {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-    </style>
-</head>
-<body>
-    <h1>🗂️ Mirror Management</h1>
-    <button class="btn-refresh" onclick="location.reload()">🔄 Refresh</button>
-
-    <div id="message"></div>
-    <div class="mirror-grid" id="mirrorGrid">
-        <div class="no-mirrors">Loading mirrors...</div>
-    </div>
-
-    <script>
-        async function loadMirrors() {
-            try {
-                const response = await fetch('/mirror-list');
-                const data = await response.json();
-                const mirrors = data.mirrors || [];
-
-                const grid = document.getElementById('mirrorGrid');
-
-                if (mirrors.length === 0) {
-                    grid.innerHTML = '<div class="no-mirrors">No mirrors registered</div>';
-                    return;
-                }
-
-                grid.innerHTML = mirrors.map(mirror => {
-                    const createdDate = new Date(mirror.created_at).toLocaleString();
-                    const lastChecked = mirror.last_checked !== 'never'
-                        ? new Date(mirror.last_checked).toLocaleString()
-                        : 'Never';
-                    const syncClass = mirror.sync_status === 'synced' ? 'synced' : 'not-synced';
-                    const syncText = mirror.sync_status === 'synced' ? '✓ Synced' : '✗ Not Synced';
-
-                    return `
-                        <div class="mirror-card">
-                            <div class="mirror-name">${mirror.name}</div>
-                            <div class="mirror-info">
-                                <label>Type:</label> ${mirror.type}
-                            </div>
-                            <div class="mirror-info">
-                                <label>Files:</label> ${mirror.file_count}
-                            </div>
-                            <div class="mirror-info">
-                                <label>Created:</label> ${createdDate}
-                            </div>
-                            <div class="mirror-info">
-                                <label>Status:</label> <span class="sync-status ${syncClass}">${syncText}</span>
-                            </div>
-                            <div class="mirror-info">
-                                <label>Last Checked:</label> ${lastChecked}
-                            </div>
-                            <div class="button-group">
-                                <button class="btn-sync" onclick="syncMirror('${mirror.name}')">📥 Sync from Host</button>
-                                <button class="btn-delete" onclick="deleteMirror('${mirror.name}')">🗑️ Delete</button>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            } catch (error) {
-                console.error('Error loading mirrors:', error);
-                document.getElementById('mirrorGrid').innerHTML =
-                    '<div class="error">Failed to load mirrors. Please refresh the page.</div>';
-            }
-        }
-
-        function showMessage(message, isError = false) {
-            const msgDiv = document.getElementById('message');
-            msgDiv.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
-            setTimeout(() => msgDiv.innerHTML = '', 5000);
-        }
-
-        async function syncMirror(name) {
-            if (!confirm(`Sync mirror '${name}' from host? This will update the sandbox mirror with host changes.`)) {
-                return;
-            }
-
-            showMessage(`Syncing mirror '${name}'...`);
-
-            try {
-                // Note: This would require host cooperation to upload files
-                // For now, we'll just show a message
-                showMessage(`Sync operation requires running /mirror sync @${name} from the CLI`, false);
-            } catch (error) {
-                showMessage(`Failed to sync: ${error.message}`, true);
-            }
-        }
-
-        async function deleteMirror(name) {
-            if (!confirm(`Delete mirror '${name}'? This will remove it from the sandbox.`)) {
-                return;
-            }
-
-            try {
-                const response = await fetch(`/remove/${name}`, {
-                    method: 'DELETE'
-                });
-
-                if (response.ok) {
-                    showMessage(`Mirror '${name}' deleted successfully`, false);
-                    setTimeout(() => location.reload(), 1000);
-                } else {
-                    const data = await response.json();
-                    showMessage(`Failed to delete: ${data.error}`, true);
-                }
-            } catch (error) {
-                showMessage(`Failed to delete: ${error.message}`, true);
-            }
-        }
-
-        // Load mirrors on page load
-        loadMirrors();
-    </script>
-</body>
-</html>
-"""
-
-
 @app.route('/mirrors', methods=['GET'])
 def mirror_web_interface():
     """Web interface for managing mirrors"""
-    return render_template_string(WEB_INTERFACE_HTML)
-
-
+    return render_template('mirrors.html')
 # Start background sync monitor thread
 if redis_client:
     sync_monitor_thread = Thread(target=mirror_sync_monitor, daemon=True)

@@ -44,6 +44,10 @@ RUN if [ -f /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl ]; then \
 COPY ./services/sandbox/src /app
 COPY ./src /app/src
 
+# Copy templates and static files for web UI
+COPY ./services/sandbox/templates /app/templates
+COPY ./services/sandbox/static /app/static
+
 # Copy entrypoint script
 COPY ./services/sandbox/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

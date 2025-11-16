@@ -74,24 +74,26 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \
 COPY services/sandbox/requirements.txt .
 COPY services/sandbox/install_r_packages.R /tmp/
 
+# Create R library directory with proper permissions before installation
+RUN mkdir -p /usr/local/lib/R/site-library && \
+    chmod -R 755 /usr/local/lib/R/site-library
+
 # Install Python dependencies with pip cache mount
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     pip install --break-system-packages -r requirements.txt
 
-# Install R linter and packages with cache mount
-# Create R library directory and set permissions
-RUN mkdir -p /usr/local/lib/R/site-library && \
-    chmod -R 755 /usr/local/lib/R/site-library
-
-# Install R packages with cache for downloads
-RUN --mount=type=cache,target=/tmp/downloaded_packages,sharing=shared \
+# Install R packages with proper cache mount for R's package download location
+# R downloads packages to a temporary directory, we'll cache that
+RUN --mount=type=cache,target=/tmp/R_pkg_cache,sharing=shared \
     R -e "options(repos = list(CRAN = 'https://cloud.r-project.org')); install.packages('lintr', quiet = TRUE)" && \
     Rscript /tmp/install_r_packages.R && \
     rm /tmp/install_r_packages.R
 
 # Copy and install spaCy large model from local wheel (if exists), otherwise download
+# Use pip cache mount for efficient caching
 COPY services/sandbox/packages/ /tmp/packages/
-RUN if [ -f /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl ]; then \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
+    if [ -f /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl ]; then \
         pip install --break-system-packages /tmp/packages/en_core_web_lg-3.8.0-py3-none-any.whl; \
     else \
         pip install --break-system-packages https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl; \

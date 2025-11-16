@@ -58,12 +58,22 @@ This document describes the comprehensive data analysis sandbox environment with
 - `psycopg2-binary` - PostgreSQL adapter
 
 #### Development Tools & Linters
+- `ruff` - Fast Python linter and formatter (modern alternative)
 - `pylint` - Code analysis
 - `flake8` - Style guide enforcement
 - `black` - Code formatter
 - `mypy` - Static type checker
 - `isort` - Import sorter
 - `autopep8` - Auto-formatter
+
+#### Testing Tools
+- `pytest` - Testing framework
+- `pytest-cov` - Code coverage reporting
+- `pytest-asyncio` - Async test support
+
+#### Security Tools
+- `bandit` - Security issue scanner
+- `safety` - Dependency vulnerability checker
 
 #### Interactive Development
 - `jupyter` - Jupyter notebooks
@@ -233,14 +243,35 @@ dbWriteTable(con, "my_table", mtcars, overwrite = TRUE)
 dbDisconnect(con)
 ```
 
-### Linting
+### Linting and Quality Checks
+
 ```bash
-# Python
+# Python - Modern linting with ruff (fast!)
+ruff check .
+ruff check script.py
+
+# Python - Traditional linters
 pylint script.py
 flake8 script.py
-black script.py
 
-# R
+# Python - Code formatting
+black script.py --check  # Check formatting
+black script.py          # Apply formatting
+isort script.py          # Sort imports
+
+# Python - Type checking
+mypy script.py
+
+# Python - Testing
+pytest tests/              # Run all tests
+pytest tests/test_file.py  # Run specific test
+pytest --cov=src tests/    # With coverage report
+
+# Python - Security scanning
+bandit -r src/            # Scan for security issues
+safety check              # Check dependencies for vulnerabilities
+
+# R - Linting
 Rscript -e "lintr::lint('script.R')"
 ```
 

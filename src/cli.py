@@ -5,6 +5,9 @@ import requests
 import time
 import zipfile
 import tempfile
+import redis
+import json
+import yaml
 from pathlib import Path
 from src.agent import generate
 from src.utils.arg_parser import ArgumentParser
@@ -97,6 +100,47 @@ def initialize_error_handler():
         error_handler.configure(config_loader=config)
     except Exception as e:
         print(f"WARNING: Failed to initialize error handler: {str(e)}", file=sys.stderr)
+
+def get_todo_list_from_redis():
+    """Fetch TODO_list from Redis storage (used by Mirror+Vanisher MCP create_plan tool)."""
+    try:
+        # Load configuration
+        config_path = Path(__file__).parent.parent / "config.yaml"
+        secrets_path = Path(__file__).parent.parent / "secrets.yaml"
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Load Redis password from secrets
+        redis_password = None
+        if secrets_path.exists():
+            with open(secrets_path, 'r') as f:
+                secrets = yaml.safe_load(f)
+                redis_password = secrets.get('redis', {}).get('password')
+        
+        # Connect to Redis
+        redis_client = redis.Redis(
+            host=config['redis']['host'],
+            port=config['redis']['port'],
+            db=0,
+            password=redis_password,
+            decode_responses=True
+        )
+        
+        # Retrieve TODO_list
+        TODO_LIST_KEY = "mcp:mirror_vanisher:todo_list"
+        todo_list_json = redis_client.get(TODO_LIST_KEY)
+        
+        if todo_list_json:
+            todo_list = json.loads(todo_list_json)
+            return todo_list
+        else:
+            return None
+            
+    except Exception as e:
+        print_error(f"Error retrieving TODO_list from Redis: {str(e)}")
+        return None
+
 
 def fetch_similar_heuristic(prompt, verbose=False, negative_weight_boost=0.0):
     """Fetch similar heuristic from sandbox to enhance LLM context."""
@@ -915,7 +959,8 @@ def interactive_mode(model, verbose=False, coding=False):
                         "       /show eternal - Show loaded eternal contexts\n"
                         "       /show pillar - Show loaded pillar contexts (coding mode)\n"
                         "       /show vanisher - Show loaded vanisher contexts (coding mode)\n"
-                        "       /show spark - Show loaded Spark contexts"
+                        "       /show spark - Show loaded Spark contexts\n"
+                        "       /show TODO_list - Show current TODO list from MCP create_plan"
             )
 
         subcommand = args[0].lower()
@@ -965,11 +1010,44 @@ def interactive_mode(model, verbose=False, coding=False):
 
             summary = spark_context.get_summary()
             return CommandResult(success=True, message=summary)
+        elif subcommand == "todo_list":
+            # Fetch TODO_list from Redis
+            todo_list = get_todo_list_from_redis()
+            
+            if todo_list is None:
+                return CommandResult(
+                    success=False,
+                    message="No TODO_list found. Create a plan using the Mirror+Vanisher MCP create_plan tool first."
+                )
+            
+            if not todo_list:
+                return CommandResult(
+                    success=False,
+                    message="TODO_list is empty."
+                )
+            
+            # Format the TODO_list nicely
+            output = []
+            output.append("=" * 80)
+            output.append("📋 TODO LIST")
+            output.append("=" * 80)
+            output.append(f"\nTotal items: {len(todo_list)}\n")
+            
+            for item in todo_list:
+                status_emoji = "⏳" if item['status'] == 'pending' else "✅"
+                output.append(f"{status_emoji} {item['step_number']}. {item['action']}")
+                output.append(f"   ➤ {item['details']}")
+                output.append(f"   Status: [{item['status'].upper()}]")
+                output.append("")
+            
+            output.append("=" * 80)
+            
+            return CommandResult(success=True, message="\n".join(output))
         else:
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /show ephemeral, /show eternal, /show pillar, /show vanisher, or /show spark"
+                        f"Use: /show ephemeral, /show eternal, /show pillar, /show vanisher, /show spark, or /show TODO_list"
             )
 
     command_handler.register_command("show", show_command_handler)

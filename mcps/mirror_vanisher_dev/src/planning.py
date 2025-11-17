@@ -6,12 +6,32 @@ Tools for creating atomic, file-specific implementation plans.
 
 import logging
 import json
+import redis
+import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from errors_handler import handle_exception
 
 logger = logging.getLogger(__name__)
+
+# Load configuration
+config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
+secrets_path = Path(__file__).parent.parent.parent.parent / "secrets.yaml"
+
+with open(config_path, 'r') as f:
+    config = yaml.safe_load(f)
+
+# Try to load secrets, fallback to no password if not available
+redis_password = None
+if secrets_path.exists():
+    with open(secrets_path, 'r') as f:
+        secrets = yaml.safe_load(f)
+        redis_password = secrets.get('redis', {}).get('password')
+    
+REDIS_HOST = config['redis']['host']
+REDIS_PORT = config['redis']['port']
+TODO_LIST_KEY = "mcp:mirror_vanisher:todo_list"
 
 
 class PlanningTools:
@@ -20,8 +40,14 @@ class PlanningTools:
     def __init__(self, manager):
         """Initialize planning tools."""
         self.manager = manager
-        # In-memory storage for TODO_list
-        self._todo_list_storage: List[Dict[str, Any]] = []
+        # Initialize Redis connection
+        self.redis_client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=0,
+            password=redis_password,
+            decode_responses=True
+        )
 
     def create_plan(self, path: str, task: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create atomic, file-specific implementation plan.
@@ -114,8 +140,8 @@ class PlanningTools:
                 }
                 todo_list.append(todo_item)
 
-            # Store TODO_list in memory (overwrite previous)
-            self._todo_list_storage = todo_list
+            # Store TODO_list in Redis (overwrite previous)
+            self.redis_client.set(TODO_LIST_KEY, json.dumps(todo_list))
 
             # Create beautiful formatted plan output
             formatted_plan = self._format_plan_beautifully(plan, todo_list)
@@ -206,16 +232,24 @@ class PlanningTools:
         return "\n".join(lines)
 
     def get_todo_list(self) -> Dict[str, Any]:
-        """Get the current TODO_list from memory.
+        """Get the current TODO_list from Redis storage.
 
         Returns:
             Dictionary containing the TODO_list
         """
         try:
+            # Retrieve TODO_list from Redis
+            todo_list_json = self.redis_client.get(TODO_LIST_KEY)
+            
+            if todo_list_json:
+                todo_list = json.loads(todo_list_json)
+            else:
+                todo_list = []
+            
             return {
                 'success': True,
-                'TODO_list': self._todo_list_storage,
-                'count': len(self._todo_list_storage)
+                'TODO_list': todo_list,
+                'count': len(todo_list)
             }
         except Exception as e:
             handle_exception(e, context={'function': 'get_todo_list'})

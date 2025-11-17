@@ -7,6 +7,7 @@ Tools for creating atomic, file-specific implementation plans.
 import logging
 import json
 import redis
+from redis.exceptions import RedisError
 import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -15,23 +16,38 @@ from errors_handler import handle_exception
 
 logger = logging.getLogger(__name__)
 
-# Load configuration
-config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
-secrets_path = Path(__file__).parent.parent.parent.parent / "secrets.yaml"
-
-with open(config_path, 'r') as f:
-    config = yaml.safe_load(f)
-
-# Try to load secrets, fallback to no password if not available
-redis_password = None
-if secrets_path.exists():
-    with open(secrets_path, 'r') as f:
-        secrets = yaml.safe_load(f)
-        redis_password = secrets.get('redis', {}).get('password')
-    
-REDIS_HOST = config['redis']['host']
-REDIS_PORT = config['redis']['port']
+# Configuration defaults
+REDIS_HOST = 'localhost'
+REDIS_PORT = 6379
+REDIS_PASSWORD = None
 TODO_LIST_KEY = "mcp:mirror_vanisher:todo_list"
+
+# Load configuration with error handling
+try:
+    config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
+    secrets_path = Path(__file__).parent.parent.parent.parent / "secrets.yaml"
+    
+    if config_path.exists():
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            if config and 'redis' in config:
+                REDIS_HOST = config['redis'].get('host', REDIS_HOST)
+                REDIS_PORT = config['redis'].get('port', REDIS_PORT)
+    else:
+        logger.warning(f"Configuration file not found: {config_path}, using defaults")
+    
+    # Try to load secrets, fallback to no password if not available
+    if secrets_path.exists():
+        with open(secrets_path, 'r') as f:
+            secrets = yaml.safe_load(f)
+            if secrets and 'redis' in secrets:
+                REDIS_PASSWORD = secrets['redis'].get('password')
+    else:
+        logger.info(f"Secrets file not found: {secrets_path}, using no password")
+        
+except (yaml.YAMLError, IOError) as e:
+    logger.error(f"Error loading configuration: {e}, using defaults")
+    handle_exception(e, context={'function': 'load_configuration', 'module': 'planning'})
 
 
 class PlanningTools:
@@ -40,14 +56,21 @@ class PlanningTools:
     def __init__(self, manager):
         """Initialize planning tools."""
         self.manager = manager
-        # Initialize Redis connection
-        self.redis_client = redis.Redis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=0,
-            password=redis_password,
-            decode_responses=True
-        )
+        # Initialize Redis connection with validation
+        try:
+            self.redis_client = redis.Redis(
+                host=REDIS_HOST,
+                port=REDIS_PORT,
+                db=0,
+                password=REDIS_PASSWORD,
+                decode_responses=True
+            )
+            # Test the connection
+            self.redis_client.ping()
+        except RedisError as e:
+            logger.error(f"Failed to connect to Redis: {e}")
+            handle_exception(e, context={'function': '__init__', 'class': 'PlanningTools'})
+            raise
 
     def create_plan(self, path: str, task: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create atomic, file-specific implementation plan.
@@ -140,8 +163,12 @@ class PlanningTools:
                 }
                 todo_list.append(todo_item)
 
-            # Store TODO_list in Redis (overwrite previous)
-            self.redis_client.set(TODO_LIST_KEY, json.dumps(todo_list))
+            # Store TODO_list in Redis (overwrite previous) with error handling
+            try:
+                self.redis_client.set(TODO_LIST_KEY, json.dumps(todo_list))
+            except RedisError as e:
+                logger.warning(f"Failed to store TODO_list in Redis: {e}")
+                # Continue even if Redis storage fails - plan is still returned
 
             # Create beautiful formatted plan output
             formatted_plan = self._format_plan_beautifully(plan, todo_list)
@@ -198,9 +225,8 @@ class PlanningTools:
         lines.append("📝 STEPS:")
         lines.append("-" * 80)
         for item in todo_list:
-            lines.append(f"  {item['step_number']}. {item['action']}")
-            lines.append(f"     ➤ {item['details']}")
-            lines.append(f"     Status: [{item['status'].upper()}]")
+            lines.append(f"  • {item['action']}")
+            lines.append(f"    ◦ {item['details']}")
             lines.append("")
 
         # Testing requirements
@@ -238,11 +264,26 @@ class PlanningTools:
             Dictionary containing the TODO_list
         """
         try:
-            # Retrieve TODO_list from Redis
-            todo_list_json = self.redis_client.get(TODO_LIST_KEY)
+            # Retrieve TODO_list from Redis with proper error handling
+            try:
+                todo_list_json = self.redis_client.get(TODO_LIST_KEY)
+            except RedisError as e:
+                logger.error(f"Redis connection error when retrieving TODO_list: {e}")
+                return {
+                    'success': False,
+                    'error': f'Redis connection error: {str(e)}'
+                }
             
             if todo_list_json:
-                todo_list = json.loads(todo_list_json)
+                try:
+                    # Type hint: with decode_responses=True, Redis returns str
+                    todo_list = json.loads(str(todo_list_json))
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parsing error for TODO_list: {e}")
+                    return {
+                        'success': False,
+                        'error': f'JSON parsing error: {str(e)}'
+                    }
             else:
                 todo_list = []
             

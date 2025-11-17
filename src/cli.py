@@ -31,6 +31,7 @@ from src.utils.vanisher_context import VanisherContextManager
 from src.utils.command_handler import CommandHandler, CommandResult
 from src.utils.token_limit_manager import get_token_limit_manager
 from src.utils.path_resolver import get_path_resolver
+from src.utils.redis_helper import get_redis_client
 
 # Add sandbox service to path for heuristics config
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "src"))
@@ -104,41 +105,35 @@ def initialize_error_handler():
 def get_todo_list_from_redis():
     """Fetch TODO_list from Redis storage (used by Mirror+Vanisher MCP create_plan tool)."""
     try:
-        # Load configuration
-        config_path = Path(__file__).parent.parent / "config.yaml"
-        secrets_path = Path(__file__).parent.parent / "secrets.yaml"
+        # Get Redis client from connection pool
+        redis_client = get_redis_client()
         
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        # Load Redis password from secrets
-        redis_password = None
-        if secrets_path.exists():
-            with open(secrets_path, 'r') as f:
-                secrets = yaml.safe_load(f)
-                redis_password = secrets.get('redis', {}).get('password')
-        
-        # Connect to Redis
-        redis_client = redis.Redis(
-            host=config['redis']['host'],
-            port=config['redis']['port'],
-            db=0,
-            password=redis_password,
-            decode_responses=True
-        )
+        if redis_client is None:
+            print_error("Failed to connect to Redis. Is Redis running?")
+            return None
         
         # Retrieve TODO_list
         TODO_LIST_KEY = "mcp:mirror_vanisher:todo_list"
-        todo_list_json = redis_client.get(TODO_LIST_KEY)
+        
+        try:
+            todo_list_json = redis_client.get(TODO_LIST_KEY)
+        except Exception as e:
+            print_error(f"Error retrieving TODO_list from Redis: {str(e)}")
+            return None
         
         if todo_list_json:
-            todo_list = json.loads(todo_list_json)
-            return todo_list
+            try:
+                # Type hint: with decode_responses=True, Redis returns str
+                todo_list = json.loads(str(todo_list_json))
+                return todo_list
+            except json.JSONDecodeError as e:
+                print_error(f"Error parsing TODO_list JSON: {str(e)}")
+                return None
         else:
             return None
             
     except Exception as e:
-        print_error(f"Error retrieving TODO_list from Redis: {str(e)}")
+        print_error(f"Unexpected error retrieving TODO_list: {str(e)}")
         return None
 
 

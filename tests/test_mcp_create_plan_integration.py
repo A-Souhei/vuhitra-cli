@@ -62,8 +62,11 @@ def test_create_plan():
     print("TEST 1: create_plan Tool")
     print("=" * 80)
     
+    # Use portable path - resolve to workspace root
+    workspace_root = str(Path(__file__).parent.parent)
+    
     params = {
-        "path": "/home/toavina/Apps/vuhitra-cli",
+        "path": workspace_root,
         "task": "Add logging functionality with different log levels (DEBUG, INFO, WARNING, ERROR)"
     }
     
@@ -183,9 +186,12 @@ def test_overwrite_behavior():
     print("TEST 3: TODO_list Overwrite Behavior")
     print("=" * 80)
     
+    # Use portable path - resolve to workspace root
+    workspace_root = str(Path(__file__).parent.parent)
+    
     # Create first plan
     params1 = {
-        "path": "/home/toavina/Apps/vuhitra-cli",
+        "path": workspace_root,
         "task": "First plan with multiple steps for implementing user authentication"
     }
     
@@ -210,7 +216,7 @@ def test_overwrite_behavior():
     
     # Create second plan
     params2 = {
-        "path": "/home/toavina/Apps/vuhitra-cli",
+        "path": workspace_root,
         "task": "Fix bug in database connection pooling"
     }
     

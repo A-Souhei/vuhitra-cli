@@ -155,7 +155,8 @@ def main():
         # Verify JSON serialization works
         try:
             json_str = json.dumps(result3['TODO_list'])
-            parsed = json.loads(json_str)
+            # Verify it can be parsed back
+            json.loads(json_str)
             print_success("JSON serialization/deserialization successful")
             print_info(f"Serialized TODO_list length: {len(json_str)} characters")
         except Exception as e:

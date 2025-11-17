@@ -601,16 +601,18 @@ def interactive_mode(model, verbose=False, coding=False):
             if not success:
                 return CommandResult(success=False, message=error)
 
-            # Load each file
+            # Load each file with spinner
             loaded = []
             failed = []
-            for file in files:
-                file_label = label if label else None
-                file_success, file_message = ephemeral_context.load_file(file, file_label, description)
-                if file_success:
-                    loaded.append(os.path.basename(file))
-                else:
-                    failed.append((os.path.basename(file), file_message))
+
+            with spinner(f"📄 Loading ephemerals from {file_path}..."):
+                for file in files:
+                    file_label = label if label else None
+                    file_success, file_message = ephemeral_context.load_file(file, file_label, description)
+                    if file_success:
+                        loaded.append(os.path.basename(file))
+                    else:
+                        failed.append((os.path.basename(file), file_message))
 
             # Build result message
             messages = []
@@ -669,24 +671,26 @@ def interactive_mode(model, verbose=False, coding=False):
             if not success:
                 return CommandResult(success=False, message=error)
 
-            # Load each file
+            # Load each file with spinner
             loaded = []
             failed = []
-            for file in files:
-                # Generate unique labels for each file in directory
-                # Use provided label as prefix, or filename if no label
-                if label:
-                    # Use label as prefix with filename
-                    file_label = f"{label}-{Path(file).stem}"
-                else:
-                    # Use filename (without extension) as label
-                    file_label = Path(file).stem
 
-                file_success, file_message = eternal_context.load_file(file, file_label, description)
-                if file_success:
-                    loaded.append(os.path.basename(file))
-                else:
-                    failed.append((os.path.basename(file), file_message))
+            with spinner(f"💾 Loading eternals from {file_path}..."):
+                for file in files:
+                    # Generate unique labels for each file in directory
+                    # Use provided label as prefix, or filename if no label
+                    if label:
+                        # Use label as prefix with filename
+                        file_label = f"{label}-{Path(file).stem}"
+                    else:
+                        # Use filename (without extension) as label
+                        file_label = Path(file).stem
+
+                    file_success, file_message = eternal_context.load_file(file, file_label, description)
+                    if file_success:
+                        loaded.append(os.path.basename(file))
+                    else:
+                        failed.append((os.path.basename(file), file_message))
 
             # Build result message
             messages = []
@@ -754,24 +758,26 @@ def interactive_mode(model, verbose=False, coding=False):
                 if not success:
                     return CommandResult(success=False, message=error)
 
-                # Load each file
+                # Load each file with spinner
                 loaded = []
                 failed = []
-                for file in files:
-                    # Generate unique labels for each file in directory
-                    # Use provided label as prefix, or filename if no label
-                    if label:
-                        # Use label as prefix with filename
-                        file_label = f"{label}-{Path(file).stem}"
-                    else:
-                        # Use filename (without extension) as label
-                        file_label = Path(file).stem
 
-                    file_success, file_message = pillar_context.load_file(file, file_label, description)
-                    if file_success:
-                        loaded.append(os.path.basename(file))
-                    else:
-                        failed.append((os.path.basename(file), file_message))
+                with spinner(f"📚 Loading pillars from {file_path}..."):
+                    for file in files:
+                        # Generate unique labels for each file in directory
+                        # Use provided label as prefix, or filename if no label
+                        if label:
+                            # Use label as prefix with filename
+                            file_label = f"{label}-{Path(file).stem}"
+                        else:
+                            # Use filename (without extension) as label
+                            file_label = Path(file).stem
+
+                        file_success, file_message = pillar_context.load_file(file, file_label, description)
+                        if file_success:
+                            loaded.append(os.path.basename(file))
+                        else:
+                            failed.append((os.path.basename(file), file_message))
 
                 # Build result message
                 messages = []
@@ -813,11 +819,12 @@ def interactive_mode(model, verbose=False, coding=False):
         if not args:
             return CommandResult(
                 success=False,
-                message="Usage: /vanisher load <file_path> [label] [description]\n"
-                        "       /vanisher load @data/config.json\n"
-                        "       /vanisher load @data/file.txt myfile \"My file description\"\n"
+                message="Usage: /vanisher load <directory_path> [label] [description]\n"
+                        "       /vanisher load @testing/\n"
+                        "       /vanisher load @src/ mycode \"Source code directory\"\n"
                         "\n"
-                        "NOTE: File/directory must be mirrored first using '/mirror do @path'"
+                        "NOTE: Vanishers only accept directory-type mirrors.\n"
+                        "      Mirror a directory first using '/mirror do @directory/'"
             )
 
         subcommand = args[0].lower()
@@ -826,7 +833,8 @@ def interactive_mode(model, verbose=False, coding=False):
             if len(args) < 2:
                 return CommandResult(
                     success=False,
-                    message="Usage: /vanisher load <file_path> [label] [description]"
+                    message="Usage: /vanisher load <directory_path> [label] [description]\n"
+                            "NOTE: Vanishers only accept directory-type mirrors"
                 )
 
             file_path = args[1]
@@ -838,9 +846,55 @@ def interactive_mode(model, verbose=False, coding=False):
             if not success:
                 return CommandResult(success=False, message=error)
 
-            # Load single file (vanisher only supports files, not directories)
-            success, message = vanisher_context.load_file(resolved_path, label, description)
-            return CommandResult(success=success, message=message)
+            # Vanishers only support directories (mirrored directories)
+            if not path_resolver.is_directory(file_path):
+                return CommandResult(
+                    success=False,
+                    message=f"Vanishers only accept directories. '{file_path}' is not a directory.\n"
+                            "Use '/mirror do @directory/' to mirror a directory first."
+                )
+
+            # Load all files in directory (must be mirrored first)
+            success, files, error = path_resolver.get_directory_files(file_path)
+            if not success:
+                return CommandResult(success=False, message=error)
+
+            # Load each file with spinner
+            loaded = []
+            failed = []
+
+            with spinner(f"📦 Loading vanishers from {file_path}..."):
+                for file in files:
+                    # Generate unique labels for each file in directory
+                    # Use provided label as prefix, or filename if no label
+                    if label:
+                        # Use label as prefix with filename
+                        file_label = f"{label}-{Path(file).stem}"
+                    else:
+                        # Use filename (without extension) as label
+                        file_label = Path(file).stem
+
+                    file_success, file_message = vanisher_context.load_file(file, file_label, description)
+                    if file_success:
+                        loaded.append(os.path.basename(file))
+                    else:
+                        failed.append((os.path.basename(file), file_message))
+
+            # Build result message
+            messages = []
+            if loaded:
+                messages.append(f"✓ Loaded {len(loaded)} vanisher(s) from {file_path}")
+                messages.append(f"  Files: {', '.join(loaded)}")
+
+            if failed:
+                messages.append(f"✗ Failed to load {len(failed)} file(s):")
+                for filename, error_msg in failed:
+                    messages.append(f"  - {filename}: {error_msg}")
+
+            if not loaded and failed:
+                return CommandResult(success=False, message="\n".join(messages))
+
+            return CommandResult(success=True, message="\n".join(messages))
         else:
             return CommandResult(
                 success=False,

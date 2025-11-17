@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration defaults
 REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
+REDIS_PORT = 16379  # Default to docker-compose mapped port
 REDIS_PASSWORD = None
 TODO_LIST_KEY = "mcp:mirror_vanisher:todo_list"
 

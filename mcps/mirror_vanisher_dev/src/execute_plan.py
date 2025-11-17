@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration defaults
 REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
+REDIS_PORT = 16379  # Default to docker-compose mapped port
 REDIS_PASSWORD = None
 TODO_LIST_KEY = "mcp:mirror_vanisher:todo_list"
 DETAILED_TODO_LIST_KEY = "mcp:mirror_vanisher:detailed_todo_list"
@@ -103,14 +103,14 @@ class ExecutePlan(EmbeddingCacheMixin):
             logger.warning(f"Redis not available: {e}. Execute plan will use memory fallback.")
             handle_exception(e, context={'function': '__init__', 'class': 'ExecutePlan'})
 
-        # Initialize embedding cache (from EmbeddingCacheMixin)
-        self._init_redis()
+        # Don't call _init_redis from EmbeddingCacheMixin as we're using our own Redis connection
+        # The mixin will use self.redis_client if it's set
 
         # Get transformer URL from config
-        transformer_config = self.config.get('transformer_service', default={})
+        transformer_config = self.config.get('transformer', default={})
         protocol = transformer_config.get('protocol', 'http')
         host = transformer_config.get('host', 'localhost')
-        port = transformer_config.get('port', 5001)
+        port = transformer_config.get('port', 16050)
         self.transformer_url = f"{protocol}://{host}:{port}"
 
         # In-memory fallback for TODO lists
@@ -283,7 +283,7 @@ class ExecutePlan(EmbeddingCacheMixin):
         tools: List[Dict[str, Any]],
         threshold: float = SIMILARITY_THRESHOLD
     ) -> List[Tuple[Dict[str, Any], float]]:
-        """Find tools that match a step using semantic similarity.
+        """Find tools that match a step using semantic similarity or keyword matching.
 
         Args:
             step_text: Text describing the step
@@ -294,34 +294,36 @@ class ExecutePlan(EmbeddingCacheMixin):
             List of (tool, similarity_score) tuples, sorted by score descending
         """
         try:
-            # Generate embedding for the step
+            # Try semantic similarity first
             step_embedding = self._generate_embedding(step_text)
-            if step_embedding is None:
-                logger.warning(f"Failed to generate embedding for step: {step_text}")
-                return []
+            
+            if step_embedding is not None:
+                # Use semantic matching
+                matches = []
 
-            matches = []
+                for tool in tools:
+                    tool_name = tool.get('name', '')
+                    tool_description = tool.get('description', '')
 
-            for tool in tools:
-                tool_name = tool.get('name', '')
-                tool_description = tool.get('description', '')
+                    # Get or generate tool embedding
+                    tool_embedding = self.get_or_generate_tool_embedding(tool_name, tool_description)
 
-                # Get or generate tool embedding
-                tool_embedding = self.get_or_generate_tool_embedding(tool_name, tool_description)
+                    if tool_embedding is None:
+                        continue
 
-                if tool_embedding is None:
-                    continue
+                    # Calculate cosine similarity
+                    similarity = cosine_similarity(step_embedding, tool_embedding)
 
-                # Calculate cosine similarity
-                similarity = cosine_similarity(step_embedding, tool_embedding)
+                    if similarity >= threshold:
+                        matches.append((tool, similarity))
 
-                if similarity >= threshold:
-                    matches.append((tool, similarity))
-
-            # Sort by similarity score descending
-            matches.sort(key=lambda x: x[1], reverse=True)
-
-            return matches
+                # Sort by similarity score descending
+                matches.sort(key=lambda x: x[1], reverse=True)
+                return matches
+            else:
+                # Fallback to keyword matching when embeddings are unavailable
+                logger.warning(f"Embeddings unavailable, using keyword matching for: {step_text}")
+                return self._keyword_match_tools(step_text, tools, threshold)
 
         except Exception as e:
             handle_exception(e, context={
@@ -329,6 +331,52 @@ class ExecutePlan(EmbeddingCacheMixin):
                 'step_text': step_text[:100]
             })
             return []
+
+    def _keyword_match_tools(
+        self,
+        step_text: str,
+        tools: List[Dict[str, Any]],
+        threshold: float = 0.1  # Lower threshold for keyword matching
+    ) -> List[Tuple[Dict[str, Any], float]]:
+        """Fallback keyword-based tool matching when embeddings are unavailable.
+
+        Args:
+            step_text: Text describing the step
+            tools: List of tool dictionaries
+            threshold: Minimum score threshold (0.0-1.0), default 0.1 for keyword matching
+
+        Returns:
+            List of (tool, score) tuples, sorted by score descending
+        """
+        step_words = set(step_text.lower().split())
+        matches = []
+
+        for tool in tools:
+            tool_name = tool.get('name', '')
+            tool_description = tool.get('description', '')
+            
+            # Combine tool name and description
+            tool_text = f"{tool_name} {tool_description}".lower()
+            tool_words = set(tool_text.split())
+
+            # Calculate Jaccard similarity (intersection over union)
+            if not tool_words:
+                continue
+
+            intersection = step_words & tool_words
+            union = step_words | tool_words
+            
+            score = len(intersection) / len(union) if union else 0.0
+
+            if score >= threshold:
+                matches.append((tool, score))
+
+        # Sort by score descending
+        matches.sort(key=lambda x: x[1], reverse=True)
+        
+        logger.info(f"Keyword matching found {len(matches)} matches (threshold={threshold}) for: {step_text[:50]}")
+        
+        return matches
 
     def extract_parameters_from_step(
         self,
@@ -498,7 +546,8 @@ class ExecutePlan(EmbeddingCacheMixin):
                 try:
                     todo_list_json = self.redis_client.get(TODO_LIST_KEY)
                     if todo_list_json:
-                        return json.loads(str(todo_list_json))
+                        # Redis client has decode_responses=True, so todo_list_json is already a string
+                        return json.loads(todo_list_json)
                 except RedisError as e:
                     logger.warning(f"Failed to get TODO_list from Redis: {e}")
                     handle_exception(e, context={'function': 'get_todo_list'})

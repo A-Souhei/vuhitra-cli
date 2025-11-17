@@ -6,6 +6,7 @@ import io
 import zipfile
 import redis
 import json
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template
@@ -26,7 +27,6 @@ from heuristics_config_loader import HeuristicsConfigLoader
 # Configure logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
 
 def sanitize_path(path_str):
     """
@@ -1629,8 +1629,11 @@ def get_all_mcps_from_redis():
 
     try:
         mcps = []
-        # Get all keys matching mcp:*
+        # Get all keys matching mcp:* but exclude mcp:*:* (tools/resources keys)
         for key in redis_client.scan_iter(match='mcp:*'):
+            # Skip keys with additional colons (these are sub-keys like mcp:id:tools)
+            if key.count(':') > 1:
+                continue
             mcp_data = redis_client.hgetall(key)
             if mcp_data:
                 mcps.append(mcp_data)
@@ -1640,8 +1643,8 @@ def get_all_mcps_from_redis():
         return []
 
 
-def register_mcp_in_redis(mcp_id, name, description, tools_count=0, resources_count=0, always_enabled=False):
-    """Register an MCP in Redis"""
+def register_mcp_in_redis(mcp_id, name, description, tools_count=0, resources_count=0, always_enabled=False, tools_list=None):
+    """Register an MCP in Redis with optional tools list"""
     if not redis_client:
         logger.debug("Redis not available, skipping MCP registration")
         return
@@ -1658,7 +1661,12 @@ def register_mcp_in_redis(mcp_id, name, description, tools_count=0, resources_co
             'registered_at': datetime.now().isoformat()
         }
         redis_client.hset(f'mcp:{mcp_id}', mapping=mcp_data)
-        logger.info(f"Registered MCP '{mcp_id}' in Redis")
+        
+        # Store tools list separately if provided
+        if tools_list:
+            redis_client.set(f'mcp:{mcp_id}:tools', json.dumps(tools_list))
+        
+        logger.info(f"Registered MCP '{mcp_id}' in Redis with {tools_count} tools")
     except Exception as e:
         logger.warning(f"Failed to register MCP in Redis: {e}")
 
@@ -1684,12 +1692,84 @@ def toggle_mcp_enabled(mcp_id, enabled):
         return {'success': False, 'error': str(e)}
 
 
+def populate_mcp_tools_from_server(mcp_id, server_path):
+    """Query an MCP server for its tools list and store in Redis"""
+    if not redis_client:
+        logger.warning(f"Redis not available, cannot populate tools for {mcp_id}")
+        return False
+    
+    try:
+        server_path = Path(server_path)
+        if not server_path.exists():
+            logger.debug(f"MCP server path does not exist: {server_path}")
+            return False
+        
+        logger.info(f"Querying MCP server {mcp_id} at {server_path}...")
+        
+        # Send tools/list request via stdio
+        request_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {}
+        }
+        
+        result = subprocess.run(
+            ['python3', str(server_path)],
+            input=json.dumps(request_payload) + '\n',
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode != 0:
+            logger.warning(f"MCP server {mcp_id} returned error code {result.returncode}")
+            if result.stderr:
+                logger.warning(f"stderr: {result.stderr[:200]}")
+            return False
+        
+        # Parse JSON-RPC response
+        for line in result.stdout.strip().split('\n'):
+            try:
+                response = json.loads(line)
+                if response.get('id') == 1 and 'result' in response:
+                    tools_data = response['result'].get('tools', [])
+                    # Simplify for UI (name + truncated description)
+                    tools = [
+                        {
+                            'name': tool['name'],
+                            'description': tool['description'][:200] + '...' 
+                                if len(tool['description']) > 200 
+                                else tool['description']
+                        }
+                        for tool in tools_data
+                    ]
+                    # Store in Redis
+                    redis_client.set(f'mcp:{mcp_id}:tools', json.dumps(tools))
+                    logger.info(f"✅ Populated {len(tools)} tools for MCP '{mcp_id}'")
+                    return True
+            except json.JSONDecodeError:
+                continue
+        
+        logger.warning(f"No valid JSON-RPC response from MCP server {mcp_id}")
+        return False
+        
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Timeout querying MCP server {mcp_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Error populating tools for {mcp_id}: {e}")
+        return False
+
+
 # Initialize Mirror+Vanisher MCP in Redis
 # This MCP is always_enabled=True meaning it's managed by coding mode
 # The 'enabled' field will be set based on coding mode, but 'always_enabled'
 # stays True to prevent manual toggling
 if redis_client:
     is_coding_mode = get_coding_mode_status()
+    
+    # Register Mirror+Vanisher Dev MCP
     register_mcp_in_redis(
         mcp_id='mirror-vanisher-dev',
         name='Mirror+Vanisher Development MCP',
@@ -1700,6 +1780,18 @@ if redis_client:
     )
     # Set enabled status based on current coding mode
     toggle_mcp_enabled('mirror-vanisher-dev', is_coding_mode)
+    
+    # Populate tools list from MCP server
+    # Try multiple possible paths (Docker vs host)
+    logger.info("Attempting to populate Mirror+Vanisher tools...")
+    mirror_vanisher_paths = [
+        Path('/app/mcps/mirror_vanisher_dev/server.py'),  # If mounted in Docker
+        Path(__file__).parent.parent.parent / 'mcps' / 'mirror_vanisher_dev' / 'server.py',  # Relative path
+    ]
+    for path in mirror_vanisher_paths:
+        logger.info(f"Trying path: {path}")
+        if populate_mcp_tools_from_server('mirror-vanisher-dev', path):
+            break
 
     # Initialize Executor MCP in Redis
     # This MCP is also always_enabled=True and managed by coding mode
@@ -1713,6 +1805,17 @@ if redis_client:
     )
     # Set enabled status based on current coding mode
     toggle_mcp_enabled('executor', is_coding_mode)
+    
+    # Populate tools list from MCP server
+    logger.info("Attempting to populate Executor tools...")
+    executor_paths = [
+        Path('/app/mcps/executor/server.py'),  # If mounted in Docker
+        Path(__file__).parent.parent.parent / 'mcps' / 'executor' / 'server.py',  # Relative path
+    ]
+    for path in executor_paths:
+        logger.info(f"Trying path: {path}")
+        if populate_mcp_tools_from_server('executor', path):
+            break
 
 
 # MCP API Routes
@@ -1798,113 +1901,24 @@ def api_get_mcp_details(mcp_id):
             return jsonify({'success': False, 'error': 'MCP not found'}), 404
 
         mcp_data = redis_client.hgetall(mcp_key)
+        
+        if not mcp_data:
+            logger.warning(f"MCP data is empty for key: {mcp_key}")
+            return jsonify({'success': False, 'error': 'MCP data not found in Redis'}), 404
 
-        # For mirror-vanisher-dev, provide actual tool list
+        # Get tools list from Redis (stored during registration)
         tools = []
         resources = []
-
-        if mcp_id == 'mirror-vanisher-dev':
-            tools = [
-                {
-                    'name': 'list_mirror_vanishers',
-                    'description': 'List all mirror+vanisher directories in the workspace. Returns comprehensive information about each mirror including path, creation date, and sync status. Useful for discovering available codebases to work with.'
-                },
-                {
-                    'name': 'verify_mirror_vanisher',
-                    'description': 'Verify that a given path is a valid mirror+vanisher directory structure. Checks for required directories (.mirror, .vanisher) and validates configuration files. Returns validation status and any issues found.'
-                },
-                {
-                    'name': 'explore_structure',
-                    'description': 'Generate a comprehensive directory tree visualization of the codebase. Shows file organization, sizes, and directory hierarchy. Helps understand project layout and locate specific files or components.'
-                },
-                {
-                    'name': 'detect_tech_stack',
-                    'description': 'Automatically identify programming languages, frameworks, and build tools used in the project. Analyzes package files (package.json, requirements.txt, etc.), configuration files, and code patterns to determine the technology stack.'
-                },
-                {
-                    'name': 'find_entrypoints',
-                    'description': 'Locate main executable files and application entry points in the codebase. Identifies files like main.py, index.js, app.py, and other common entry point patterns. Essential for understanding how to run and navigate the application.'
-                },
-                {
-                    'name': 'full_exploration',
-                    'description': 'Execute a comprehensive exploration combining structure analysis, tech stack detection, and entrypoint discovery in a single operation. Provides a complete overview of the codebase including architecture, technologies, and key files.'
-                },
-                {
-                    'name': 'analyze_architecture',
-                    'description': 'Identify and analyze architectural patterns in the codebase such as MVC, microservices, layered architecture, or component-based design. Examines code organization, module relationships, and structural patterns to understand system design.'
-                },
-                {
-                    'name': 'map_dependencies',
-                    'description': 'Map and analyze all imports and dependencies throughout the codebase. Creates a dependency graph showing how modules relate to each other, identifies circular dependencies, and highlights external package usage. Critical for understanding code coupling and modularity.'
-                },
-                {
-                    'name': 'identify_patterns',
-                    'description': 'Detect common design patterns used in the code such as Singleton, Factory, Observer, Strategy, and others. Analyzes code structure and class relationships to recognize pattern implementations and architectural best practices.'
-                },
-                {
-                    'name': 'chunk_file',
-                    'description': 'Break down a large file into logical, manageable chunks based on code structure (functions, classes, modules). Useful for processing large files in pieces while maintaining context boundaries. Returns chunks with metadata about relationships.'
-                },
-                {
-                    'name': 'chunk_directory',
-                    'description': 'Create an intelligent chunking strategy for an entire directory or module. Groups related files together and establishes a hierarchical chunking plan that respects architectural boundaries and dependencies. Essential for processing large codebases efficiently.'
-                },
-                {
-                    'name': 'create_plan',
-                    'description': 'Generate a detailed implementation plan for a new feature or modification. Analyzes requirements, existing code, and architecture to produce step-by-step instructions including files to modify, functions to create, and testing strategy.'
-                },
-                {
-                    'name': 'run_tests',
-                    'description': 'Execute the project\'s test suite including unit tests, integration tests, and end-to-end tests. Supports multiple testing frameworks (pytest, jest, mocha, etc.). Returns test results, coverage reports, and identifies failing tests with detailed error messages.'
-                },
-                {
-                    'name': 'full_quality_check',
-                    'description': 'Run comprehensive code quality analysis including linters (pylint, eslint), formatters (black, prettier), and type checkers (mypy, typescript). Identifies code style violations, potential bugs, type errors, and suggests improvements across the entire codebase.'
-                },
-                {
-                    'name': 'scan_secrets',
-                    'description': 'Scan the codebase for hardcoded secrets, API keys, passwords, tokens, and other sensitive information. Uses pattern matching and entropy analysis to detect potential security leaks. Reports findings with file locations and severity levels.'
-                },
-                {
-                    'name': 'security_audit',
-                    'description': 'Perform a comprehensive security audit of the codebase including dependency vulnerability scanning, common security anti-patterns detection, authentication/authorization review, and input validation checks. Provides prioritized security recommendations.'
-                },
-                {
-                    'name': 'complete_feature_workflow',
-                    'description': 'Execute end-to-end feature implementation workflow: exploration → architecture analysis → planning → code generation → testing → quality checks. Guides through the entire development lifecycle for adding new features while maintaining code quality and consistency.'
-                },
-                {
-                    'name': 'bugfix_workflow',
-                    'description': 'Systematic bug fixing workflow that analyzes the bug, locates affected code, generates fix with tests, validates the solution, and ensures no regressions. Includes root cause analysis and prevention recommendations.'
-                }
-            ]
-        elif mcp_id == 'executor':
-            tools = [
-                {'name': 'list_mirror_vanishers', 'description': 'List all mirror+vanisher directories available for execution operations'},
-                {'name': 'verify_mirror_vanisher', 'description': 'Verify directory is configured for code execution and file operations'},
-                {'name': 'execute_python_code', 'description': 'Execute Python scripts with arguments, capturing output and return codes'},
-                {'name': 'execute_javascript_code', 'description': 'Run JavaScript/Node.js scripts with arguments'},
-                {'name': 'execute_shell_command', 'description': 'Execute shell commands and bash scripts in the working directory'},
-                {'name': 'execute_code_snippet', 'description': 'Run code snippets dynamically in Python, JavaScript, or Bash'},
-                {'name': 'create_file', 'description': 'Create new files with specified content and optional overwrite'},
-                {'name': 'update_file', 'description': 'Update existing files with new content and automatic backup creation'},
-                {'name': 'append_to_file', 'description': 'Append content to existing files without replacing'},
-                {'name': 'delete_file', 'description': 'Delete files with optional backup before removal'},
-                {'name': 'copy_file', 'description': 'Copy files to new locations with overwrite protection'},
-                {'name': 'move_file', 'description': 'Move or rename files with optional overwrite'},
-                {'name': 'install_pip_packages', 'description': 'Install Python packages using pip from list or requirements.txt'},
-                {'name': 'install_npm_packages', 'description': 'Install Node.js packages using npm from list or package.json'},
-                {'name': 'run_build_command', 'description': 'Execute build commands like make, gradle, maven, or custom scripts'},
-                {'name': 'compile_python', 'description': 'Compile Python files to bytecode for syntax validation'},
-                {'name': 'create_virtual_env', 'description': 'Create Python virtual environments for dependency isolation'},
-                {'name': 'run_docker_build', 'description': 'Build Docker images from Dockerfiles with custom tags and build args'},
-                {'name': 'create_directory', 'description': 'Create new directories with optional parent directory creation'},
-                {'name': 'create_directory_structure', 'description': 'Create complete directory structures from dictionary specifications'},
-                {'name': 'delete_directory', 'description': 'Delete directories with recursive option and backup archive creation'},
-                {'name': 'copy_directory', 'description': 'Copy entire directory trees to new locations'},
-                {'name': 'move_directory', 'description': 'Move or rename directories with optional overwrite'},
-                {'name': 'list_directory_contents', 'description': 'List directory contents with recursive option and file filtering'}
-            ]
+        
+        tools_json = redis_client.get(f'mcp:{mcp_id}:tools')
+        if tools_json:
+            try:
+                # Handle bytes if redis returns bytes
+                if isinstance(tools_json, bytes):
+                    tools_json = tools_json.decode('utf-8')
+                tools = json.loads(tools_json)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse tools list for {mcp_id}")
 
         return jsonify({
             'success': True,
@@ -1924,7 +1938,6 @@ def api_get_mcp_details(mcp_id):
     except Exception as e:
         error_handler.handle_exception(e, context={'operation': 'api_get_mcp_details', 'mcp_id': mcp_id})
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 # Start background sync monitor thread
 if redis_client:

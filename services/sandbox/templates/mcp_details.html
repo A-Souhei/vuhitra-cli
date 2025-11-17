@@ -7,7 +7,337 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mcps.css') }}">
+    <style>
+        /* Enhanced MCP Details Styles */
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .mcp-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2.5rem;
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .mcp-header h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .mcp-header .subtitle {
+            font-size: 1.15rem;
+            opacity: 0.95;
+            margin-bottom: 1.5rem;
+            font-weight: 400;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1.25rem;
+            margin-top: 2rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .stat-card .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.9;
+        }
+
+        .stat-card .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+            line-height: 1;
+        }
+
+        .stat-card .stat-label {
+            font-size: 0.95rem;
+            opacity: 0.95;
+            font-weight: 500;
+        }
+
+        .status-badges {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            padding: 0.65rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .status-badge i {
+            font-size: 1.1rem;
+        }
+
+        .status-badge.enabled {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .status-badge.disabled {
+            background: linear-gradient(135deg, #757F9A 0%, #D7DDE8 100%);
+            color: white;
+        }
+
+        .status-badge.always-on {
+            background: linear-gradient(135deg, #F09819 0%, #EDDE5D 100%);
+            color: #333;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+            border: none;
+        }
+
+        .info-card h5 {
+            color: #667eea;
+            font-weight: 800;
+            margin-bottom: 1.75rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .info-card h5 i {
+            font-size: 1.75rem;
+        }
+
+        .info-table {
+            width: 100%;
+        }
+
+        .info-table tr {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-table tr:last-child {
+            border-bottom: none;
+        }
+
+        .info-table th {
+            padding: 1rem 0;
+            font-weight: 700;
+            color: #555;
+            width: 30%;
+            font-size: 0.95rem;
+        }
+
+        .info-table td {
+            padding: 1rem 0;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .tool-item, .resource-item {
+            background: white;
+            border: 2px solid #e8ecf1;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .tool-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+        }
+
+        .tool-item h6 {
+            color: #667eea;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .tool-item h6 i {
+            font-size: 1.25rem;
+        }
+
+        .tool-item h6 code {
+            background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
+            color: #667eea;
+            padding: 0.4rem 1rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .tool-item p {
+            color: #666;
+            line-height: 1.8;
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .resource-item h6 {
+            color: #F2994A;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 1.1rem;
+        }
+
+        .resource-item h6 i {
+            font-size: 1.25rem;
+        }
+
+        .resource-item p {
+            color: #666;
+            line-height: 1.8;
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .resource-type-badge {
+            background: #F2994A20;
+            color: #F2994A;
+            padding: 0.35rem 1rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .btn-custom {
+            padding: 0.85rem 2rem;
+            border-radius: 50px;
+            font-weight: 700;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-custom:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-toggle-enable {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-toggle-disable {
+            background: linear-gradient(135deg, #F2994A 0%, #F2C94C 100%);
+            color: white;
+        }
+
+        .btn-back {
+            background: linear-gradient(135deg, #757F9A 0%, #D7DDE8 100%);
+            color: #333;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+
+        .section-count {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.5rem 1.25rem;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1rem;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #999;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.3;
+        }
+
+        .empty-state p {
+            font-size: 1.1rem;
+            margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .mcp-header h1 {
+                font-size: 2rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .info-table th,
+            .info-table td {
+                display: block;
+                width: 100%;
+            }
+
+            .info-table th {
+                padding-bottom: 0.25rem;
+            }
+
+            .info-table td {
+                padding-top: 0.25rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Navigation -->
@@ -65,10 +395,10 @@
         <div class="container">
             <div class="container-custom">
                 <!-- Breadcrumb -->
-                <nav aria-label="breadcrumb">
+                <nav aria-label="breadcrumb" class="mb-4">
                     <ol class="breadcrumb">
-                        <li class="breadcrumb-item"><a href="/home">Home</a></li>
-                        <li class="breadcrumb-item"><a href="/mcps">MCPs</a></li>
+                        <li class="breadcrumb-item"><a href="/home"><i class="bi bi-house"></i> Home</a></li>
+                        <li class="breadcrumb-item"><a href="/mcps"><i class="bi bi-plugin"></i> MCPs</a></li>
                         <li class="breadcrumb-item active" aria-current="page" id="breadcrumbMcpName">Loading...</li>
                     </ol>
                 </nav>
@@ -77,10 +407,10 @@
 
                 <div id="mcpDetailsContainer">
                     <div class="text-center py-5">
-                        <div class="spinner-border text-primary" role="status">
+                        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
-                        <p class="text-muted mt-2">Loading MCP details...</p>
+                        <p class="text-muted mt-3" style="font-size: 1.1rem;">Loading MCP details...</p>
                     </div>
                 </div>
             </div>
@@ -142,113 +472,126 @@
 
             const container = document.getElementById('mcpDetailsContainer');
 
+            // Create status badges
             const statusBadge = mcp.enabled
-                ? '<span class="badge bg-success">Enabled</span>'
-                : '<span class="badge bg-secondary">Disabled</span>';
+                ? '<span class="status-badge enabled"><i class="bi bi-check-circle-fill"></i>Enabled</span>'
+                : '<span class="status-badge disabled"><i class="bi bi-x-circle-fill"></i>Disabled</span>';
 
             const alwaysEnabledBadge = mcp.always_enabled
-                ? '<span class="badge bg-primary ms-2">Always ON</span>'
+                ? '<span class="status-badge always-on"><i class="bi bi-star-fill"></i>Always ON</span>'
                 : '';
 
             let html = `
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">
-                            <i class="bi bi-plugin"></i> ${mcp.name}
-                        </h4>
-                        <div>
-                            ${statusBadge}
-                            ${alwaysEnabledBadge}
+                <div class="mcp-header">
+                    <h1>
+                        <i class="bi bi-plugin"></i>
+                        ${mcp.name}
+                    </h1>
+                    <div class="subtitle">${mcp.description}</div>
+                    <div class="status-badges">
+                        ${statusBadge}
+                        ${alwaysEnabledBadge}
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="bi bi-tools"></i></div>
+                            <div class="stat-value">${mcp.tools_count}</div>
+                            <div class="stat-label">Tools</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="bi bi-file-earmark"></i></div>
+                            <div class="stat-value">${mcp.resources_count}</div>
+                            <div class="stat-label">Resources</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+                            <div class="stat-value">${formatDateShort(mcp.registered_at)}</div>
+                            <div class="stat-label">Registered</div>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <h6><i class="bi bi-info-circle"></i> Information</h6>
-                        <table class="table table-sm">
-                            <tr><th style="width: 20%;">ID:</th><td><code>${mcp.id}</code></td></tr>
-                            <tr><th>Description:</th><td>${mcp.description}</td></tr>
-                            <tr><th>Status:</th><td>${statusBadge}</td></tr>
-                            <tr><th>Always Enabled:</th><td>${mcp.always_enabled ? 'Yes (coding mode)' : 'No'}</td></tr>
-                            <tr><th>Tools:</th><td>${mcp.tools_count}</td></tr>
-                            <tr><th>Resources:</th><td>${mcp.resources_count}</td></tr>
-                            <tr><th>Registered:</th><td>${formatDate(mcp.registered_at)}</td></tr>
-                        </table>
+                </div>
+
+                <div class="info-card">
+                    <h5><i class="bi bi-info-circle-fill"></i>Information</h5>
+                    <table class="info-table">
+                        <tr><th>ID:</th><td><code>${mcp.id}</code></td></tr>
+                        <tr><th>Status:</th><td>${statusBadge}</td></tr>
+                        <tr><th>Always Enabled:</th><td>${mcp.always_enabled ? '<strong>Yes</strong> (coding mode)' : 'No'}</td></tr>
+                        <tr><th>Registered:</th><td>${formatDate(mcp.registered_at)}</td></tr>
+                    </table>
+
+                    ${!mcp.always_enabled ? `
+                        <div class="action-buttons">
+                            <button class="btn btn-custom btn-toggle-${mcp.enabled ? 'disable' : 'enable'}"
+                                    onclick="toggleMCP('${mcp.id}', ${!mcp.enabled})">
+                                <i class="bi bi-power"></i> ${mcp.enabled ? 'Disable' : 'Enable'} MCP
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="info-card">
+                    <div class="section-header">
+                        <h5><i class="bi bi-tools"></i>Tools</h5>
+                        <span class="section-count">${mcp.tools.length}</span>
+                    </div>
             `;
 
-            // Add toggle button if allowed
-            if (!mcp.always_enabled) {
+            if (mcp.tools.length > 0) {
+                mcp.tools.forEach(tool => {
+                    html += `
+                        <div class="tool-item">
+                            <h6><i class="bi bi-gear-fill"></i><code>${tool.name}</code></h6>
+                            <p>${tool.description}</p>
+                        </div>
+                    `;
+                });
+            } else {
                 html += `
-                    <div class="mt-3">
-                        <button class="btn btn-${mcp.enabled ? 'warning' : 'success'}"
-                                onclick="toggleMCP('${mcp.id}', ${!mcp.enabled})">
-                            <i class="bi bi-power"></i> ${mcp.enabled ? 'Disable' : 'Enable'} MCP
-                        </button>
+                    <div class="empty-state">
+                        <i class="bi bi-tools"></i>
+                        <p>No tools available</p>
                     </div>
                 `;
             }
 
             html += `
-                    </div>
                 </div>
 
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-tools"></i> Tools (${mcp.tools.length})</h5>
+                <div class="info-card">
+                    <div class="section-header">
+                        <h5><i class="bi bi-file-earmark-text-fill"></i>Resources</h5>
+                        <span class="section-count">${mcp.resources.length}</span>
                     </div>
-                    <div class="card-body">
-            `;
-
-            if (mcp.tools.length > 0) {
-                html += '<div class="list-group">';
-                mcp.tools.forEach(tool => {
-                    html += `
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1"><code>${tool.name}</code></h6>
-                            </div>
-                            <p class="mb-0 text-muted">${tool.description}</p>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-            } else {
-                html += '<p class="text-muted">No tools available</p>';
-            }
-
-            html += `
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-file-earmark"></i> Resources (${mcp.resources.length})</h5>
-                    </div>
-                    <div class="card-body">
             `;
 
             if (mcp.resources.length > 0) {
-                html += '<div class="list-group">';
                 mcp.resources.forEach(resource => {
                     html += `
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">${resource.name}</h6>
-                                <small class="text-muted">${resource.type}</small>
-                            </div>
-                            <p class="mb-0 text-muted">${resource.description}</p>
+                        <div class="resource-item">
+                            <h6>
+                                <span><i class="bi bi-file-earmark"></i>${resource.name}</span>
+                                <span class="resource-type-badge">${resource.type}</span>
+                            </h6>
+                            <p>${resource.description}</p>
                         </div>
                     `;
                 });
-                html += '</div>';
             } else {
-                html += '<p class="text-muted">No resources available</p>';
+                html += `
+                    <div class="empty-state">
+                        <i class="bi bi-file-earmark"></i>
+                        <p>No resources available</p>
+                    </div>
+                `;
             }
 
             html += `
-                    </div>
                 </div>
 
-                <div class="mt-4">
-                    <a href="/mcps" class="btn btn-secondary">
+                <div class="action-buttons">
+                    <a href="/mcps" class="btn btn-custom btn-back">
                         <i class="bi bi-arrow-left"></i> Back to MCPs
                     </a>
                 </div>
@@ -269,7 +612,6 @@
             .then(data => {
                 if (data.success) {
                     showSuccess(`MCP ${enabled ? 'enabled' : 'disabled'} successfully`);
-                    // Reload the page to show updated status
                     setTimeout(() => location.reload(), 1000);
                 } else {
                     showError(data.error || 'Failed to toggle MCP');
@@ -286,11 +628,24 @@
             return date.toLocaleString();
         }
 
+        function formatDateShort(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return '1d ago';
+            if (diffDays < 30) return `${diffDays}d ago`;
+            if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+            return `${Math.floor(diffDays / 365)}y ago`;
+        }
+
         function showSuccess(message) {
             const messageDiv = document.getElementById('message');
             messageDiv.innerHTML = `
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <i class="bi bi-check-circle"></i> ${message}
+                    <i class="bi bi-check-circle-fill"></i> ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             `;
@@ -301,7 +656,7 @@
             const messageDiv = document.getElementById('message');
             messageDiv.innerHTML = `
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <i class="bi bi-exclamation-triangle"></i> ${message}
+                    <i class="bi bi-exclamation-triangle-fill"></i> ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             `;

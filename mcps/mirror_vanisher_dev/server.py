@@ -68,7 +68,7 @@ class MCPServer:
         return {
             # Mirror+Vanisher Management
             "list_mirror_vanishers": {
-                "description": "List all directories that are both mirrors and vanishers",
+                "description": "List and enumerate all directories that are simultaneously mirrors (synced to sandbox) and vanishers (loaded into LLM context). Use this when you need to discover available projects, see what codebases are ready for development operations, check which directories are properly configured for mirror+vanisher workflows, or find projects to work on. Returns directory names, paths, file counts, and synchronization status for each mirror+vanisher combination.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {},
@@ -77,7 +77,7 @@ class MCPServer:
                 "handler": self.manager.list_mirror_vanishers
             },
             "verify_mirror_vanisher": {
-                "description": "Verify a directory is both mirrored and loaded as vanisher",
+                "description": "Verify and validate that a specific directory is correctly configured as both a mirror (synced to sandbox) and a vanisher (loaded into LLM context). Use this before starting any development work to confirm proper setup, check if a directory meets mirror+vanisher requirements, troubleshoot configuration issues, or validate that both mirroring and vanisher loading are active. Provides detailed status including mirror existence, vanisher loading state, directory type validation, and specific reasons for any failures.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -90,7 +90,7 @@ class MCPServer:
 
             # Step 1: Exploration Tools
             "explore_structure": {
-                "description": "Explore directory structure (tree view) of a mirror+vanisher",
+                "description": "Explore and visualize the hierarchical directory structure and file organization of a codebase using a tree view representation. Use this when you need to understand how a project is organized, see the folder hierarchy, identify directory patterns, examine file layout, navigate large codebases, or get an overview of project structure before making changes. Generates a recursive tree showing directories and files up to a configurable depth, filtering out common ignored directories like node_modules, __pycache__, .git, and hidden files. Returns tree structure with file counts and directory statistics.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -102,7 +102,7 @@ class MCPServer:
                 "handler": self.exploration.explore_structure
             },
             "detect_tech_stack": {
-                "description": "Detect technology stack and languages used",
+                "description": "Detect and identify the technology stack, programming languages, frameworks, and build tools used in a codebase. Use this when you need to understand what technologies a project uses, identify the primary programming language, discover frameworks and libraries, find build tools and package managers, assess technology choices, or prepare for development work. Analyzes file extensions to detect languages (Python, JavaScript, TypeScript, Java, Go, Rust, etc.), identifies configuration files (package.json, requirements.txt, Cargo.toml, pom.xml, etc.) to detect frameworks (Node.js, Flask, React, etc.), and discovers build tools (Make, Docker, Maven, Gradle, etc.). Returns comprehensive report with language breakdown, framework list, build tool identification, and configuration file locations.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -113,7 +113,7 @@ class MCPServer:
                 "handler": self.exploration.detect_tech_stack
             },
             "find_entrypoints": {
-                "description": "Find main entrypoints and executable files",
+                "description": "Find and locate main entrypoints, executable files, and program starting points in a codebase. Use this when you need to discover how to run the application, find the main files that start execution, locate executable scripts, identify program entry points, understand application startup, or find files with main() functions. Searches for common entrypoint filenames (main.py, app.py, index.js, main.go, etc.), detects Python files with __main__ blocks, identifies executable files with execution permissions, and categorizes entrypoints by type (named entrypoint, Python main block, executable script, etc.). Returns list of entrypoints with file paths, types, and execution information.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -124,7 +124,7 @@ class MCPServer:
                 "handler": self.exploration.find_entrypoints
             },
             "full_exploration": {
-                "description": "Combined: Complete exploration (structure + tech stack + entrypoints)",
+                "description": "Perform comprehensive and complete codebase exploration by running all exploration operations together: directory structure visualization, technology stack detection, and entrypoint discovery. Use this as the first step when starting work on any unfamiliar codebase, when you need a complete overview before implementing features, to understand a project thoroughly before refactoring, when analyzing a new codebase for the first time, or when you want all exploration data in one operation. Executes explore_structure, detect_tech_stack, and find_entrypoints sequentially, combining their results into a unified exploration report. Returns comprehensive analysis including tree structure, file/directory statistics, primary language, complete language breakdown, frameworks, build tools, all entrypoints, and a summary with key metrics. This is the recommended starting point for any development workflow.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -138,7 +138,7 @@ class MCPServer:
 
             # Step 2: Architecture Tools
             "analyze_architecture": {
-                "description": "Analyze architectural patterns (MVC, microservices, etc.)",
+                "description": "Analyze and identify architectural patterns, software design approaches, and structural organization in a codebase. Use this when you need to understand the architecture style (MVC, microservices, layered, clean/hexagonal, feature-based), plan refactoring to align with architectural patterns, assess code organization quality, determine if the project follows architectural best practices, or understand system design before making significant changes. Detects common patterns by analyzing directory structure (models/views/controllers for MVC, services for microservices, domain/application/infrastructure for Clean Architecture), identifies layered architecture (services, repositories, DAO, models), recognizes feature-based organization, and checks for tests, documentation, configuration, and scripts directories. Returns architecture type, detected patterns, directory list, and detailed analysis of project organization.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -149,7 +149,7 @@ class MCPServer:
                 "handler": self.architecture.analyze_architecture
             },
             "map_dependencies": {
-                "description": "Map dependencies between modules/files",
+                "description": "Map and analyze dependencies, imports, and relationships between modules, files, and components in a codebase. Use this when you need to understand code coupling, identify which files depend on which, analyze module relationships, find circular dependencies, plan refactoring to reduce coupling, understand data flow between components, or create dependency graphs. Scans Python files for import statements (from/import), extracts module names and dependencies, builds a comprehensive dependency map showing what each file imports, and calculates dependency statistics (total dependencies per file, overall dependency count). Returns detailed dependency map with file-to-imports relationships, file count, and total dependency metrics. Useful for understanding codebase interconnections and planning modular changes.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -160,7 +160,7 @@ class MCPServer:
                 "handler": self.architecture.map_dependencies
             },
             "identify_patterns": {
-                "description": "Identify design patterns in use",
+                "description": "Identify and recognize software design patterns used in the codebase such as Singleton, Factory, Strategy, Observer, Decorator, and other Gang of Four patterns. Use this when you need to understand what design patterns are implemented, assess code design quality, find examples of specific patterns, plan refactoring to use appropriate patterns, understand architectural decisions, or learn from existing pattern implementations. Searches for pattern indicators in file names (singleton, factory, strategy, observer, decorator, listener, etc.), identifies potential pattern usage, and catalogs all discovered patterns with their locations. Returns list of identified patterns with file paths and pattern types. Helpful for understanding design sophistication and recognizing reusable design solutions in the code.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -173,7 +173,7 @@ class MCPServer:
 
             # Step 3: Chunking Tools
             "chunk_file": {
-                "description": "Break a large file into manageable chunks",
+                "description": "Break down and divide a large source code file into smaller, manageable, overlapping chunks for analysis or processing. Use this when you need to handle files that exceed context window limits, process large files in smaller pieces, analyze specific sections of very long files, work with files over 500-1000 lines, or prepare code for chunk-by-chunk review. Splits file by lines with configurable chunk size and overlap, creates sequential chunks with line number tracking, ensures context preservation through overlap, and maintains readability. Returns array of chunks with chunk numbers, start/end line numbers, line counts, and full content for each chunk. Configurable chunk size (default 100 lines) and overlap (default 10 lines) allow flexible chunking strategies. Essential for handling large codebases that don't fit in single context windows.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -186,7 +186,7 @@ class MCPServer:
                 "handler": self.chunking.chunk_file
             },
             "chunk_directory": {
-                "description": "Create chunking strategy for entire directory",
+                "description": "Analyze an entire directory and create a comprehensive chunking strategy identifying which files need to be split into chunks due to size. Use this when you need to plan how to process a large codebase, identify files that exceed size limits, create a processing strategy for large projects, understand which files need chunking before analysis, or prepare a systematic approach for reviewing code. Scans all files in directory recursively, measures file sizes in lines, categorizes files as large (need chunking) or small (processable as-is), calculates estimated chunk counts for large files, and provides statistics. Returns files needing chunks (with line counts and estimated chunk numbers), small files list, and summary statistics (total large files, total small files). Configurable max_file_size threshold (default 500 lines) determines the chunking boundary. Critical for planning large codebase analysis workflows.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -200,7 +200,7 @@ class MCPServer:
 
             # Step 4: Planning Tools
             "create_plan": {
-                "description": "Create atomic, file-specific implementation plan",
+                "description": "Create detailed, atomic, and file-specific implementation plans for development tasks including feature implementation, bug fixes, or refactoring. Use this when you need to plan how to implement a feature, create step-by-step approach for bug fixes, organize refactoring work, break down complex tasks into manageable steps, identify files to modify, define testing requirements, or establish clear implementation roadmap. Analyzes task description to automatically detect task type (bugfix, refactoring, feature_implementation, general), generates appropriate step-by-step plan with specific actions and details for each step, identifies potential risks and considerations, defines testing requirements (unit tests, integration tests, edge cases), and incorporates context from exploration and architecture analysis. Returns comprehensive plan with task type, ordered steps with actions and details, estimated files to modify, potential risks, and testing requirements. Plans are tailored to task type with specific recommendations (e.g., bug fixes include test reproduction steps, refactoring includes behavior preservation verification, features include API design and documentation).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -213,7 +213,7 @@ class MCPServer:
                 "handler": self.planning.create_plan
             },
             "validate_plan": {
-                "description": "Validate a plan for feasibility and completeness",
+                "description": "Validate and verify that an implementation plan is complete, feasible, and well-structured before execution. Use this when you need to check if a plan has all necessary steps, verify plan completeness before starting work, identify missing elements in implementation plans, ensure plans have proper structure, validate testing requirements are defined, or catch planning issues early. Checks for required plan fields (task, steps, testing_requirements), validates step structure (action, details, proper numbering), identifies missing information, flags warnings about incomplete sections, and provides detailed validation results. Returns validation status (valid/invalid), list of critical issues that must be fixed, list of warnings for improvements, and clear validation message. Ensures plans are thorough before development begins, preventing incomplete or poorly thought-out implementations.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -226,7 +226,7 @@ class MCPServer:
 
             # Step 5: Code Generation Tools
             "generate_diff": {
-                "description": "Generate safe code diff for a file",
+                "description": "Generate safe, reviewable code diffs showing proposed changes to a file before applying them. Use this when you need to preview changes before modifying files, create diffs for code review, see what will change before committing, generate patches for specific modifications, plan code changes safely, or prepare changes for approval. Analyzes original file content, creates diff preview structure, performs safety checks (file exists, writable, needs backup), validates file accessibility, and provides change metadata. Returns diff generation status, file path, change description, original line count, safety check results (file existence, writability, backup recommendation), and preparation message. This is a planning/preview tool - use apply_changes to actually modify files. Critical for safe code modification workflows.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -239,7 +239,7 @@ class MCPServer:
                 "handler": self.code_generation.generate_diff
             },
             "apply_changes": {
-                "description": "Apply code changes with safety checks",
+                "description": "Apply code changes and modifications to files with automatic safety checks including backup creation and dry-run preview capability. Use this when you need to modify source code files, implement planned changes, apply generated diffs, update code safely with automatic backups, test changes with dry-run mode before committing, or make production code modifications. Creates automatic timestamped backups before modifications, supports dry-run mode for previewing without changes, validates file existence and permissions, applies diffs or direct modifications, and tracks backup locations. Returns success status, file path modified, backup file path (with timestamp), dry-run indicator if previewing, and operation result message. Use dry_run=true to preview changes without modifying files. Essential safety tool for code modification workflows ensuring changes can always be reverted.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -252,7 +252,7 @@ class MCPServer:
                 "handler": self.code_generation.apply_changes
             },
             "rewrite_file": {
-                "description": "Completely rewrite a file with safety backup",
+                "description": "Completely replace and rewrite entire file contents with new content while maintaining safety through automatic backup creation. Use this when you need to completely replace file content, rewrite files from scratch, update configuration files entirely, regenerate source files, replace implementations completely, or make comprehensive file changes. Creates automatic timestamped backup of original content (optional but recommended), writes entirely new content to file, validates file paths and permissions, tracks backup locations, and handles encoding properly. Returns success status, file path, backup path (if created), new line count, and completion message. Unlike apply_changes which applies diffs, this tool performs complete file replacement. Critical for major file updates while maintaining ability to restore original content. Default creates backups (backup=true) to prevent data loss.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -267,7 +267,7 @@ class MCPServer:
 
             # Step 6: Testing Tools
             "generate_tests": {
-                "description": "Generate unit tests for a file/function",
+                "description": "Generate test templates, test file structures, and testing recommendations for source code files or functions. Use this when you need to create unit tests for new code, generate integration test structures, build edge case test templates, establish testing frameworks for untested code, create test files following best practices, or get testing recommendations for specific test types. Detects appropriate test framework (pytest, unittest for Python; jest, mocha for JavaScript), generates test file paths following naming conventions (test_*.py, *.test.js), creates test templates based on test type (unit, integration, edge cases), provides framework-specific recommendations, and suggests testing strategies. Returns test generation status, source file path, generated test file path, test type (unit/integration/edge), detected test framework, and detailed recommendations for the test type. Supports unit testing (isolated function tests with mocks), integration testing (component interaction tests), and edge case testing (boundary conditions, error scenarios). Foundation for comprehensive test coverage.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -279,7 +279,7 @@ class MCPServer:
                 "handler": self.testing.generate_tests
             },
             "run_tests": {
-                "description": "Run tests in the directory",
+                "description": "Execute and run automated tests in a directory or file using the appropriate testing framework with support for pytest, unittest, jest, and mocha. Use this when you need to verify code functionality, check if tests pass, validate recent changes, ensure no regressions, run continuous integration checks, execute test suites, or verify implementation correctness. Automatically detects testing framework (pytest.ini/pyproject.toml for pytest, jest.config.js for jest, etc.), runs framework-specific test commands, captures stdout and stderr output, reports test results with pass/fail status, shows exit codes, and handles timeouts. Returns test execution success status, framework used, exit code (0 for success), complete stdout output, stderr output, and result message. Supports verbose output, test discovery, and framework auto-detection. Essential for test-driven development and continuous validation workflows. Helps ensure code quality and catch bugs early.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -291,7 +291,7 @@ class MCPServer:
                 "handler": self.testing.run_tests
             },
             "verify_changes": {
-                "description": "Verify changes by running relevant tests",
+                "description": "Verify and validate code changes by automatically finding and running relevant tests for modified files. Use this when you need to check if changes broke existing functionality, run tests related to specific file modifications, verify changes before committing, execute targeted tests for changed files, ensure modifications don't cause regressions, or get quick feedback on recent changes. Finds test files related to changed files (test_*.py for *.py files), runs tests only for modified files (not entire suite), reports results per changed file, identifies files without tests, and provides aggregated pass/fail status. Returns verification success status, whether all tests passed, results array with test outcomes per file, count of files tested, and count of files without tests. More efficient than running entire test suite - focuses on relevant tests for changed code. Critical for rapid development iteration with confidence.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -304,7 +304,7 @@ class MCPServer:
 
             # Step 7: Quality Check Tools
             "run_linter": {
-                "description": "Run linter on code",
+                "description": "Run static code analysis linters to detect code quality issues, style violations, potential bugs, and anti-patterns with optional auto-fix capability. Use this when you need to check code quality, identify style violations, find potential bugs before runtime, enforce coding standards, clean up code formatting issues automatically, or prepare code for review. Automatically detects and uses appropriate linter (ruff/flake8 for Python, eslint for JavaScript/TypeScript), runs linting analysis on files/directories, supports automatic fixing of violations (--fix flag), captures linting output and issues, reports violation counts, and provides detailed linting results. Returns linting success status (clean code or issues found), linter used, exit code, stdout with violations, stderr output, whether auto-fix was applied, and result message. Supports ruff (fast modern Python linter), flake8 (traditional Python linter), and eslint (JavaScript/TypeScript linter). Essential for maintaining code quality and consistency.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -316,7 +316,7 @@ class MCPServer:
                 "handler": self.quality.run_linter
             },
             "run_formatter": {
-                "description": "Run code formatter",
+                "description": "Run automatic code formatters to standardize code style, fix formatting inconsistencies, and apply consistent styling across codebase. Use this when you need to format code to match style guidelines, fix indentation and spacing issues, standardize code appearance, prepare code for commits, apply consistent formatting across files, or check if code matches formatting standards. Automatically detects and uses appropriate formatter (ruff format/black for Python, prettier for JavaScript/TypeScript/JSON/CSS), runs formatting operations, supports check-only mode to verify without changes, applies consistent style rules, and reports formatting status. Returns formatting success status, formatter used, exit code, stdout and stderr output, check-only mode indicator, and result message (formatting correct or changes needed). Use check_only=true to verify formatting without modifying files. Use check_only=false to apply formatting changes. Essential for maintaining consistent code style across team development.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -328,7 +328,7 @@ class MCPServer:
                 "handler": self.quality.run_formatter
             },
             "run_type_checker": {
-                "description": "Run type checker (mypy, typescript, etc.)",
+                "description": "Run static type checkers to verify type correctness, catch type errors before runtime, and ensure type safety in statically-typed or type-annotated code. Use this when you need to verify type annotations, catch type mismatches, check Python type hints, validate TypeScript types, ensure type safety, find type-related bugs early, or enforce strict typing. Automatically detects and uses appropriate type checker (mypy for Python, tsc for TypeScript), analyzes type annotations and declarations, identifies type errors and mismatches, validates type consistency across codebase, reports type violations with locations, and checks type coverage. Returns type checking success status, type checker used, exit code, stdout with type errors, stderr output, and result message (type checking passed or errors found). Supports mypy (Python static type checker) and tsc (TypeScript compiler in type-check mode). Critical for type-safe development and catching type-related bugs before runtime.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -339,7 +339,7 @@ class MCPServer:
                 "handler": self.quality.run_type_checker
             },
             "full_quality_check": {
-                "description": "Combined: Run all quality checks (lint + format + types)",
+                "description": "Run comprehensive quality checks combining linting, code formatting, and type checking in a single operation with optional auto-fix for all fixable issues. Use this when you need to perform complete code quality validation, prepare code for production, check all quality metrics before committing, run pre-commit quality gates, ensure code meets all quality standards, or get complete quality report in one operation. Executes run_linter (with optional auto-fix), run_formatter (with optional formatting application), and run_type_checker sequentially, aggregates results from all three checks, reports whether all checks passed, provides detailed results for each check type, and supports auto-fix mode to automatically resolve fixable issues. Returns comprehensive quality check status, whether all checks passed (true if linting, formatting, and type checking all succeed), detailed results object with individual check outcomes, and summary message. Use fix=true to automatically fix linting and formatting issues. Essential for comprehensive code quality validation before merging or deployment. Recommended for pre-commit hooks and CI/CD pipelines.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -353,7 +353,7 @@ class MCPServer:
 
             # Step 8: Security Tools
             "scan_secrets": {
-                "description": "Scan for hardcoded secrets and credentials",
+                "description": "Scan codebase for hardcoded secrets, credentials, API keys, passwords, and sensitive information using pattern matching and heuristics. Use this when you need to find exposed secrets before committing, audit code for security issues, check for accidentally committed credentials, scan for API keys and tokens, identify potential security vulnerabilities, or ensure no sensitive data is in code. Scans all text files recursively, uses regex patterns to detect common secret types (API keys, passwords, AWS credentials, private keys, database passwords, tokens, etc.), identifies files and line numbers with potential secrets, categorizes findings by severity (high/medium/low), provides context around matches (surrounding lines), and generates detailed security report. Returns scan success status, path scanned, complete findings list with file paths, line numbers, secret types, severity levels, and context, total findings count, and severity breakdown. Detects API keys, passwords, secret tokens, AWS access/secret keys, private keys, database passwords, and generic long strings that might be secrets. Critical for preventing credential leaks and maintaining security.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -364,7 +364,7 @@ class MCPServer:
                 "handler": self.security.scan_secrets
             },
             "check_vulnerabilities": {
-                "description": "Check dependencies for known vulnerabilities",
+                "description": "Check project dependencies and packages for known security vulnerabilities using vulnerability databases (safety for Python, npm audit for JavaScript/Node.js). Use this when you need to scan dependencies for CVEs, check for vulnerable packages, audit third-party libraries, find outdated packages with security issues, ensure dependency security, or prepare security reports. Automatically detects dependency files (requirements.txt for Python, package.json for JavaScript), uses appropriate security scanner (safety for Python dependencies, npm audit for Node.js), queries vulnerability databases, identifies vulnerable packages with CVE details, reports severity levels and affected versions, and provides remediation recommendations. Returns vulnerability scan status, path checked, results array with scanner-specific outputs, vulnerability counts, whether vulnerabilities were found, and detailed vulnerability information. Supports Python (safety scanner for requirements.txt), JavaScript/Node.js (npm audit for package.json). Essential for dependency security management and compliance requirements. Helps prevent using packages with known security flaws.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -375,7 +375,7 @@ class MCPServer:
                 "handler": self.security.check_vulnerabilities
             },
             "security_audit": {
-                "description": "Run comprehensive security audit",
+                "description": "Run complete and comprehensive security audit combining secret scanning and dependency vulnerability checking in a single thorough security assessment. Use this when you need to perform full security review, check all security aspects before deployment, audit codebase for security compliance, prepare security reports, validate no security issues exist, or get complete security status. Executes scan_secrets to find hardcoded credentials and sensitive data, runs check_vulnerabilities to audit dependencies, combines results into unified security report, identifies all security issues across code and dependencies, reports whether any security issues exist, and provides detailed findings for both secret exposure and vulnerable dependencies. Returns comprehensive audit status, path audited, complete secrets_scan results (all findings with locations and types), complete vulnerabilities_check results (all vulnerable dependencies), whether security issues were found (true if either secrets or vulnerabilities detected), and summary message. Essential for pre-deployment security validation, compliance checks, and security-first development. Recommended to run before every release and periodically on codebases. Critical for maintaining security posture.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -388,7 +388,7 @@ class MCPServer:
 
             # Multi-Step Workflow Tools
             "complete_feature_workflow": {
-                "description": "Combined: Complete workflow to add a new feature (explore + plan + implement + test + quality)",
+                "description": "Execute complete end-to-end workflow for implementing a new feature from initial exploration through planning and guidance for implementation, testing, and quality checks. Use this when you need to add a new feature to a codebase, implement new functionality systematically, follow best practices for feature development, get structured guidance for implementation, ensure all development steps are covered, or execute a comprehensive development process. Runs full_exploration to understand codebase, creates detailed implementation plan with create_plan, provides ready status and guidance for implementation (use generate_diff/apply_changes to code), provides ready status and guidance for testing (use generate_tests/run_tests), provides ready status and guidance for quality checks (use full_quality_check), and returns complete workflow with all step results. Returns workflow ID, workflow type (feature_implementation), exploration results (structure, tech stack, entrypoints), detailed implementation plan with steps, implementation ready status with next action guidance, testing ready status with test generation instructions, quality check ready status with validation instructions, and workflow completion message. This workflow guides you through all steps but requires LLM assistance for actual code generation, testing, and quality validation. Recommended starting point for all feature development work. Ensures systematic and thorough feature implementation.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -400,7 +400,7 @@ class MCPServer:
                 "handler": self.complete_feature_workflow
             },
             "bugfix_workflow": {
-                "description": "Combined: Complete workflow to fix a bug (explore + analyze + fix + test)",
+                "description": "Execute complete end-to-end workflow for fixing bugs systematically from initial exploration through architecture analysis and guidance for bug fixing and verification. Use this when you need to fix a bug in existing code, resolve issues methodically, understand bug context before fixing, follow systematic bug resolution process, ensure bug fixes don't cause regressions, or get structured guidance for debugging. Runs full_exploration to understand codebase context, executes analyze_architecture to understand system design around bug, creates detailed bugfix plan with reproduction steps and fix strategy, provides ready status and guidance for implementing fix (use generate_diff/apply_changes), provides ready status and guidance for verification (use run_tests), and returns complete workflow with all step results. Returns workflow ID, workflow type (bug_fix), exploration results (structure, tech stack), architecture analysis (patterns, organization), detailed fix plan with root cause analysis, implementation ready status with fix guidance, verification ready status with testing instructions, and workflow completion message. This workflow helps you understand bug context before fixing and ensures systematic resolution. Recommended for all bug fixing work. Critical for preventing regression bugs and ensuring quality fixes.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -412,7 +412,7 @@ class MCPServer:
                 "handler": self.bugfix_workflow
             },
             "refactor_workflow": {
-                "description": "Combined: Complete workflow to refactor code (analyze + plan + refactor + test + quality)",
+                "description": "Execute complete end-to-end workflow for refactoring code systematically while maintaining functionality from architecture analysis through planning and guidance for implementation, testing, and quality validation. Use this when you need to refactor code to improve design, restructure code while preserving behavior, improve code quality and maintainability, apply better design patterns, reduce technical debt, or modernize legacy code. Runs analyze_architecture to understand current design, creates detailed refactoring plan with behavior preservation strategy, provides ready status and guidance for refactoring implementation (use generate_diff/apply_changes), provides ready status and guidance for testing to ensure behavior unchanged (use run_tests), provides ready status and guidance for quality validation (use full_quality_check), and returns complete workflow with all step results. Returns workflow ID, workflow type (refactoring), architecture analysis results (patterns, structure), detailed refactoring plan with steps and risks, refactoring ready status with implementation guidance, testing ready status emphasizing behavior preservation, quality check ready status with validation instructions, and workflow completion message. This workflow ensures refactoring doesn't break functionality and improves code quality. Recommended for all refactoring work. Critical for safe code restructuring and technical debt reduction.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {

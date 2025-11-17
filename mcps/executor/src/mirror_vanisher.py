@@ -151,10 +151,10 @@ class MirrorVanisherManager:
             is_vanisher = self._check_vanisher_exists(name)
 
             # Check if it's a directory mirror
-            # Handle both 'type' == 'directory' and 'is_file' == False
+            # Handle both 'type' == 'directory' and 'is_file' is False
             if mirror_info:
                 is_directory = (mirror_info.get('type') == 'directory' or
-                              mirror_info.get('is_file') == False)
+                              mirror_info.get('is_file', True) is False)
             else:
                 is_directory = False
 

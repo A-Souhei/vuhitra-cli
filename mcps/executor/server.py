@@ -20,7 +20,13 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Add src to path
+import sys
+import json
+import logging
+import os
+from typing import Any, Dict
+
+# Add src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from code_execution import CodeExecutionTools

@@ -6,8 +6,7 @@ Provides tools for creating, updating, and managing files.
 
 import logging
 import shutil
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 
 from mirror_vanisher import MirrorVanisherManager
@@ -47,8 +46,10 @@ class FileOperationsTools:
 
             target_file = resolved_path / file_path
 
-            # Check if file exists
-            if target_file.exists() and not overwrite:
+            # Check if file exists before writing
+            file_existed = target_file.exists()
+            
+            if file_existed and not overwrite:
                 return {
                     'success': False,
                     'error': f'File already exists: {file_path}. Use overwrite=true to replace it.'
@@ -66,7 +67,7 @@ class FileOperationsTools:
                 'relative_path': file_path,
                 'size_bytes': len(content.encode('utf-8')),
                 'lines': content.count('\n') + 1,
-                'action': 'overwritten' if (target_file.exists() and overwrite) else 'created'
+                'action': 'overwritten' if file_existed else 'created'
             }
 
         except Exception as e:

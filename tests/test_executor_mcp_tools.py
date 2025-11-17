@@ -5,7 +5,6 @@ This actually invokes the MCP tool implementations, not just shell commands.
 """
 
 import sys
-import os
 from pathlib import Path
 
 # Add executor MCP to path
@@ -13,11 +12,11 @@ executor_path = Path(__file__).parent.parent / "mcps" / "executor"
 sys.path.insert(0, str(executor_path))
 sys.path.insert(0, str(executor_path / "src"))
 
-from src.mirror_vanisher import MirrorVanisherManager
-from src.code_execution import CodeExecutionTools
-from src.file_operations import FileOperationsTools
-from src.build_operations import BuildOperationsTools
-from src.directory_operations import DirectoryOperationsTools
+from mirror_vanisher import MirrorVanisherManager
+from code_execution import CodeExecutionTools
+from file_operations import FileOperationsTools
+from build_operations import BuildOperationsTools
+from directory_operations import DirectoryOperationsTools
 
 # Colors
 GREEN = '\033[0;32m'
@@ -335,7 +334,7 @@ def main():
     print()
     
     # ==========================================================================
-    # BUILD OPERATIONS TOOLS (8)
+    # BUILD & VIRTUAL ENVIRONMENT OPERATIONS TOOLS (8)
     # ==========================================================================
     
     print_header("TEST 19: install_pip_packages")
@@ -451,13 +450,15 @@ def main():
     for file in cleanup_files:
         try:
             file_ops.delete_file(path=test_path, file_path=file, backup=False)
-        except:
+        except (FileNotFoundError, OSError):
+            # Ignore errors if file does not exist during cleanup
             pass
     
     for directory in cleanup_dirs:
         try:
             dir_ops.delete_directory(path=test_path, directory_path=directory, recursive=True, backup=False)
-        except:
+        except (FileNotFoundError, OSError):
+            # Ignore errors if directory does not exist during cleanup
             pass
     
     print_success("Cleanup completed")

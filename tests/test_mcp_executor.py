@@ -55,6 +55,8 @@ class TestMCPServer:
         assert 'run_build_command' in server.tools
         assert 'compile_python' in server.tools
         assert 'create_virtual_env' in server.tools
+        assert 'install_in_virtual_env' in server.tools
+        assert 'run_in_virtual_env' in server.tools
         assert 'run_docker_build' in server.tools
 
         # Check directory operations tools
@@ -68,8 +70,8 @@ class TestMCPServer:
     def test_tool_count(self):
         """Test that we have the expected number of tools."""
         server = MCPServer()
-        # 2 (mirror+vanisher) + 4 (execution) + 6 (file ops) + 6 (build) + 6 (directory) = 24
-        assert len(server.tools) == 24
+        # 2 (mirror+vanisher) + 4 (execution) + 6 (file ops) + 8 (build & venv) + 6 (directory) = 26
+        assert len(server.tools) == 26
 
     def test_initialize_request(self):
         """Test initialize request handling."""
@@ -105,7 +107,7 @@ class TestMCPServer:
         assert response["id"] == 2
         assert "result" in response
         assert "tools" in response["result"]
-        assert len(response["result"]["tools"]) == 24
+        assert len(response["result"]["tools"]) == 26
 
 
 class TestMirrorVanisherManager:

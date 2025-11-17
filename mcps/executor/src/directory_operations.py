@@ -7,7 +7,7 @@ Provides tools for creating, managing, and manipulating directories.
 import shutil
 import logging
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from mirror_vanisher import MirrorVanisherManager
 from errors_handler import handle_exception

@@ -1669,6 +1669,19 @@ if redis_client:
     # Set enabled status based on current coding mode
     toggle_mcp_enabled('mirror-vanisher-dev', is_coding_mode)
 
+    # Initialize Executor MCP in Redis
+    # This MCP is also always_enabled=True and managed by coding mode
+    register_mcp_in_redis(
+        mcp_id='executor',
+        name='Executor MCP',
+        description='Code execution and file operations on mirrored directories for building and running code',
+        tools_count=24,  # Code execution, file ops, build ops, directory ops
+        resources_count=0,
+        always_enabled=True  # Cannot be manually toggled - managed by coding mode
+    )
+    # Set enabled status based on current coding mode
+    toggle_mcp_enabled('executor', is_coding_mode)
+
 
 # MCP API Routes
 @app.route('/mcps', methods=['GET'])
@@ -1721,8 +1734,8 @@ def api_list_mcps():
 def api_toggle_mcp(mcp_id):
     """Toggle MCP enabled/disabled status"""
     try:
-        # Prevent toggling mirror-vanisher-dev as it's managed by coding mode
-        if mcp_id == 'mirror-vanisher-dev':
+        # Prevent toggling coding-mode MCPs as they're managed by coding mode
+        if mcp_id in ['mirror-vanisher-dev', 'executor']:
             return jsonify({
                 'success': False,
                 'error': 'This MCP is automatically managed by coding mode and cannot be manually toggled'
@@ -1832,6 +1845,33 @@ def api_get_mcp_details(mcp_id):
                     'name': 'bugfix_workflow',
                     'description': 'Systematic bug fixing workflow that analyzes the bug, locates affected code, generates fix with tests, validates the solution, and ensures no regressions. Includes root cause analysis and prevention recommendations.'
                 }
+            ]
+        elif mcp_id == 'executor':
+            tools = [
+                {'name': 'list_mirror_vanishers', 'description': 'List all mirror+vanisher directories available for execution operations'},
+                {'name': 'verify_mirror_vanisher', 'description': 'Verify directory is configured for code execution and file operations'},
+                {'name': 'execute_python_code', 'description': 'Execute Python scripts with arguments, capturing output and return codes'},
+                {'name': 'execute_javascript_code', 'description': 'Run JavaScript/Node.js scripts with arguments'},
+                {'name': 'execute_shell_command', 'description': 'Execute shell commands and bash scripts in the working directory'},
+                {'name': 'execute_code_snippet', 'description': 'Run code snippets dynamically in Python, JavaScript, or Bash'},
+                {'name': 'create_file', 'description': 'Create new files with specified content and optional overwrite'},
+                {'name': 'update_file', 'description': 'Update existing files with new content and automatic backup creation'},
+                {'name': 'append_to_file', 'description': 'Append content to existing files without replacing'},
+                {'name': 'delete_file', 'description': 'Delete files with optional backup before removal'},
+                {'name': 'copy_file', 'description': 'Copy files to new locations with overwrite protection'},
+                {'name': 'move_file', 'description': 'Move or rename files with optional overwrite'},
+                {'name': 'install_pip_packages', 'description': 'Install Python packages using pip from list or requirements.txt'},
+                {'name': 'install_npm_packages', 'description': 'Install Node.js packages using npm from list or package.json'},
+                {'name': 'run_build_command', 'description': 'Execute build commands like make, gradle, maven, or custom scripts'},
+                {'name': 'compile_python', 'description': 'Compile Python files to bytecode for syntax validation'},
+                {'name': 'create_virtual_env', 'description': 'Create Python virtual environments for dependency isolation'},
+                {'name': 'run_docker_build', 'description': 'Build Docker images from Dockerfiles with custom tags and build args'},
+                {'name': 'create_directory', 'description': 'Create new directories with optional parent directory creation'},
+                {'name': 'create_directory_structure', 'description': 'Create complete directory structures from dictionary specifications'},
+                {'name': 'delete_directory', 'description': 'Delete directories with recursive option and backup archive creation'},
+                {'name': 'copy_directory', 'description': 'Copy entire directory trees to new locations'},
+                {'name': 'move_directory', 'description': 'Move or rename directories with optional overwrite'},
+                {'name': 'list_directory_contents', 'description': 'List directory contents with recursive option and file filtering'}
             ]
 
         return jsonify({

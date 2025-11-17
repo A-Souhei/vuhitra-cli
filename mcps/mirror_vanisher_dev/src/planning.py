@@ -56,7 +56,10 @@ class PlanningTools:
     def __init__(self, manager):
         """Initialize planning tools."""
         self.manager = manager
-        # Initialize Redis connection with validation
+        # Initialize Redis connection with validation (optional for testing)
+        self.redis_client = None
+        self.redis_available = False
+        
         try:
             self.redis_client = redis.Redis(
                 host=REDIS_HOST,
@@ -67,10 +70,12 @@ class PlanningTools:
             )
             # Test the connection
             self.redis_client.ping()
+            self.redis_available = True
+            logger.info("Redis connection established successfully")
         except RedisError as e:
-            logger.error(f"Failed to connect to Redis: {e}")
+            logger.warning(f"Redis not available: {e}. TODO_list persistence disabled.")
             handle_exception(e, context={'function': '__init__', 'class': 'PlanningTools'})
-            raise
+            # Don't raise - allow initialization to continue without Redis
 
     def create_plan(self, path: str, task: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create atomic, file-specific implementation plan.
@@ -164,11 +169,14 @@ class PlanningTools:
                 todo_list.append(todo_item)
 
             # Store TODO_list in Redis (overwrite previous) with error handling
-            try:
-                self.redis_client.set(TODO_LIST_KEY, json.dumps(todo_list))
-            except RedisError as e:
-                logger.warning(f"Failed to store TODO_list in Redis: {e}")
-                # Continue even if Redis storage fails - plan is still returned
+            if self.redis_available and self.redis_client:
+                try:
+                    self.redis_client.set(TODO_LIST_KEY, json.dumps(todo_list))
+                except RedisError as e:
+                    logger.warning(f"Failed to store TODO_list in Redis: {e}")
+                    # Continue even if Redis storage fails - plan is still returned
+            else:
+                logger.debug("Redis not available, skipping TODO_list storage")
 
             # Create beautiful formatted plan output
             formatted_plan = self._format_plan_beautifully(plan, todo_list)
@@ -264,6 +272,16 @@ class PlanningTools:
             Dictionary containing the TODO_list
         """
         try:
+            # Check if Redis is available
+            if not self.redis_available or not self.redis_client:
+                logger.warning("Redis not available, returning empty TODO_list")
+                return {
+                    'success': True,
+                    'TODO_list': [],
+                    'count': 0,
+                    'message': 'Redis not available'
+                }
+            
             # Retrieve TODO_list from Redis with proper error handling
             try:
                 todo_list_json = self.redis_client.get(TODO_LIST_KEY)

@@ -63,16 +63,16 @@ function displayMCPs(mcps, codingMode) {
 
     mcps.forEach(mcp => {
         const statusBadge = mcp.enabled
-            ? '<span class="badge bg-success">Enabled</span>'
-            : '<span class="badge bg-secondary">Disabled</span>';
+            ? '<span class="badge bg-success" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">Enabled</span>'
+            : '<span class="badge bg-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">Disabled</span>';
 
         const alwaysEnabledBadge = mcp.always_enabled
-            ? '<span class="badge bg-primary ms-2">Always ON</span>'
+            ? '<span class="badge bg-primary" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">Always ON</span>'
             : '';
 
         const toggleDisabled = !mcp.can_toggle ? 'disabled' : '';
         const toggleTooltip = !mcp.can_toggle
-            ? 'title="This MCP is always enabled in coding mode"'
+            ? 'title="This MCP is automatically managed by coding mode"'
             : '';
 
         html += `
@@ -83,7 +83,7 @@ function displayMCPs(mcps, codingMode) {
                             <h5 class="card-title">
                                 <i class="bi bi-plugin"></i> ${mcp.name}
                             </h5>
-                            <div>
+                            <div class="d-flex gap-2 align-items-center flex-shrink-0">
                                 ${statusBadge}
                                 ${alwaysEnabledBadge}
                             </div>

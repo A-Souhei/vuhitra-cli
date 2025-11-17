@@ -23,6 +23,8 @@ from src.utils.conversation_history import ConversationHistoryManager
 from src.utils.ephemeral_context import EphemeralContextManager
 from src.utils.eternal_context import EternalContextManager
 from src.utils.spark_context import SparkContextManager
+from src.utils.pillar_context import PillarContextManager
+from src.utils.vanisher_context import VanisherContextManager
 from src.utils.command_handler import CommandHandler, CommandResult
 from src.utils.token_limit_manager import get_token_limit_manager
 from src.utils.path_resolver import get_path_resolver
@@ -256,13 +258,23 @@ def send_feedback_to_sandbox(feedback_data, verbose=False):
             print(f"WARNING: {error_msg}", file=sys.stderr)
         return False
 
-def interactive_mode(model, verbose=False):
-    """Run interactive mode with enhanced UI and verbose logging."""
+def interactive_mode(model, verbose=False, coding=False):
+    """Run interactive mode with enhanced UI and verbose logging.
+
+    Args:
+        model: The LLM model to use
+        verbose: Enable verbose debugging output
+        coding: Enable coding mode (disables eternals/ephemerals/auto-iteration, enables pillars/vanishers)
+    """
     # Set global verbose mode
     set_verbose_mode(verbose)
 
     # Print styled banner
     print_banner(model)
+
+    # Show coding mode status
+    if coding:
+        console.print("[bold green]🔧 Coding mode enabled[/bold green] - Using Pillars & Vanishers, auto-iteration disabled")
 
     # Initialize feedback collector
     feedback_collector = FeedbackCollector()
@@ -279,13 +291,29 @@ def interactive_mode(model, verbose=False):
     # Initialize conversation history manager
     conversation_history = ConversationHistoryManager()
 
-    # Initialize ephemeral context manager
-    ephemeral_context = EphemeralContextManager()
+    # Initialize context managers based on mode
+    if coding:
+        # Coding mode: disable eternals/ephemerals, enable pillars/vanishers
+        ephemeral_context = EphemeralContextManager(enabled=False)
+        eternal_context = EternalContextManager(enabled=False)
+        pillar_context = PillarContextManager(enabled=True)
+        vanisher_context = VanisherContextManager(enabled=True)
 
-    # Initialize eternal context manager (loads existing contexts from storage)
-    eternal_context = EternalContextManager()
+        # Auto-load pillars from pillars/ directory
+        loaded_count, loaded_files = pillar_context.auto_load_from_pillars_directory(verbose=verbose)
+        if loaded_count > 0:
+            print_success(f"✓ Auto-loaded {loaded_count} pillar(s) from pillars/ directory")
+            if verbose:
+                for filename in loaded_files:
+                    print_info(f"  - {filename}")
+    else:
+        # Normal mode: enable eternals/ephemerals, disable pillars/vanishers
+        ephemeral_context = EphemeralContextManager()
+        eternal_context = EternalContextManager()
+        pillar_context = PillarContextManager(enabled=False)
+        vanisher_context = VanisherContextManager(enabled=False)
 
-    # Initialize Spark context manager (in-memory ephemeral)
+    # Initialize Spark context manager (in-memory ephemeral, always enabled)
     spark_context = SparkContextManager()
 
     # Initialize heuristics config (used for conversation history settings)
@@ -304,6 +332,8 @@ def interactive_mode(model, verbose=False):
                         "       /clear tokenlimit - Clear discovered token limit for current model\n"
                         "       /clear ephemeral [label|--all] - Clear ephemeral context\n"
                         "       /clear eternal [label|--all] - Clear eternal context\n"
+                        "       /clear pillar [label|--all] - Clear pillar context (coding mode)\n"
+                        "       /clear vanisher [label|--all] - Clear vanisher context (coding mode)\n"
                         "       /clear spark [label|--all] - Clear Spark context"
             )
 
@@ -410,6 +440,72 @@ def interactive_mode(model, verbose=False):
                         success=False,
                         message=f"Eternal context '{target}' not found. Use '/show eternal' to see loaded contexts."
                     )
+        elif subcommand == "pillar":
+            if not pillar_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Pillar context is disabled. Enable coding mode with --coding flag."
+                )
+
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /clear pillar <label> - Clear specific pillar context\n"
+                            "       /clear pillar --all - Clear all pillar contexts"
+                )
+
+            target = args[1]
+
+            if target == "--all":
+                count = pillar_context.clear_all()
+                return CommandResult(
+                    success=True,
+                    message=f"✓ Cleared all pillar contexts ({count} contexts removed from storage)"
+                )
+            else:
+                if pillar_context.remove_by_label(target):
+                    return CommandResult(
+                        success=True,
+                        message=f"✓ Removed pillar context '{target}' from storage"
+                    )
+                else:
+                    return CommandResult(
+                        success=False,
+                        message=f"Pillar context '{target}' not found. Use '/show pillar' to see loaded contexts."
+                    )
+        elif subcommand == "vanisher":
+            if not vanisher_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Vanisher context is disabled. Enable coding mode with --coding flag."
+                )
+
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /clear vanisher <label> - Clear specific vanisher context\n"
+                            "       /clear vanisher --all - Clear all vanisher contexts"
+                )
+
+            target = args[1]
+
+            if target == "--all":
+                count = vanisher_context.clear_all()
+                return CommandResult(
+                    success=True,
+                    message=f"✓ Cleared all vanisher contexts ({count} contexts removed)"
+                )
+            else:
+                if vanisher_context.remove_by_label(target):
+                    return CommandResult(
+                        success=True,
+                        message=f"✓ Removed vanisher context '{target}'"
+                    )
+                else:
+                    return CommandResult(
+                        success=False,
+                        message=f"Vanisher context '{target}' not found. Use '/show vanisher' to see loaded contexts."
+                    )
         elif subcommand == "spark":
             if not spark_context.is_enabled():
                 return CommandResult(
@@ -438,7 +534,7 @@ def interactive_mode(model, verbose=False):
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /clear context, /clear tokenlimit, /clear ephemeral, /clear eternal, or /clear spark"
+                        f"Use: /clear context, /clear tokenlimit, /clear ephemeral, /clear eternal, /clear pillar, /clear vanisher, or /clear spark"
             )
 
     command_handler.register_command("clear", clear_command_handler)
@@ -576,7 +672,15 @@ def interactive_mode(model, verbose=False):
             loaded = []
             failed = []
             for file in files:
-                file_label = label if label else None
+                # Generate unique labels for each file in directory
+                # Use provided label as prefix, or filename if no label
+                if label:
+                    # Use label as prefix with filename
+                    file_label = f"{label}-{Path(file).stem}"
+                else:
+                    # Use filename (without extension) as label
+                    file_label = Path(file).stem
+
                 file_success, file_message = eternal_context.load_file(file, file_label, description)
                 if file_success:
                     loaded.append(os.path.basename(file))
@@ -605,6 +709,146 @@ def interactive_mode(model, verbose=False):
 
     command_handler.register_command("load-eternal", load_eternal_command_handler)
 
+    # Register /pillar command to load pillar context from file (coding mode only)
+    def pillar_command_handler(args):
+        """Handle /pillar command to load pillar context from file (coding mode only)."""
+        if not pillar_context.is_enabled():
+            return CommandResult(
+                success=False,
+                message="Pillar context is disabled. Enable coding mode with --coding flag."
+            )
+
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /pillar load <file_path> [label] [description]\n"
+                        "       /pillar load ./docs/api_spec.md\n"
+                        "       /pillar load @docs/api_spec.md api \"REST API specification\"\n"
+                        "       /pillar load @docs/ (loads all files in directory)\n"
+                        "       /pillar load ./docs/coding_standards.md standards \"Python coding standards\""
+            )
+
+        subcommand = args[0].lower()
+
+        if subcommand == "load":
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /pillar load <file_path> [label] [description]"
+                )
+
+            file_path = args[1]
+            label = args[2] if len(args) > 2 else None
+            description = args[3] if len(args) > 3 else None
+
+            # Resolve @ prefix path if present
+            success, resolved_path, error = path_resolver.resolve_path(file_path)
+            if not success:
+                return CommandResult(success=False, message=error)
+
+            # Check if it's a directory
+            if path_resolver.is_directory(file_path):
+                # Load all files in directory
+                success, files, error = path_resolver.get_directory_files(file_path)
+                if not success:
+                    return CommandResult(success=False, message=error)
+
+                # Load each file
+                loaded = []
+                failed = []
+                for file in files:
+                    # Generate unique labels for each file in directory
+                    # Use provided label as prefix, or filename if no label
+                    if label:
+                        # Use label as prefix with filename
+                        file_label = f"{label}-{Path(file).stem}"
+                    else:
+                        # Use filename (without extension) as label
+                        file_label = Path(file).stem
+
+                    file_success, file_message = pillar_context.load_file(file, file_label, description)
+                    if file_success:
+                        loaded.append(os.path.basename(file))
+                    else:
+                        failed.append((os.path.basename(file), file_message))
+
+                # Build result message
+                messages = []
+                if loaded:
+                    messages.append(f"✓ Loaded {len(loaded)} pillar(s) from {file_path}")
+                    messages.append(f"  Files: {', '.join(loaded)}")
+
+                if failed:
+                    messages.append(f"✗ Failed to load {len(failed)} file(s):")
+                    for filename, error_msg in failed:
+                        messages.append(f"  - {filename}: {error_msg}")
+
+                if not loaded and failed:
+                    return CommandResult(success=False, message="\n".join(messages))
+
+                return CommandResult(success=True, message="\n".join(messages))
+            else:
+                # Load single file
+                success, message = pillar_context.load_file(resolved_path, label, description)
+                return CommandResult(success=success, message=message)
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown pillar subcommand: {subcommand}\n"
+                        "Available: /pillar load <file_path> [label] [description]"
+            )
+
+    command_handler.register_command("pillar", pillar_command_handler)
+
+    # Register /vanisher command to load vanisher context from mirrored file (coding mode only)
+    def vanisher_command_handler(args):
+        """Handle /vanisher command to load vanisher context from mirrored file (coding mode only)."""
+        if not vanisher_context.is_enabled():
+            return CommandResult(
+                success=False,
+                message="Vanisher context is disabled. Enable coding mode with --coding flag."
+            )
+
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /vanisher load <file_path> [label] [description]\n"
+                        "       /vanisher load @data/config.json\n"
+                        "       /vanisher load @data/file.txt myfile \"My file description\"\n"
+                        "\n"
+                        "NOTE: File/directory must be mirrored first using '/mirror do @path'"
+            )
+
+        subcommand = args[0].lower()
+
+        if subcommand == "load":
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /vanisher load <file_path> [label] [description]"
+                )
+
+            file_path = args[1]
+            label = args[2] if len(args) > 2 else None
+            description = args[3] if len(args) > 3 else None
+
+            # Resolve @ prefix path if present
+            success, resolved_path, error = path_resolver.resolve_path(file_path)
+            if not success:
+                return CommandResult(success=False, message=error)
+
+            # Load single file (vanisher only supports files, not directories)
+            success, message = vanisher_context.load_file(resolved_path, label, description)
+            return CommandResult(success=success, message=message)
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown vanisher subcommand: {subcommand}\n"
+                        "Available: /vanisher load <file_path> [label] [description]"
+            )
+
+    command_handler.register_command("vanisher", vanisher_command_handler)
+
     # Register /show command to show information
     def show_command_handler(args):
         """Handle /show command to display information."""
@@ -613,6 +857,8 @@ def interactive_mode(model, verbose=False):
                 success=False,
                 message="Usage: /show ephemeral - Show loaded ephemeral contexts\n"
                         "       /show eternal - Show loaded eternal contexts\n"
+                        "       /show pillar - Show loaded pillar contexts (coding mode)\n"
+                        "       /show vanisher - Show loaded vanisher contexts (coding mode)\n"
                         "       /show spark - Show loaded Spark contexts"
             )
 
@@ -636,6 +882,24 @@ def interactive_mode(model, verbose=False):
 
             summary = eternal_context.get_summary()
             return CommandResult(success=True, message=summary)
+        elif subcommand == "pillar":
+            if not pillar_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Pillar context is disabled. Enable coding mode with --coding flag."
+                )
+
+            summary = pillar_context.get_summary()
+            return CommandResult(success=True, message=summary)
+        elif subcommand == "vanisher":
+            if not vanisher_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Vanisher context is disabled. Enable coding mode with --coding flag."
+                )
+
+            summary = vanisher_context.get_summary()
+            return CommandResult(success=True, message=summary)
         elif subcommand == "spark":
             if not spark_context.is_enabled():
                 return CommandResult(
@@ -649,7 +913,7 @@ def interactive_mode(model, verbose=False):
             return CommandResult(
                 success=False,
                 message=f"Unknown subcommand: {subcommand}\n"
-                        f"Use: /show ephemeral, /show eternal, or /show spark"
+                        f"Use: /show ephemeral, /show eternal, /show pillar, /show vanisher, or /show spark"
             )
 
     command_handler.register_command("show", show_command_handler)
@@ -1433,6 +1697,22 @@ def interactive_mode(model, verbose=False):
                             "relevance_filtered": eternal_context.semantic_filtering_enabled
                         })
 
+                # Get pillar context (coding mode - filtered by semantic relevance to prompt)
+                pillar_context_str = ""
+                if pillar_context.is_enabled():
+                    pillar_context_str = pillar_context.get_context_string(prompt=prompt, verbose=verbose)
+
+                    if pillar_context_str and verbose:
+                        # Get relevant contexts to show count
+                        relevant = pillar_context.get_relevant_contexts(prompt, verbose=verbose)
+                        loaded_labels = [label for label, ctx, score in relevant]
+                        print_debug("Pillar Context", {
+                            "contexts_loaded": len(relevant),
+                            "loaded": loaded_labels if loaded_labels else "none",
+                            "total_contexts": pillar_context.get_context_count(),
+                            "relevance_filtered": pillar_context.semantic_filtering_enabled
+                        })
+
                 # Get ephemeral context (filtered by semantic relevance to prompt)
                 ephemeral_context_str = ""
                 if ephemeral_context.is_enabled():
@@ -1447,6 +1727,22 @@ def interactive_mode(model, verbose=False):
                             "loaded": loaded_labels if loaded_labels else "none",
                             "total_contexts": ephemeral_context.get_context_count(),
                             "relevance_filtered": ephemeral_context.semantic_filtering_enabled
+                        })
+
+                # Get vanisher context (coding mode - filtered by semantic relevance to prompt)
+                vanisher_context_str = ""
+                if vanisher_context.is_enabled():
+                    vanisher_context_str = vanisher_context.get_context_string(prompt=prompt, verbose=verbose)
+
+                    if vanisher_context_str and verbose:
+                        # Get relevant contexts to show count
+                        relevant = vanisher_context.get_relevant_contexts(prompt, verbose=verbose)
+                        loaded_labels = [ctx.label for ctx, score in relevant]
+                        print_debug("Vanisher Context", {
+                            "contexts_loaded": len(relevant),
+                            "loaded": loaded_labels if loaded_labels else "none",
+                            "total_contexts": vanisher_context.get_context_count(),
+                            "relevance_filtered": vanisher_context.semantic_filtering_enabled
                         })
 
                 # Get Spark context (in-memory ephemeral, dies with /clear context)
@@ -1491,16 +1787,22 @@ def interactive_mode(model, verbose=False):
                     negative_weight_boost=negative_weight_boost
                 )
 
-                # Enhance prompt with eternal, ephemeral, spark, conversation history, and heuristic context
+                # Enhance prompt with contexts: eternal/pillar, ephemeral/vanisher, spark, conversation history, and heuristic context
                 enhanced_prompt = prompt
                 context_parts = []
 
-                # Order: Eternal (first, permanent), Ephemeral (session), Spark (in-memory), Conversation, Heuristics
+                # Order: Eternal/Pillar (first, permanent), Ephemeral/Vanisher (session), Spark (in-memory), Conversation, Heuristics
                 if eternal_context_str:
                     context_parts.append(eternal_context_str)
 
+                if pillar_context_str:
+                    context_parts.append(pillar_context_str)
+
                 if ephemeral_context_str:
                     context_parts.append(ephemeral_context_str)
+
+                if vanisher_context_str:
+                    context_parts.append(vanisher_context_str)
 
                 if spark_context_str:
                     context_parts.append(spark_context_str)
@@ -1519,7 +1821,9 @@ def interactive_mode(model, verbose=False):
                             "original_length": len(prompt),
                             "enhanced_length": len(enhanced_prompt),
                             "eternal_context": len(eternal_context_str) if eternal_context_str else 0,
+                            "pillar_context": len(pillar_context_str) if pillar_context_str else 0,
                             "ephemeral_context": len(ephemeral_context_str) if ephemeral_context_str else 0,
+                            "vanisher_context": len(vanisher_context_str) if vanisher_context_str else 0,
                             "spark_context": len(spark_context_str) if spark_context_str else 0,
                             "conversation_context": len(conversation_context) if conversation_context else 0,
                             "heuristic_context": len(heuristic_context) if heuristic_context else 0,
@@ -1632,8 +1936,14 @@ def interactive_mode(model, verbose=False):
                     send_feedback_to_sandbox(feedback_data, verbose=(verbose or force_sync))
 
                     # Check if we should auto-iterate (rating == 0)
+                    # SKIP auto-iteration in coding mode
                     if rating == 0:
-                        if iteration_number + 1 < max_iterations:
+                        if coding:
+                            # Coding mode: auto-iteration disabled, just break
+                            if verbose:
+                                print_info("⚠️  Rating 0 received, but auto-iteration is disabled in coding mode")
+                            break
+                        elif iteration_number + 1 < max_iterations:
                             # Ask user if they want to retry with timeout
                             console.print(f"\n[yellow]⚠️  Response out of context (attempt {iteration_number + 1}/{max_iterations})[/yellow]")
 
@@ -1778,10 +2088,21 @@ def interactive_mode(model, verbose=False):
             })
             print_error(str(e))
 
-def non_interactive_mode(model, prompt, verbose=False):
-    """Run non-interactive mode with a single prompt."""
+def non_interactive_mode(model, prompt, verbose=False, coding=False):
+    """Run non-interactive mode with a single prompt.
+
+    Args:
+        model: The LLM model to use
+        prompt: The prompt to process
+        verbose: Enable verbose debugging output
+        coding: Coding mode flag (ignored in non-interactive mode)
+    """
     # Set global verbose mode
     set_verbose_mode(verbose)
+
+    # Show warning if coding mode was requested
+    if coding:
+        print_warning("⚠️  Coding mode is only available in interactive mode. Use ./start.sh --coding without -p flag.")
 
     try:
         if verbose:
@@ -1830,7 +2151,8 @@ def main():
 
         # Set verbose mode from args
         verbose = args.verbose
-        
+        coding = args.coding
+
         # Wait for services to be ready before proceeding
         if not wait_for_services():
             print_error("Cannot proceed without services. Exiting.")
@@ -1839,13 +2161,14 @@ def main():
         capture_message("CLI started", level="info", context={
             'mode': 'interactive' if not args.prompt else 'non_interactive',
             'model': args.model,
-            'verbose': verbose
+            'verbose': verbose,
+            'coding': coding
         })
 
         if args.prompt:
-            non_interactive_mode(args.model, args.prompt, verbose=verbose)
+            non_interactive_mode(args.model, args.prompt, verbose=verbose, coding=coding)
         else:
-            interactive_mode(args.model, verbose=verbose)
+            interactive_mode(args.model, verbose=verbose, coding=coding)
 
     except Exception as e:
         handle_exception(e, context={'function': 'main'})

@@ -6,10 +6,11 @@
 options(repos = list(CRAN = "https://cloud.r-project.org"))
 
 # Function to install packages with error handling
-install_package <- function(pkg_name) {
+# Use destdir to cache downloads in /tmp/R_downloads
+install_package <- function(pkg_name, download_dir = "/tmp/R_downloads") {
   tryCatch({
     if (!require(pkg_name, character.only = TRUE)) {
-      install.packages(pkg_name, quiet = TRUE)
+      install.packages(pkg_name, destdir = download_dir, quiet = TRUE)
       cat(sprintf("✓ Installed %s\n", pkg_name))
     } else {
       cat(sprintf("✓ %s already installed\n", pkg_name))

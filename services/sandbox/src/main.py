@@ -1401,6 +1401,76 @@ def mirror_sync_monitor():
 def mirror_web_interface():
     """Web interface for managing mirrors"""
     return render_template('mirrors.html')
+
+
+@app.route('/home', methods=['GET'])
+@app.route('/', methods=['GET'])
+def home_interface():
+    """Home page with navigation to all context management pages"""
+    return render_template('home.html')
+
+
+@app.route('/eternals', methods=['GET'])
+def eternals_interface():
+    """Web interface for managing eternal contexts"""
+    return render_template('eternals.html')
+
+
+@app.route('/pillars', methods=['GET'])
+def pillars_interface():
+    """Web interface for managing pillar contexts"""
+    return render_template('pillars.html')
+
+
+@app.route('/ephemerals', methods=['GET'])
+def ephemerals_interface():
+    """Web interface for managing ephemeral contexts"""
+    return render_template('ephemerals.html')
+
+
+@app.route('/vanishers', methods=['GET'])
+def vanishers_interface():
+    """Web interface for managing vanisher contexts"""
+    return render_template('vanishers.html')
+
+
+# API endpoints for context management (placeholders for future implementation)
+@app.route('/api/contexts/eternals', methods=['GET'])
+def api_get_eternals():
+    """API endpoint to get eternal contexts"""
+    return jsonify({
+        'contexts': [],
+        'message': 'This endpoint requires the CLI to be running with eternal contexts enabled'
+    })
+
+
+@app.route('/api/contexts/pillars', methods=['GET'])
+def api_get_pillars():
+    """API endpoint to get pillar contexts"""
+    return jsonify({
+        'contexts': [],
+        'message': 'This endpoint requires the CLI to be running in coding mode (--coding flag)'
+    })
+
+
+@app.route('/api/contexts/ephemerals', methods=['GET'])
+def api_get_ephemerals():
+    """API endpoint to get ephemeral contexts"""
+    return jsonify({
+        'contexts': [],
+        'message': 'This endpoint requires the CLI to be running with ephemeral contexts enabled'
+    })
+
+
+@app.route('/api/contexts/vanishers', methods=['GET'])
+def api_get_vanishers():
+    """API endpoint to get vanisher contexts"""
+    return jsonify({
+        'contexts': [],
+        'message': 'This endpoint requires the CLI to be running in coding mode (--coding flag)'
+    })
+
+
 # Start background sync monitor thread
 if redis_client:
     sync_monitor_thread = Thread(target=mirror_sync_monitor, daemon=True)

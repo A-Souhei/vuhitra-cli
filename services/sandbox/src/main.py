@@ -64,9 +64,14 @@ def sanitize_path(path_str):
     return '/'.join(parts) if parts else ''
 
 # Configure Flask app with template and static folders
-app = Flask(__name__, 
-            template_folder='/app/templates',
-            static_folder='/app/static')
+# Get the base directory (services/sandbox/)
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+template_folder = os.path.join(base_dir, 'templates')
+static_folder = os.path.join(base_dir, 'static')
+
+app = Flask(__name__,
+            template_folder=template_folder,
+            static_folder=static_folder)
 
 # Initialize error handler
 error_handler = get_error_handler()

@@ -59,6 +59,7 @@ fi
 if [ "$WITH_CONTAINERS" = true ]; then
     echo -e "${YELLOW}Running ALL tests (including container tests)${NC}"
     IGNORE_OPTS=""
+    MARKER_OPTS=""
     TEST_PATTERN="tests/"
 else
     echo -e "${YELLOW}Running NON-CONTAINER tests only${NC}"
@@ -66,10 +67,13 @@ else
     echo "  - Excluding: test_sandbox_redis.py (requires Redis container)"
     echo "  - Excluding: test_heuristics_endpoints.py (Flask integration tests)"
     echo "  - Excluding: test_heuristics_retriever_old.py (old implementation)"
+    echo "  - Excluding: tests marked with 'requires_redis'"
     echo "  - Including: test_sandbox_endpoints_mocked.py (mocked version)"
     echo "  - Including: test_sandbox_redis_mocked.py (mocked version)"
     echo "  - Including: test_heuristics_retriever_embeddings.py (new embedding tests)"
+    echo "  - Including: test_mcp_mirror_vanisher.py (Redis-optional tests)"
     IGNORE_OPTS="--ignore=tests/test_sandbox_endpoints.py --ignore=tests/test_sandbox_redis.py --ignore=tests/test_heuristics_endpoints.py --ignore=tests/test_heuristics_retriever_old.py"
+    MARKER_OPTS='-m "not requires_redis"'
     TEST_PATTERN="tests/"
 fi
 
@@ -81,6 +85,11 @@ PYTEST_CMD="pytest"
 # Add ignore options
 if [ -n "$IGNORE_OPTS" ]; then
     PYTEST_CMD="$PYTEST_CMD $IGNORE_OPTS"
+fi
+
+# Add marker options
+if [ -n "$MARKER_OPTS" ]; then
+    PYTEST_CMD="$PYTEST_CMD $MARKER_OPTS"
 fi
 
 # Add verbosity

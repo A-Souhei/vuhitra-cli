@@ -13,14 +13,15 @@ async function loadVanishers() {
                 <div class="empty-state">
                     <i class="bi bi-inbox"></i>
                     <h4>No Vanisher Contexts Found</h4>
-                    <p>Vanishers are auto-loaded from the <code>vanishers/</code> directory when starting in coding mode.</p>
+                    <p>Vanishers load individual files from mirrored directories in coding mode.</p>
                     <div class="cli-hint">
                         <code>./start.sh --coding</code>
                     </div>
-                    <p class="mt-3">Or load manually:</p>
+                    <p class="mt-3">Load files from a mirrored directory:</p>
                     <div class="cli-hint">
-                        <code>/vanisher load @docs/guide.md guide "Development guide"</code>
+                        <code>/vanisher load @directory/</code>
                     </div>
+                    <p class="mt-2 text-muted small">Each file in the directory will appear as a separate vanisher context above.</p>
                 </div>
             `;
             return;
@@ -43,9 +44,9 @@ async function loadVanishers() {
                         ${contexts.map(ctx => {
                             const label = ctx.label || 'unknown';
                             const filePath = ctx.file_path || '-';
-                            const sizeKB = (ctx.content_size / 1024).toFixed(1);
+                            const sizeKB = ctx.size_kb ? ctx.size_kb.toFixed(1) : '0.0';
                             const chunks = ctx.num_chunks || 1;
-                            const timestamp = formatDateTime(ctx.timestamp);
+                            const timestamp = formatDateTime(ctx.loaded_at);
                             const autoLoaded = ctx.auto_loaded ? '<span class="badge bg-success ms-2">Auto-loaded</span>' : '';
 
                             return `
@@ -64,10 +65,10 @@ async function loadVanishers() {
                                     <td class="text-end">
                                         <div class="btn-group btn-group-sm" role="group">
                                             <button class="btn btn-outline-info" onclick="viewVanisherContent('${escapeHtml(label)}')" title="View Content">
-                                                <i class="bi bi-eye"></i>
+                                                <i class="bi bi-eye-fill"></i>
                                             </button>
                                             <button class="btn btn-outline-danger" onclick="deleteVanisher('${escapeHtml(label)}')" title="Delete">
-                                                <i class="bi bi-trash"></i>
+                                                <i class="bi bi-trash-fill"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -80,7 +81,8 @@ async function loadVanishers() {
             <div class="mt-3">
                 <p class="text-muted small">
                     <i class="bi bi-info-circle"></i>
-                    Vanisher contexts are used in coding mode (<code>--coding</code> flag). Auto-loaded from <code>vanishers/</code> directory. Stored in <code>.vuhitra/vanisher_contexts/</code>
+                    Vanisher contexts are individual files loaded from mirrored directories. Use in coding mode (<code>--coding</code> flag). 
+                    Load with: <code>/vanisher load @directory/</code>. Each file from the directory is shown separately above.
                 </p>
             </div>
         `;

@@ -106,6 +106,9 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
 COPY ./services/sandbox/src /app
 COPY ./src /app/src
 
+# Copy heuristics configuration
+COPY ./services/sandbox/heuristics_config.yaml /heuristics_config.yaml
+
 # Copy templates and static files for web UI
 COPY ./services/sandbox/templates /app/templates
 COPY ./services/sandbox/static /app/static

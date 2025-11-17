@@ -68,6 +68,7 @@ services:
     volumes:
       - workspace:/app/WORKSPACE
       - ${VUHITRA_DIR:-..}/.vuhitra:/app/.vuhitra:ro  # Mount .vuhitra directory for context access (read-only, set VUHITRA_DIR to override base path)
+      - ${VUHITRA_DIR:-..}/mcps:/app/mcps:ro  # Mount MCP servers for tool list queries (read-only)
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379

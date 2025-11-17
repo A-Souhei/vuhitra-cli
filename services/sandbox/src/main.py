@@ -1471,6 +1471,212 @@ def api_get_vanishers():
     })
 
 
+# MCP Management Functions
+def get_coding_mode_status():
+    """Check if CLI is in coding mode"""
+    # Check environment variable or Redis flag
+    return os.getenv('VUHITRA_CODING_MODE', 'false').lower() == 'true'
+
+
+def get_all_mcps_from_redis():
+    """Get all registered MCPs from Redis"""
+    if not redis_client:
+        return []
+
+    try:
+        mcps = []
+        # Get all keys matching mcp:*
+        for key in redis_client.scan_iter(match='mcp:*'):
+            mcp_data = redis_client.hgetall(key)
+            if mcp_data:
+                mcps.append(mcp_data)
+        return mcps
+    except Exception as e:
+        logger.warning(f"Failed to get MCPs from Redis: {e}")
+        return []
+
+
+def register_mcp_in_redis(mcp_id, name, description, tools_count=0, resources_count=0, always_enabled=False):
+    """Register an MCP in Redis"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping MCP registration")
+        return
+
+    try:
+        mcp_data = {
+            'id': mcp_id,
+            'name': name,
+            'description': description,
+            'tools_count': tools_count,
+            'resources_count': resources_count,
+            'enabled': 'true' if always_enabled else 'false',
+            'always_enabled': 'true' if always_enabled else 'false',
+            'registered_at': datetime.now().isoformat()
+        }
+        redis_client.hset(f'mcp:{mcp_id}', mapping=mcp_data)
+        logger.info(f"Registered MCP '{mcp_id}' in Redis")
+    except Exception as e:
+        logger.warning(f"Failed to register MCP in Redis: {e}")
+
+
+def toggle_mcp_enabled(mcp_id, enabled):
+    """Toggle MCP enabled status (only if not always_enabled)"""
+    if not redis_client:
+        return {'success': False, 'error': 'Redis not available'}
+
+    try:
+        mcp_key = f'mcp:{mcp_id}'
+        if not redis_client.exists(mcp_key):
+            return {'success': False, 'error': 'MCP not found'}
+
+        mcp_data = redis_client.hgetall(mcp_key)
+        if mcp_data.get('always_enabled') == 'true':
+            return {'success': False, 'error': 'This MCP is always enabled and cannot be disabled'}
+
+        redis_client.hset(mcp_key, 'enabled', 'true' if enabled else 'false')
+        return {'success': True}
+    except Exception as e:
+        logger.warning(f"Failed to toggle MCP: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+# Initialize Mirror+Vanisher MCP in Redis
+# This MCP is always enabled in coding mode
+if redis_client:
+    is_coding_mode = get_coding_mode_status()
+    register_mcp_in_redis(
+        mcp_id='mirror-vanisher-dev',
+        name='Mirror+Vanisher Development MCP',
+        description='LLM-driven development operations on mirrored directories loaded into context',
+        tools_count=18,  # Based on our test results
+        resources_count=0,
+        always_enabled=is_coding_mode  # Always enabled in coding mode
+    )
+
+
+# MCP API Routes
+@app.route('/mcps', methods=['GET'])
+def mcps_web_interface():
+    """Web interface for MCP management"""
+    return render_template('mcps.html')
+
+
+@app.route('/mcps/<mcp_id>', methods=['GET'])
+def mcp_details_page(mcp_id):
+    """Web interface for MCP details"""
+    return render_template('mcp_details.html', mcp_id=mcp_id)
+
+
+@app.route('/api/mcps', methods=['GET'])
+def api_list_mcps():
+    """List all registered MCPs"""
+    try:
+        mcps = get_all_mcps_from_redis()
+        is_coding_mode = get_coding_mode_status()
+
+        # Format MCPs for response
+        formatted_mcps = []
+        for mcp in mcps:
+            formatted_mcp = {
+                'id': mcp.get('id'),
+                'name': mcp.get('name'),
+                'description': mcp.get('description'),
+                'tools_count': int(mcp.get('tools_count', 0)),
+                'resources_count': int(mcp.get('resources_count', 0)),
+                'enabled': mcp.get('enabled') == 'true',
+                'always_enabled': mcp.get('always_enabled') == 'true',
+                'can_toggle': mcp.get('always_enabled') != 'true',
+                'registered_at': mcp.get('registered_at')
+            }
+            formatted_mcps.append(formatted_mcp)
+
+        return jsonify({
+            'success': True,
+            'mcps': formatted_mcps,
+            'coding_mode': is_coding_mode,
+            'count': len(formatted_mcps)
+        })
+    except Exception as e:
+        error_handler.handle_exception(e, context={'operation': 'api_list_mcps'})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mcps/<mcp_id>/toggle', methods=['POST'])
+def api_toggle_mcp(mcp_id):
+    """Toggle MCP enabled/disabled status"""
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+
+        result = toggle_mcp_enabled(mcp_id, enabled)
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={'operation': 'api_toggle_mcp', 'mcp_id': mcp_id})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mcps/<mcp_id>', methods=['GET'])
+def api_get_mcp_details(mcp_id):
+    """Get detailed information about an MCP including tools and resources"""
+    try:
+        if not redis_client:
+            return jsonify({'success': False, 'error': 'Redis not available'}), 500
+
+        mcp_key = f'mcp:{mcp_id}'
+        if not redis_client.exists(mcp_key):
+            return jsonify({'success': False, 'error': 'MCP not found'}), 404
+
+        mcp_data = redis_client.hgetall(mcp_key)
+
+        # For mirror-vanisher-dev, provide actual tool list
+        tools = []
+        resources = []
+
+        if mcp_id == 'mirror-vanisher-dev':
+            tools = [
+                {'name': 'list_mirror_vanishers', 'description': 'List all mirror+vanisher directories'},
+                {'name': 'verify_mirror_vanisher', 'description': 'Verify a path is a valid mirror+vanisher'},
+                {'name': 'explore_structure', 'description': 'Generate directory tree'},
+                {'name': 'detect_tech_stack', 'description': 'Identify languages and frameworks'},
+                {'name': 'find_entrypoints', 'description': 'Locate main executable files'},
+                {'name': 'full_exploration', 'description': 'Combined exploration tool'},
+                {'name': 'analyze_architecture', 'description': 'Identify architectural patterns'},
+                {'name': 'map_dependencies', 'description': 'Map imports and dependencies'},
+                {'name': 'identify_patterns', 'description': 'Find design patterns'},
+                {'name': 'chunk_file', 'description': 'Break a file into chunks'},
+                {'name': 'chunk_directory', 'description': 'Create chunking strategy for directory'},
+                {'name': 'create_plan', 'description': 'Generate implementation plan'},
+                {'name': 'run_tests', 'description': 'Execute tests'},
+                {'name': 'full_quality_check', 'description': 'Run linter, formatter, and type checker'},
+                {'name': 'scan_secrets', 'description': 'Find hardcoded secrets'},
+                {'name': 'security_audit', 'description': 'Complete security audit'},
+                {'name': 'complete_feature_workflow', 'description': 'End-to-end feature implementation'},
+                {'name': 'bugfix_workflow', 'description': 'Systematic bug fixing'}
+            ]
+
+        return jsonify({
+            'success': True,
+            'mcp': {
+                'id': mcp_data.get('id'),
+                'name': mcp_data.get('name'),
+                'description': mcp_data.get('description'),
+                'tools_count': int(mcp_data.get('tools_count', 0)),
+                'resources_count': int(mcp_data.get('resources_count', 0)),
+                'enabled': mcp_data.get('enabled') == 'true',
+                'always_enabled': mcp_data.get('always_enabled') == 'true',
+                'registered_at': mcp_data.get('registered_at'),
+                'tools': tools,
+                'resources': resources
+            }
+        })
+    except Exception as e:
+        error_handler.handle_exception(e, context={'operation': 'api_get_mcp_details', 'mcp_id': mcp_id})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Start background sync monitor thread
 if redis_client:
     sync_monitor_thread = Thread(target=mirror_sync_monitor, daemon=True)

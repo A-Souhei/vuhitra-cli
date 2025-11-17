@@ -1889,10 +1889,10 @@ def interactive_mode(model, verbose=False, coding=False):
                 # Inject reasoning prompt for auto-iteration retries (the cherry on top!)
                 # When iteration_number > 0, it means we got rating=0 and are retrying
                 # SKIP if we have user_feedback - we want LLM to follow the correction, not overthink it
-                user_feedback_value = (
-                    heuristic_data.get('matched_heuristic', {}).get('user_feedback', '')
-                    if heuristic_data else ''
-                )
+                if heuristic_data and heuristic_data.get('matched_heuristic'):
+                    user_feedback_value = heuristic_data.get('matched_heuristic', {}).get('user_feedback', '')
+                else:
+                    user_feedback_value = ''
                 has_user_feedback = bool(user_feedback_value and user_feedback_value.strip())
 
                 if iteration_number > 0 and not has_user_feedback:

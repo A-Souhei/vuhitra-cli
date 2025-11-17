@@ -2,14 +2,20 @@
 
 import pytest
 import sys
+import importlib.util
 from pathlib import Path
 
-# Add MCP server to path
+# Add MCP server to path - use unique module loading to avoid conflicts
 mcp_path = Path(__file__).parent.parent / 'mcps' / 'mirror_vanisher_dev'
 sys.path.insert(0, str(mcp_path))
 sys.path.insert(0, str(mcp_path / 'src'))
 
-from server import MCPServer
+# Import with explicit path to avoid conflicts with executor MCP
+spec = importlib.util.spec_from_file_location("mirror_vanisher_server", mcp_path / "server.py")
+mirror_vanisher_server = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mirror_vanisher_server)
+MCPServer = mirror_vanisher_server.MCPServer
+
 from mirror_vanisher import MirrorVanisherManager
 from exploration import ExplorationTools
 from architecture import ArchitectureTools

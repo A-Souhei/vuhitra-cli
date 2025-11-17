@@ -7,6 +7,7 @@ import re
 import time
 import requests
 from typing import Dict, List, Optional, Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 from src.errors_handler import handle_exception
@@ -66,11 +67,15 @@ class MCPToolCompleter(Completer):
 
             all_tools = []
 
-            # For each MCP, fetch its tools
-            for mcp in mcps_data.get('mcps', []):
-                if not mcp.get('enabled'):
-                    continue
+            # Get list of enabled MCPs
+            enabled_mcps = [
+                mcp for mcp in mcps_data.get('mcps', [])
+                if mcp.get('enabled')
+            ]
 
+            # Fetch MCP details concurrently for better performance
+            def fetch_mcp_details(mcp):
+                """Fetch details for a single MCP."""
                 mcp_id = mcp.get('id')
                 try:
                     details_response = requests.get(
@@ -86,13 +91,16 @@ class MCPToolCompleter(Completer):
                         mcp_name = mcp_info.get('name', mcp_id)
 
                         # Add MCP name context to each tool
-                        for tool in tools:
-                            all_tools.append({
+                        return [
+                            {
                                 'name': tool.get('name', ''),
                                 'description': tool.get('description', ''),
                                 'mcp_id': mcp_id,
                                 'mcp_name': mcp_name
-                            })
+                            }
+                            for tool in tools
+                        ]
+                    return []
 
                 except Exception as e:
                     # Log but don't fail - just skip this MCP
@@ -101,7 +109,29 @@ class MCPToolCompleter(Completer):
                         'operation': 'fetching MCP details',
                         'mcp_id': mcp_id
                     })
-                    continue
+                    return []
+
+            # Use ThreadPoolExecutor for concurrent requests
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # Submit all fetch tasks
+                future_to_mcp = {
+                    executor.submit(fetch_mcp_details, mcp): mcp
+                    for mcp in enabled_mcps
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_mcp):
+                    try:
+                        tools = future.result()
+                        all_tools.extend(tools)
+                    except Exception as e:
+                        mcp = future_to_mcp[future]
+                        handle_exception(e, context={
+                            'function': 'MCPToolCompleter._fetch_mcp_tools',
+                            'operation': 'processing MCP future',
+                            'mcp_id': mcp.get('id')
+                        })
+                        continue
 
             self.tools = all_tools
             self.cache_timestamp = time.time()

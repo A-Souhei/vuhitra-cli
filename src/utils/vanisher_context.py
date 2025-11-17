@@ -227,7 +227,13 @@ class VanisherContextManager(EmbeddingCacheMixin):
 
             # Generate mirror name from parent directory (not the file itself)
             # Vanishers work with mirrored directories, so check if parent dir is mirrored
-            mirror_name = path.parent.name
+            # Use full parent path to avoid naming conflicts between different directories
+            # that happen to have the same parent directory name
+            import hashlib
+            parent_path_str = str(path.parent.resolve())
+            # Create a unique mirror name using parent dir name + hash of full path
+            path_hash = hashlib.md5(parent_path_str.encode()).hexdigest()[:8]
+            mirror_name = f"{path.parent.name}_{path_hash}"
 
             # Check if parent directory is mirrored
             is_mirrored, mirror_info = self._check_mirror_exists(mirror_name)

@@ -846,24 +846,25 @@ def interactive_mode(model, verbose=False, coding=False):
             if not success:
                 return CommandResult(success=False, message=error)
 
-            # Vanishers only support directories (mirrored directories)
+            # Vanishers load individual files from mirrored directories
+            # The directory itself must be mirrored first, then we load each file separately
             if not path_resolver.is_directory(file_path):
                 return CommandResult(
                     success=False,
-                    message=f"Vanishers only accept directories. '{file_path}' is not a directory.\n"
+                    message=f"Vanishers load files from mirrored directories. '{file_path}' is not a directory.\n"
                             "Use '/mirror do @directory/' to mirror a directory first."
                 )
 
-            # Load all files in directory (must be mirrored first)
+            # Get all files in the mirrored directory
             success, files, error = path_resolver.get_directory_files(file_path)
             if not success:
                 return CommandResult(success=False, message=error)
 
-            # Load each file with spinner
+            # Load each file individually with spinner
             loaded = []
             failed = []
 
-            with spinner(f"📦 Loading vanishers from {file_path}..."):
+            with spinner(f"📦 Loading files from mirrored directory {file_path}..."):
                 for file in files:
                     # Generate unique labels for each file in directory
                     # Use provided label as prefix, or filename if no label

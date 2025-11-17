@@ -300,7 +300,4 @@ def spinner(message: str = "Loading...", spinner_type: str = "dots"):
     """
     spinner_obj = Spinner(spinner_type, text=message, style="cyan")
     with Live(spinner_obj, console=console, refresh_per_second=10):
-        try:
-            yield
-        finally:
-            pass
+        yield

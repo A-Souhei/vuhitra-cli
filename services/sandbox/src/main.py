@@ -1475,8 +1475,15 @@ def api_get_eternals():
 
 @app.route('/api/contexts/pillars', methods=['GET'])
 def api_get_pillars():
-    """API endpoint to get pillar contexts"""
+    """API endpoint to get pillar contexts
+    
+    Query parameters:
+        include_full_paths (bool): If true, include full file paths. Default: false
+    """
     try:
+        # Check if full paths should be included (default: false for security)
+        include_full_paths = request.args.get('include_full_paths', 'false').lower() == 'true'
+        
         # Get pillar contexts directory from environment or use default
         pillar_dir = Path(os.getenv('PILLAR_CONTEXTS_DIR', '.vuhitra/pillar_contexts'))
 
@@ -1502,10 +1509,32 @@ def api_get_pillars():
                 with open(json_file, 'r', encoding='utf-8') as f:
                     context_data = json.load(f)
 
+                    # Sanitize file path - only show relative path from base directory
+                    full_path = context_data.get('file_path', '')
+                    if full_path and not include_full_paths:
+                        # Convert to relative path from a known base (e.g., /app or workspace root)
+                        try:
+                            path_obj = Path(full_path)
+                            # Try to make it relative to common base paths
+                            for base in [Path('/app'), Path('/app/WORKSPACE'), pillar_dir.parent.parent]:
+                                try:
+                                    relative_path = path_obj.relative_to(base)
+                                    file_path = str(relative_path)
+                                    break
+                                except ValueError:
+                                    continue
+                            else:
+                                # If can't make relative, just use filename
+                                file_path = path_obj.name
+                        except Exception:
+                            file_path = Path(full_path).name
+                    else:
+                        file_path = full_path
+
                     # Create summary without full content and embedding
                     summary = {
                         'label': context_data.get('label', ''),
-                        'file_path': context_data.get('file_path', ''),
+                        'file_path': file_path,
                         'timestamp': context_data.get('timestamp', ''),
                         'description': context_data.get('description', ''),
                         'auto_loaded': context_data.get('auto_loaded', False),

@@ -29,6 +29,7 @@ from testing import TestingTools
 from quality_checks import QualityCheckTools
 from security import SecurityTools
 from mirror_vanisher import MirrorVanisherManager
+from llm_plan_generator import LLMPlanGenerator
 from errors_handler import handle_exception
 
 # Configure logging
@@ -56,6 +57,7 @@ class MCPServer:
         self.testing = TestingTools(self.manager)
         self.quality = QualityCheckTools(self.manager)
         self.security = SecurityTools(self.manager)
+        self.llm_planner = LLMPlanGenerator(self.manager)
 
         # Tool registry
         self.tools = self._register_tools()
@@ -222,6 +224,18 @@ class MCPServer:
                     "required": ["plan"]
                 },
                 "handler": self.planning.validate_plan
+            },
+            "generate_llm_plan": {
+                "description": "Generate comprehensive, AI-powered implementation plans using LLM with context from loaded vanisher, pillars methodology, and MCP tool recommendations. Use this when you receive a [plan] prefix in user prompts, need intelligent plan generation based on codebase analysis, want automatic tool recommendations for each step, require context-aware planning with embeddings, need plans that follow the 8-pillar methodology, or want to leverage AI to create detailed implementation strategies. REQUIRES a vanisher of directory type to be loaded. Validates vanisher is loaded and is directory type, loads pillars documentation (especially Step 4: Planning), analyzes MCP tool descriptions and creates embeddings, reads vanisher context (file list and sample content), calls Anthropic Claude to generate comprehensive plan, enhances plan steps with relevant tool recommendations using semantic similarity, and provides detailed metadata about plan generation. Returns success status, generated plan with type/task/steps/files/testing/risks, tool recommendations per step based on embeddings, and metadata about context used. Plan includes: task type detection (bugfix/refactoring/feature/general), atomic file-specific steps with actions/details/verification, estimated files to modify, testing requirements, potential risks, and MCP tools suggested for each pillar step. This is the most advanced planning tool - use it when you want AI-assisted comprehensive planning.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "task": {"type": "string", "description": "Task description from user (after [plan] prefix)"},
+                        "path": {"type": "string", "description": "Path to the loaded vanisher directory"}
+                    },
+                    "required": ["task", "path"]
+                },
+                "handler": lambda task, path: self.llm_planner.generate_plan(task, path, self.tools)
             },
 
             # Step 5: Code Generation Tools

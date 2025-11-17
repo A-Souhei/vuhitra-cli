@@ -2,3 +2,6 @@ requests>=2.32.0
 pyyaml>=6.0
 pathlib>=1.0.1
 flask>=3.0.0
+anthropic>=0.39.0
+sentence-transformers>=2.2.0
+numpy>=1.24.0

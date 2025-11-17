@@ -142,7 +142,7 @@ class PromptInjectionCompleter(Completer):
 
     def get_completions(self, document: Document, complete_event):
         """
-        Generate completions for : prefix.
+        Generate completions for : or & prefix.
 
         Args:
             document: The current document
@@ -154,8 +154,8 @@ class PromptInjectionCompleter(Completer):
         try:
             text_before_cursor = document.text_before_cursor
 
-            # Match pattern :word (where word is partial or complete category name)
-            match = re.search(r':([^\s]*)$', text_before_cursor)
+            # Match pattern :word or &word (where word is partial or complete category name)
+            match = re.search(r'[:&]([^\s]*)$', text_before_cursor)
 
             if not match:
                 return
@@ -191,7 +191,7 @@ class PromptInjectionCompleter(Completer):
 
     def replace_category_with_phrase(self, text: str, cursor_position: int) -> tuple[str, int]:
         """
-        Replace :category with a random phrase from that category.
+        Replace :category or &category with a random phrase from that category.
 
         Args:
             text: The full text
@@ -201,8 +201,8 @@ class PromptInjectionCompleter(Completer):
             Tuple of (new_text, new_cursor_position)
         """
         try:
-            # Find all :category patterns
-            pattern = r':(\w+)'
+            # Find all :category or &category patterns
+            pattern = r'[:&](\w+)'
 
             def replace_with_phrase(match):
                 category = match.group(1)
@@ -216,7 +216,7 @@ class PromptInjectionCompleter(Completer):
                     # Keep original if category not found
                     return match.group(0)
 
-            # Replace all :category with phrases
+            # Replace all :category or &category with phrases
             new_text = re.sub(pattern, replace_with_phrase, text)
 
             # Adjust cursor position (simplified - keeps cursor at end)

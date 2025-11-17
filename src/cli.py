@@ -1571,19 +1571,19 @@ def interactive_mode(model, verbose=False, coding=False):
         return prompt_text, loaded_sparks, errors
 
     def process_prompt_injections(prompt_text: str) -> str:
-        """Process :category shortcuts and replace with random phrases.
+        """Process :category or &category shortcuts and replace with random phrases.
 
         Args:
             prompt_text: The user's prompt text
 
         Returns:
-            Modified prompt with :category replaced by random phrases with emojis
+            Modified prompt with :category or &category replaced by random phrases with emojis
         """
         import re
         from src.utils.prompt_injection_completer import PromptInjectionCompleter
 
-        # Check if there are any :category patterns
-        pattern = r':(\w+)'
+        # Check if there are any :category or &category patterns
+        pattern = r'[:&](\w+)'
         if not re.search(pattern, prompt_text):
             return prompt_text
 
@@ -1591,7 +1591,7 @@ def interactive_mode(model, verbose=False, coding=False):
         completer = PromptInjectionCompleter()
 
         def replace_with_phrase(match):
-            """Replace :category with random phrase from that category."""
+            """Replace :category or &category with random phrase from that category."""
             category = match.group(1)
             phrase = completer.get_random_phrase(category)
             emoji = completer.get_category_emoji(category)
@@ -1603,7 +1603,7 @@ def interactive_mode(model, verbose=False, coding=False):
                 # Keep original if category not found
                 return match.group(0)
 
-        # Replace all :category with phrases
+        # Replace all :category or &category with phrases
         modified_prompt = re.sub(pattern, replace_with_phrase, prompt_text)
 
         return modified_prompt

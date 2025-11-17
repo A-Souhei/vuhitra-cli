@@ -162,3 +162,19 @@ prompt_injections:
       - "Think carefully, organize clearly, and present concisely."
       - "Analyze thoroughly, consider alternatives, and recommend the best approach."
       - "Research the topic, verify facts, and present findings systematically."
+
+  # 📋 Planning and strategy
+  plan:
+    emoji: "📋"
+    description: "Generate comprehensive coding plans"
+    phrases:
+      - "[plan] Create a detailed, step-by-step implementation plan following the 8-pillar methodology."
+      - "[plan] Analyze the task and generate a comprehensive plan with file-specific steps."
+      - "[plan] Design a strategic approach with testing requirements and risk assessment."
+      - "[plan] Build an atomic, reversible plan with clear verification steps."
+      - "[plan] Establish a detailed plan of action based on codebase architecture."
+      - "[plan] Generate a stepwise plan with behavior-focused outcomes."
+      - "[plan] Create a file-specific plan with test-aware implementation steps."
+      - "[plan] Develop a risk-conscious plan with rollback strategies."
+      - "[plan] Outline a comprehensive plan following best practices and pillars."
+      - "[plan] Formulate a detailed implementation strategy with validation commands."

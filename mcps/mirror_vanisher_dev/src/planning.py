@@ -5,6 +5,7 @@ Tools for creating atomic, file-specific implementation plans.
 """
 
 import logging
+import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -19,6 +20,8 @@ class PlanningTools:
     def __init__(self, manager):
         """Initialize planning tools."""
         self.manager = manager
+        # In-memory storage for TODO_list
+        self._todo_list_storage: List[Dict[str, Any]] = []
 
     def create_plan(self, path: str, task: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create atomic, file-specific implementation plan.
@@ -100,14 +103,122 @@ class PlanningTools:
             if context.get('architecture'):
                 plan['architecture_pattern'] = context['architecture'].get('structure_type', 'Unknown')
 
+            # Generate TODO_list from plan steps
+            todo_list = []
+            for step in plan['steps']:
+                todo_item = {
+                    'step_number': step['step'],
+                    'action': step['action'],
+                    'details': step['details'],
+                    'status': 'pending'
+                }
+                todo_list.append(todo_item)
+
+            # Store TODO_list in memory (overwrite previous)
+            self._todo_list_storage = todo_list
+
+            # Create beautiful formatted plan output
+            formatted_plan = self._format_plan_beautifully(plan, todo_list)
+
+            # Log the beautiful plan
+            logger.info(f"\n{formatted_plan}")
+
             return {
                 'success': True,
                 'plan': plan,
+                'TODO_list': todo_list,
+                'formatted_plan': formatted_plan,
                 'message': f'Created {plan["type"]} plan with {len(plan["steps"])} steps'
             }
 
         except Exception as e:
             handle_exception(e, context={'function': 'create_plan', 'path': path, 'task': task})
+            return {'success': False, 'error': str(e)}
+
+    def _format_plan_beautifully(self, plan: Dict[str, Any], todo_list: List[Dict[str, Any]]) -> str:
+        """Format plan in a beautiful, readable way.
+
+        Args:
+            plan: The plan dictionary
+            todo_list: The TODO list items
+
+        Returns:
+            Beautifully formatted plan string
+        """
+        lines = []
+        lines.append("=" * 80)
+        lines.append("📋 IMPLEMENTATION PLAN")
+        lines.append("=" * 80)
+        lines.append("")
+
+        # Task information
+        lines.append(f"📌 Task: {plan['task']}")
+        lines.append(f"📂 Path: {plan['path']}")
+        lines.append(f"🏷️  Type: {plan['type'].upper().replace('_', ' ')}")
+        lines.append("")
+
+        # Tech stack if available
+        if 'detected_tech_stack' in plan:
+            lines.append(f"💻 Tech Stack: {plan['detected_tech_stack']}")
+
+        # Architecture pattern if available
+        if 'architecture_pattern' in plan:
+            lines.append(f"🏗️  Architecture: {plan['architecture_pattern']}")
+
+        if 'detected_tech_stack' in plan or 'architecture_pattern' in plan:
+            lines.append("")
+
+        # Steps
+        lines.append("📝 STEPS:")
+        lines.append("-" * 80)
+        for item in todo_list:
+            lines.append(f"  {item['step_number']}. {item['action']}")
+            lines.append(f"     ➤ {item['details']}")
+            lines.append(f"     Status: [{item['status'].upper()}]")
+            lines.append("")
+
+        # Testing requirements
+        if plan.get('testing_requirements'):
+            lines.append("🧪 TESTING REQUIREMENTS:")
+            lines.append("-" * 80)
+            for req in plan['testing_requirements']:
+                lines.append(f"  • {req}")
+            lines.append("")
+
+        # Potential risks
+        if plan.get('potential_risks'):
+            lines.append("⚠️  POTENTIAL RISKS:")
+            lines.append("-" * 80)
+            for risk in plan['potential_risks']:
+                lines.append(f"  • {risk}")
+            lines.append("")
+
+        # Files to modify
+        if plan.get('estimated_files_to_modify'):
+            lines.append("📄 ESTIMATED FILES TO MODIFY:")
+            lines.append("-" * 80)
+            for file_path in plan['estimated_files_to_modify']:
+                lines.append(f"  • {file_path}")
+            lines.append("")
+
+        lines.append("=" * 80)
+
+        return "\n".join(lines)
+
+    def get_todo_list(self) -> Dict[str, Any]:
+        """Get the current TODO_list from memory.
+
+        Returns:
+            Dictionary containing the TODO_list
+        """
+        try:
+            return {
+                'success': True,
+                'TODO_list': self._todo_list_storage,
+                'count': len(self._todo_list_storage)
+            }
+        except Exception as e:
+            handle_exception(e, context={'function': 'get_todo_list'})
             return {'success': False, 'error': str(e)}
 
     def validate_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:

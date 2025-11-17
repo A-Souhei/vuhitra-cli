@@ -12,6 +12,80 @@
             background: #f8f9fb;
         }
 
+        .help-container {
+            display: flex;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .help-sidebar {
+            position: sticky;
+            top: 2rem;
+            width: 280px;
+            height: fit-content;
+            flex-shrink: 0;
+        }
+
+        .sidebar-nav {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        .sidebar-nav h3 {
+            color: #2d3748;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-nav li {
+            margin-bottom: 0.25rem;
+        }
+
+        .sidebar-nav a {
+            display: block;
+            padding: 0.625rem 0.875rem;
+            color: #4a5568;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-nav a:hover {
+            background: #f7fafc;
+            color: #667eea;
+            border-left-color: #667eea;
+            padding-left: 1rem;
+        }
+
+        .sidebar-nav a.active {
+            background: #eef2ff;
+            color: #667eea;
+            border-left-color: #667eea;
+            font-weight: 600;
+        }
+
+        .help-main {
+            flex: 1;
+            min-width: 0;
+        }
+
         .help-header {
             background: white;
             border-left: 4px solid #667eea;
@@ -28,6 +102,7 @@
             margin-bottom: 1.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             border: 1px solid #e2e8f0;
+            scroll-margin-top: 2rem;
         }
 
         .help-section h2 {
@@ -97,6 +172,17 @@
             color: #4a5568;
             margin: 0;
             font-size: 0.95rem;
+        }
+
+        @media (max-width: 992px) {
+            .help-container {
+                flex-direction: column;
+            }
+
+            .help-sidebar {
+                position: static;
+                width: 100%;
+            }
         }
 
         .code-block {
@@ -257,31 +343,33 @@
         </div>
     </nav>
 
-    <div class="main-content">
-        <div class="container">
-            <div class="container-custom">
-                <!-- Header -->
-                <div class="help-header">
-                    <h1 class="mb-3">
-                        <i class="bi bi-book"></i> Help & Documentation
-                    </h1>
-                    <p class="mb-0 text-muted">
-                        Comprehensive guide to Vuhitra CLI features and context management system
-                    </p>
-                </div>
+    <div class="help-container">
+        <!-- Left Sidebar Navigation -->
+        <aside class="help-sidebar">
+            <nav class="sidebar-nav">
+                <h3>Contents</h3>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#context-types">Context Types</a></li>
+                    <li><a href="#mirrors">Mirrors & Vanishers</a></li>
+                    <li><a href="#mcps">Model Context Protocol</a></li>
+                    <li><a href="#coding-mode">Coding Mode</a></li>
+                    <li><a href="#quick-start">Quick Start Guide</a></li>
+                </ul>
+            </nav>
+        </aside>
 
-                <!-- Table of Contents -->
-                <div class="table-of-contents">
-                    <h3><i class="bi bi-list-ul"></i> Table of Contents</h3>
-                    <ul>
-                        <li><a href="#overview">Overview</a></li>
-                        <li><a href="#context-types">Context Types</a></li>
-                        <li><a href="#mirrors">Mirrors & Vanishers</a></li>
-                        <li><a href="#mcps">Model Context Protocol (MCP)</a></li>
-                        <li><a href="#coding-mode">Coding Mode</a></li>
-                        <li><a href="#quick-start">Quick Start Guide</a></li>
-                    </ul>
-                </div>
+        <!-- Main Content -->
+        <div class="help-main">
+            <!-- Header -->
+            <div class="help-header">
+                <h1 class="mb-3">
+                    <i class="bi bi-book"></i> Help & Documentation
+                </h1>
+                <p class="mb-0 text-muted">
+                    Comprehensive guide to Vuhitra CLI features and context management system
+                </p>
+            </div>
 
                 <!-- Overview Section -->
                 <div class="help-section" id="overview">
@@ -657,8 +745,6 @@
                         <li>Explore the <code>pillars/</code> guides for detailed information</li>
                     </ul>
                 </div>
-
-            </div>
         </div>
     </div>
 
@@ -676,5 +762,67 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Smooth scroll for sidebar links
+        document.querySelectorAll('.sidebar-nav a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                    
+                    // Update URL without scrolling
+                    history.pushState(null, null, targetId);
+                    
+                    // Update active state
+                    updateActiveLink(targetId);
+                }
+            });
+        });
+
+        // Update active link based on scroll position
+        function updateActiveLink(targetId) {
+            document.querySelectorAll('.sidebar-nav a').forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === targetId) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        // Intersection Observer to update active link on scroll
+        const sections = document.querySelectorAll('.help-section');
+        const observerOptions = {
+            root: null,
+            rootMargin: '-20% 0px -70% 0px',
+            threshold: 0
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = '#' + entry.target.id;
+                    updateActiveLink(id);
+                }
+            });
+        }, observerOptions);
+
+        sections.forEach(section => {
+            observer.observe(section);
+        });
+
+        // Set initial active state based on URL hash
+        if (window.location.hash) {
+            updateActiveLink(window.location.hash);
+        } else {
+            document.querySelector('.sidebar-nav a')?.classList.add('active');
+        }
+    </script>
 </body>
 </html>
+

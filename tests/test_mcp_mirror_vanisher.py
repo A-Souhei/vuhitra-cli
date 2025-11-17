@@ -1,9 +1,7 @@
 """Tests for the Mirror+Vanisher Development MCP Server."""
 
 import pytest
-import json
 import sys
-import os
 from pathlib import Path
 
 # Add MCP server to path
@@ -12,10 +10,10 @@ sys.path.insert(0, str(mcp_path))
 sys.path.insert(0, str(mcp_path / 'src'))
 
 from server import MCPServer
-from src.mirror_vanisher import MirrorVanisherManager
-from src.exploration import ExplorationTools
-from src.architecture import ArchitectureTools
-from src.planning import PlanningTools
+from mirror_vanisher import MirrorVanisherManager
+from exploration import ExplorationTools
+from architecture import ArchitectureTools
+from planning import PlanningTools
 
 
 class TestMCPServer:

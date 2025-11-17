@@ -9,22 +9,21 @@ import os
 import sys
 import json
 import logging
-from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.exploration import ExplorationTools
-from src.architecture import ArchitectureTools
-from src.chunking import ChunkingTools
-from src.planning import PlanningTools
-from src.code_generation import CodeGenerationTools
-from src.testing import TestingTools
-from src.quality_checks import QualityCheckTools
-from src.security import SecurityTools
-from src.mirror_vanisher import MirrorVanisherManager
-from src.errors_handler import handle_exception
+from exploration import ExplorationTools
+from architecture import ArchitectureTools
+from chunking import ChunkingTools
+from planning import PlanningTools
+from code_generation import CodeGenerationTools
+from testing import TestingTools
+from quality_checks import QualityCheckTools
+from security import SecurityTools
+from mirror_vanisher import MirrorVanisherManager
+from errors_handler import handle_exception
 
 # Configure logging
 logging.basicConfig(

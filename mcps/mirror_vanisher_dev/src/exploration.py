@@ -321,8 +321,9 @@ class ExplorationTools:
                                     'type': 'python_main_block',
                                     'name': file
                                 })
-                        except:
-                            pass
+                        except Exception as e:
+                            # Skip files that can't be read (binary files, permission issues, etc.)
+                            logger.debug(f"Could not read file {file_path}: {e}")
 
             return {
                 'success': True,

@@ -22,7 +22,7 @@ async function loadMirrorVanishers() {
             let html = '';
             data.mirror_vanishers.forEach(mv => {
                 html += `
-                    <div class="mirror-item" onclick="selectMirrorVanisher('${mv.name}', '${mv.path}')">
+                    <div class="mirror-item" onclick="selectMirrorVanisher('${mv.name}', '${mv.path}', event)">
                         <h4>📁 ${mv.name}</h4>
                         <p><strong>Path:</strong> ${mv.path}</p>
                         <p><strong>Files:</strong> ${mv.file_count} | <strong>Status:</strong> ${mv.sync_status}</p>
@@ -39,14 +39,16 @@ async function loadMirrorVanishers() {
 }
 
 // Select mirror+vanisher
-function selectMirrorVanisher(name, path) {
+function selectMirrorVanisher(name, path, event) {
     selectedPath = path;
 
     // Update UI
     document.querySelectorAll('.mirror-item').forEach(item => {
         item.classList.remove('selected');
     });
-    event.currentTarget.classList.add('selected');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('selected');
+    }
 }
 
 // Setup tabs

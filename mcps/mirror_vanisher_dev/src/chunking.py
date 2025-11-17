@@ -90,9 +90,8 @@ class ChunkingTools:
             files_to_chunk = []
             small_files = []
 
-            for root, dirs, files in Path(resolved_path).rglob('*'):
-                if root.is_file():
-                    file_path = root
+            for file_path in Path(resolved_path).rglob('*'):
+                if file_path.is_file():
                     try:
                         lines = len(file_path.read_text().splitlines())
 
@@ -107,8 +106,9 @@ class ChunkingTools:
                                 'file': str(file_path.relative_to(resolved_path)),
                                 'lines': lines
                             })
-                    except:
-                        pass
+                    except Exception as e:
+                        # Skip files that can't be read (binary files, permission issues, etc.)
+                        logger.debug(f"Could not read file {file_path}: {e}")
 
             return {
                 'success': True,

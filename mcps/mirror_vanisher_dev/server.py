@@ -29,6 +29,7 @@ from testing import TestingTools
 from quality_checks import QualityCheckTools
 from security import SecurityTools
 from mirror_vanisher import MirrorVanisherManager
+from execute_plan import ExecutePlan
 from errors_handler import handle_exception
 
 # Configure logging
@@ -56,6 +57,7 @@ class MCPServer:
         self.testing = TestingTools(self.manager)
         self.quality = QualityCheckTools(self.manager)
         self.security = SecurityTools(self.manager)
+        self.execute_plan = ExecutePlan(self.manager, server_instance=self)
 
         # Tool registry
         self.tools = self._register_tools()
@@ -220,6 +222,21 @@ class MCPServer:
                     "required": []
                 },
                 "handler": self.planning.get_todo_list
+            },
+            "execute_plan": {
+                "description": "Execute the plan by automatically matching TODO_list steps with available tools using semantic similarity, building a DETAILED_TODO_list with tool mappings and parameters, and optionally auto-executing all matched tools without ratings or heuristics. Use this when you need to automatically execute a previously created plan, convert high-level TODO steps into concrete tool invocations, match plan steps with appropriate development and execution tools, build a detailed execution plan with tool names and parameters, or automatically run all steps in sequence without manual intervention. This tool uses embeddings and semantic similarity to find the best matching tools from both Mirror+Vanisher Development MCP (for exploration, architecture, code generation, testing, quality, security) and Executor MCP (for code execution, file operations, build operations, directory operations). The DETAILED_TODO_list is stored in Redis/memory for inspection and includes tool names, parameters, similarity scores, and execution status. When auto_execute is True (default), it will automatically run all matched tools in sequence with ratings and heuristics disabled for uninterrupted execution. Returns detailed execution results including the DETAILED_TODO_list with all tool mappings, similarity scores, extracted parameters, execution results for each item, and overall execution status.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "auto_execute": {
+                            "type": "boolean",
+                            "description": "If true, automatically execute all matched tools. If false, only build DETAILED_TODO_list without execution.",
+                            "default": True
+                        }
+                    },
+                    "required": []
+                },
+                "handler": self.execute_plan.execute_plan
             },
             "validate_plan": {
                 "description": "Validate and verify that an implementation plan is complete, feasible, and well-structured before execution. Use this when you need to check if a plan has all necessary steps, verify plan completeness before starting work, identify missing elements in implementation plans, ensure plans have proper structure, validate testing requirements are defined, or catch planning issues early. Checks for required plan fields (task, steps, testing_requirements), validates step structure (action, details, proper numbering), identifies missing information, flags warnings about incomplete sections, and provides detailed validation results. Returns validation status (valid/invalid), list of critical issues that must be fixed, list of warnings for improvements, and clear validation message. Ensures plans are thorough before development begins, preventing incomplete or poorly thought-out implementations.",

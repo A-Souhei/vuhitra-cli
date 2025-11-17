@@ -161,6 +161,17 @@ def handle_unexpected_exception(e):
     return jsonify({"error": "Internal server error"}), 500
 
 
+@app.errorhandler(404)
+def handle_not_found(e):
+    """Handle 404 Not Found errors with beautiful error page"""
+    # Check if request wants JSON (API endpoints)
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Endpoint not found", "path": request.path}), 404
+
+    # Otherwise return HTML 404 page
+    return render_template('404.html'), 404
+
+
 # Redis mirror tracking helper functions
 def add_mirror_to_redis(target_name, is_file, file_count):
     """Register a mirror in Redis with metadata"""

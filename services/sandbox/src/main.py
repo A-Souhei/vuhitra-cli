@@ -64,9 +64,15 @@ def sanitize_path(path_str):
     return '/'.join(parts) if parts else ''
 
 # Configure Flask app with template and static folders
-app = Flask(__name__, 
-            template_folder='/app/templates',
-            static_folder='/app/static')
+# Get the base directory - in container, main.py is at /app/main.py
+# so templates and static are also in /app
+base_dir = os.path.dirname(os.path.abspath(__file__))
+template_folder = os.path.join(base_dir, 'templates')
+static_folder = os.path.join(base_dir, 'static')
+
+app = Flask(__name__,
+            template_folder=template_folder,
+            static_folder=static_folder)
 
 # Initialize error handler
 error_handler = get_error_handler()
@@ -159,6 +165,17 @@ def handle_unexpected_exception(e):
     """Handle any unexpected exceptions"""
     error_handler.handle_exception(e, context={"operation": "unexpected_error"})
     return jsonify({"error": "Internal server error"}), 500
+
+
+@app.errorhandler(404)
+def handle_not_found(e):
+    """Handle 404 Not Found errors with beautiful error page"""
+    # Check if request wants JSON (API endpoints)
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Endpoint not found", "path": request.path}), 404
+
+    # Otherwise return HTML 404 page
+    return render_template('404.html'), 404
 
 
 # Redis mirror tracking helper functions
@@ -275,6 +292,12 @@ def health_check():
         "heuristics": health_status,
         "retriever": retriever_health
     }), 200
+
+
+@app.route('/favicon.ico', methods=['GET'])
+def favicon():
+    """Serve favicon"""
+    return send_file(os.path.join(static_folder, 'favicon.svg'), mimetype='image/svg+xml')
 
 
 @app.route('/upload', methods=['POST'])
@@ -1434,6 +1457,12 @@ def vanishers_interface():
     return render_template('vanishers.html')
 
 
+@app.route('/help', methods=['GET'])
+def help_page():
+    """Help and documentation page"""
+    return render_template('help.html')
+
+
 # API endpoints for context management (placeholders for future implementation)
 @app.route('/api/contexts/eternals', methods=['GET'])
 def api_get_eternals():
@@ -1469,6 +1498,277 @@ def api_get_vanishers():
         'contexts': [],
         'message': 'This endpoint requires the CLI to be running in coding mode (--coding flag)'
     })
+
+
+# MCP Management Functions
+def get_coding_mode_status():
+    """Check if CLI is in coding mode"""
+    # Check environment variable or Redis flag
+    return os.getenv('VUHITRA_CODING_MODE', 'false').lower() == 'true'
+
+
+def get_all_mcps_from_redis():
+    """Get all registered MCPs from Redis"""
+    if not redis_client:
+        return []
+
+    try:
+        mcps = []
+        # Get all keys matching mcp:*
+        for key in redis_client.scan_iter(match='mcp:*'):
+            mcp_data = redis_client.hgetall(key)
+            if mcp_data:
+                mcps.append(mcp_data)
+        return mcps
+    except Exception as e:
+        logger.warning(f"Failed to get MCPs from Redis: {e}")
+        return []
+
+
+def register_mcp_in_redis(mcp_id, name, description, tools_count=0, resources_count=0, always_enabled=False):
+    """Register an MCP in Redis"""
+    if not redis_client:
+        logger.debug("Redis not available, skipping MCP registration")
+        return
+
+    try:
+        mcp_data = {
+            'id': mcp_id,
+            'name': name,
+            'description': description,
+            'tools_count': tools_count,
+            'resources_count': resources_count,
+            'enabled': 'true' if always_enabled else 'false',
+            'always_enabled': 'true' if always_enabled else 'false',
+            'registered_at': datetime.now().isoformat()
+        }
+        redis_client.hset(f'mcp:{mcp_id}', mapping=mcp_data)
+        logger.info(f"Registered MCP '{mcp_id}' in Redis")
+    except Exception as e:
+        logger.warning(f"Failed to register MCP in Redis: {e}")
+
+
+def toggle_mcp_enabled(mcp_id, enabled):
+    """Toggle MCP enabled status (only if not always_enabled)"""
+    if not redis_client:
+        return {'success': False, 'error': 'Redis not available'}
+
+    try:
+        mcp_key = f'mcp:{mcp_id}'
+        if not redis_client.exists(mcp_key):
+            return {'success': False, 'error': 'MCP not found'}
+
+        mcp_data = redis_client.hgetall(mcp_key)
+        if mcp_data.get('always_enabled') == 'true':
+            return {'success': False, 'error': 'This MCP is always enabled and cannot be disabled'}
+
+        redis_client.hset(mcp_key, 'enabled', 'true' if enabled else 'false')
+        return {'success': True}
+    except Exception as e:
+        logger.warning(f"Failed to toggle MCP: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+# Initialize Mirror+Vanisher MCP in Redis
+# This MCP is always_enabled=True meaning it's managed by coding mode
+# The 'enabled' field will be set based on coding mode, but 'always_enabled'
+# stays True to prevent manual toggling
+if redis_client:
+    is_coding_mode = get_coding_mode_status()
+    register_mcp_in_redis(
+        mcp_id='mirror-vanisher-dev',
+        name='Mirror+Vanisher Development MCP',
+        description='LLM-driven development operations on mirrored directories loaded into context',
+        tools_count=18,  # Based on our test results
+        resources_count=0,
+        always_enabled=True  # Cannot be manually toggled - managed by coding mode
+    )
+    # Set enabled status based on current coding mode
+    toggle_mcp_enabled('mirror-vanisher-dev', is_coding_mode)
+
+
+# MCP API Routes
+@app.route('/mcps', methods=['GET'])
+def mcps_web_interface():
+    """Web interface for MCP management"""
+    return render_template('mcps.html')
+
+
+@app.route('/mcps/<mcp_id>', methods=['GET'])
+def mcp_details_page(mcp_id):
+    """Web interface for MCP details"""
+    return render_template('mcp_details.html', mcp_id=mcp_id)
+
+
+@app.route('/api/mcps', methods=['GET'])
+def api_list_mcps():
+    """List all registered MCPs"""
+    try:
+        mcps = get_all_mcps_from_redis()
+        is_coding_mode = get_coding_mode_status()
+
+        # Format MCPs for response
+        formatted_mcps = []
+        for mcp in mcps:
+            formatted_mcp = {
+                'id': mcp.get('id'),
+                'name': mcp.get('name'),
+                'description': mcp.get('description'),
+                'tools_count': int(mcp.get('tools_count', 0)),
+                'resources_count': int(mcp.get('resources_count', 0)),
+                'enabled': mcp.get('enabled') == 'true',
+                'always_enabled': mcp.get('always_enabled') == 'true',
+                'can_toggle': mcp.get('always_enabled') != 'true',
+                'registered_at': mcp.get('registered_at')
+            }
+            formatted_mcps.append(formatted_mcp)
+
+        return jsonify({
+            'success': True,
+            'mcps': formatted_mcps,
+            'coding_mode': is_coding_mode,
+            'count': len(formatted_mcps)
+        })
+    except Exception as e:
+        error_handler.handle_exception(e, context={'operation': 'api_list_mcps'})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mcps/<mcp_id>/toggle', methods=['POST'])
+def api_toggle_mcp(mcp_id):
+    """Toggle MCP enabled/disabled status"""
+    try:
+        # Prevent toggling mirror-vanisher-dev as it's managed by coding mode
+        if mcp_id == 'mirror-vanisher-dev':
+            return jsonify({
+                'success': False,
+                'error': 'This MCP is automatically managed by coding mode and cannot be manually toggled'
+            }), 403
+
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+
+        result = toggle_mcp_enabled(mcp_id, enabled)
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+    except Exception as e:
+        error_handler.handle_exception(e, context={'operation': 'api_toggle_mcp', 'mcp_id': mcp_id})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mcps/<mcp_id>', methods=['GET'])
+def api_get_mcp_details(mcp_id):
+    """Get detailed information about an MCP including tools and resources"""
+    try:
+        if not redis_client:
+            return jsonify({'success': False, 'error': 'Redis not available'}), 500
+
+        mcp_key = f'mcp:{mcp_id}'
+        if not redis_client.exists(mcp_key):
+            return jsonify({'success': False, 'error': 'MCP not found'}), 404
+
+        mcp_data = redis_client.hgetall(mcp_key)
+
+        # For mirror-vanisher-dev, provide actual tool list
+        tools = []
+        resources = []
+
+        if mcp_id == 'mirror-vanisher-dev':
+            tools = [
+                {
+                    'name': 'list_mirror_vanishers',
+                    'description': 'List all mirror+vanisher directories in the workspace. Returns comprehensive information about each mirror including path, creation date, and sync status. Useful for discovering available codebases to work with.'
+                },
+                {
+                    'name': 'verify_mirror_vanisher',
+                    'description': 'Verify that a given path is a valid mirror+vanisher directory structure. Checks for required directories (.mirror, .vanisher) and validates configuration files. Returns validation status and any issues found.'
+                },
+                {
+                    'name': 'explore_structure',
+                    'description': 'Generate a comprehensive directory tree visualization of the codebase. Shows file organization, sizes, and directory hierarchy. Helps understand project layout and locate specific files or components.'
+                },
+                {
+                    'name': 'detect_tech_stack',
+                    'description': 'Automatically identify programming languages, frameworks, and build tools used in the project. Analyzes package files (package.json, requirements.txt, etc.), configuration files, and code patterns to determine the technology stack.'
+                },
+                {
+                    'name': 'find_entrypoints',
+                    'description': 'Locate main executable files and application entry points in the codebase. Identifies files like main.py, index.js, app.py, and other common entry point patterns. Essential for understanding how to run and navigate the application.'
+                },
+                {
+                    'name': 'full_exploration',
+                    'description': 'Execute a comprehensive exploration combining structure analysis, tech stack detection, and entrypoint discovery in a single operation. Provides a complete overview of the codebase including architecture, technologies, and key files.'
+                },
+                {
+                    'name': 'analyze_architecture',
+                    'description': 'Identify and analyze architectural patterns in the codebase such as MVC, microservices, layered architecture, or component-based design. Examines code organization, module relationships, and structural patterns to understand system design.'
+                },
+                {
+                    'name': 'map_dependencies',
+                    'description': 'Map and analyze all imports and dependencies throughout the codebase. Creates a dependency graph showing how modules relate to each other, identifies circular dependencies, and highlights external package usage. Critical for understanding code coupling and modularity.'
+                },
+                {
+                    'name': 'identify_patterns',
+                    'description': 'Detect common design patterns used in the code such as Singleton, Factory, Observer, Strategy, and others. Analyzes code structure and class relationships to recognize pattern implementations and architectural best practices.'
+                },
+                {
+                    'name': 'chunk_file',
+                    'description': 'Break down a large file into logical, manageable chunks based on code structure (functions, classes, modules). Useful for processing large files in pieces while maintaining context boundaries. Returns chunks with metadata about relationships.'
+                },
+                {
+                    'name': 'chunk_directory',
+                    'description': 'Create an intelligent chunking strategy for an entire directory or module. Groups related files together and establishes a hierarchical chunking plan that respects architectural boundaries and dependencies. Essential for processing large codebases efficiently.'
+                },
+                {
+                    'name': 'create_plan',
+                    'description': 'Generate a detailed implementation plan for a new feature or modification. Analyzes requirements, existing code, and architecture to produce step-by-step instructions including files to modify, functions to create, and testing strategy.'
+                },
+                {
+                    'name': 'run_tests',
+                    'description': 'Execute the project\'s test suite including unit tests, integration tests, and end-to-end tests. Supports multiple testing frameworks (pytest, jest, mocha, etc.). Returns test results, coverage reports, and identifies failing tests with detailed error messages.'
+                },
+                {
+                    'name': 'full_quality_check',
+                    'description': 'Run comprehensive code quality analysis including linters (pylint, eslint), formatters (black, prettier), and type checkers (mypy, typescript). Identifies code style violations, potential bugs, type errors, and suggests improvements across the entire codebase.'
+                },
+                {
+                    'name': 'scan_secrets',
+                    'description': 'Scan the codebase for hardcoded secrets, API keys, passwords, tokens, and other sensitive information. Uses pattern matching and entropy analysis to detect potential security leaks. Reports findings with file locations and severity levels.'
+                },
+                {
+                    'name': 'security_audit',
+                    'description': 'Perform a comprehensive security audit of the codebase including dependency vulnerability scanning, common security anti-patterns detection, authentication/authorization review, and input validation checks. Provides prioritized security recommendations.'
+                },
+                {
+                    'name': 'complete_feature_workflow',
+                    'description': 'Execute end-to-end feature implementation workflow: exploration → architecture analysis → planning → code generation → testing → quality checks. Guides through the entire development lifecycle for adding new features while maintaining code quality and consistency.'
+                },
+                {
+                    'name': 'bugfix_workflow',
+                    'description': 'Systematic bug fixing workflow that analyzes the bug, locates affected code, generates fix with tests, validates the solution, and ensures no regressions. Includes root cause analysis and prevention recommendations.'
+                }
+            ]
+
+        return jsonify({
+            'success': True,
+            'mcp': {
+                'id': mcp_data.get('id'),
+                'name': mcp_data.get('name'),
+                'description': mcp_data.get('description'),
+                'tools_count': int(mcp_data.get('tools_count', 0)),
+                'resources_count': int(mcp_data.get('resources_count', 0)),
+                'enabled': mcp_data.get('enabled') == 'true',
+                'always_enabled': mcp_data.get('always_enabled') == 'true',
+                'registered_at': mcp_data.get('registered_at'),
+                'tools': tools,
+                'resources': resources
+            }
+        })
+    except Exception as e:
+        error_handler.handle_exception(e, context={'operation': 'api_get_mcp_details', 'mcp_id': mcp_id})
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # Start background sync monitor thread

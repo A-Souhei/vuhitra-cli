@@ -110,6 +110,11 @@ COPY ./src /app/src
 COPY ./services/sandbox/templates /app/templates
 COPY ./services/sandbox/static /app/static
 
+# Ensure templates and static files have correct permissions
+# Set directories to 755 (rwxr-xr-x) and files to 644 (rw-r--r--)
+RUN find /app/templates /app/static -type d -exec chmod 755 {} \; && \
+    find /app/templates /app/static -type f -exec chmod 644 {} \;
+
 # Copy entrypoint script
 COPY ./services/sandbox/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

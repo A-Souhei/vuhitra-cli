@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📖 Help & Documentation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+    <style>
+        body {
+            background: #f8f9fb;
+        }
+
+        .help-header {
+            background: white;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .help-section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        .help-section h2 {
+            color: #2d3748;
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-bottom: 2px solid #f7fafc;
+            padding-bottom: 1rem;
+        }
+
+        .help-section h2 i {
+            color: #667eea;
+            font-size: 2rem;
+        }
+
+        .help-section h3 {
+            color: #4a5568;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .help-section p {
+            color: #4a5568;
+            line-height: 1.7;
+            margin-bottom: 1rem;
+        }
+
+        .help-section ul, .help-section ol {
+            color: #4a5568;
+            line-height: 1.7;
+            margin-bottom: 1rem;
+        }
+
+        .help-section li {
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h4 {
+            color: #2d3748;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .feature-card h4 i {
+            color: #667eea;
+        }
+
+        .feature-card p {
+            color: #4a5568;
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .code-block {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+
+        .badge-demo {
+            display: inline-flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin: 0.25rem 0;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .quick-link {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .quick-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+            border-color: #cbd5e0;
+        }
+
+        .quick-link i {
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+
+        .quick-link-text {
+            flex: 1;
+        }
+
+        .quick-link-text h5 {
+            color: #2d3748;
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .quick-link-text p {
+            color: #718096;
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .table-of-contents {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .table-of-contents h3 {
+            color: #2d3748;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .table-of-contents ul {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .table-of-contents li {
+            margin-bottom: 0.5rem;
+        }
+
+        .table-of-contents a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .table-of-contents a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-custom">
+        <div class="container">
+            <a class="navbar-brand" href="/home">
+                <i class="bi bi-house-fill"></i> Vuhitra CLI
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/home">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/eternals">
+                            <i class="bi bi-infinity"></i> Eternals
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pillars">
+                            <i class="bi bi-building"></i> Pillars
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/ephemerals">
+                            <i class="bi bi-clock-history"></i> Ephemerals
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/vanishers">
+                            <i class="bi bi-eye-slash"></i> Vanishers
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mirrors">
+                            <i class="bi bi-folder-symlink"></i> Mirrors
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mcps">
+                            <i class="bi bi-plugin"></i> MCPs
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/help">
+                            <i class="bi bi-question-circle"></i> Help
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="container-custom">
+                <!-- Header -->
+                <div class="help-header">
+                    <h1 class="mb-3">
+                        <i class="bi bi-book"></i> Help & Documentation
+                    </h1>
+                    <p class="mb-0 text-muted">
+                        Comprehensive guide to Vuhitra CLI features and context management system
+                    </p>
+                </div>
+
+                <!-- Table of Contents -->
+                <div class="table-of-contents">
+                    <h3><i class="bi bi-list-ul"></i> Table of Contents</h3>
+                    <ul>
+                        <li><a href="#overview">Overview</a></li>
+                        <li><a href="#context-types">Context Types</a></li>
+                        <li><a href="#mirrors">Mirrors & Vanishers</a></li>
+                        <li><a href="#mcps">Model Context Protocol (MCP)</a></li>
+                        <li><a href="#coding-mode">Coding Mode</a></li>
+                        <li><a href="#quick-start">Quick Start Guide</a></li>
+                    </ul>
+                </div>
+
+                <!-- Overview Section -->
+                <div class="help-section" id="overview">
+                    <h2><i class="bi bi-info-circle"></i> Overview</h2>
+                    <p>
+                        <strong>Vuhitra CLI</strong> is an intelligent context management system designed for Large Language Model (LLM) interactions.
+                        It organizes and manages different types of contextual information to enhance AI-assisted development workflows.
+                    </p>
+                    
+                    <h3>Key Features</h3>
+                    <div class="quick-links">
+                        <div class="feature-card">
+                            <h4><i class="bi bi-layers"></i> Multi-Level Context</h4>
+                            <p>Organize information into Eternals, Pillars, Ephemerals, and Vanishers for optimal context management.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="bi bi-folder-symlink"></i> Mirror System</h4>
+                            <p>Create isolated workspaces for projects while keeping originals untouched.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="bi bi-plugin"></i> MCP Integration</h4>
+                            <p>Extend functionality with Model Context Protocol servers and tools.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h4><i class="bi bi-code-square"></i> Coding Mode</h4>
+                            <p>Specialized mode with enhanced development tools and capabilities.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Context Types Section -->
+                <div class="help-section" id="context-types">
+                    <h2><i class="bi bi-diagram-3"></i> Context Types</h2>
+                    <p>Vuhitra CLI organizes context into four distinct types, each serving a specific purpose:</p>
+
+                    <div class="feature-card">
+                        <h4><i class="bi bi-infinity"></i> Eternals</h4>
+                        <p>
+                            <strong>Long-lasting, persistent context</strong> that remains relevant across sessions.
+                            Perfect for project documentation, coding standards, API references, and fundamental knowledge.
+                        </p>
+                        <ul>
+                            <li><strong>Use for:</strong> Documentation, guidelines, reference materials</li>
+                            <li><strong>Lifetime:</strong> Permanent until explicitly removed</li>
+                            <li><strong>Examples:</strong> Coding standards, API documentation, architecture guides</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4><i class="bi bi-building"></i> Pillars</h4>
+                        <p>
+                            <strong>Foundational context</strong> that forms the core understanding for specific domains or projects.
+                            These are the "pillars" that support your AI interactions.
+                        </p>
+                        <ul>
+                            <li><strong>Use for:</strong> Project-specific knowledge, domain expertise</li>
+                            <li><strong>Lifetime:</strong> Long-term, project-specific</li>
+                            <li><strong>Examples:</strong> Database schemas, system architecture, business logic</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4><i class="bi bi-clock-history"></i> Ephemerals</h4>
+                        <p>
+                            <strong>Temporary, session-specific context</strong> that's relevant for current tasks.
+                            Automatically cleaned up to prevent context pollution.
+                        </p>
+                        <ul>
+                            <li><strong>Use for:</strong> Current task details, temporary notes, debug info</li>
+                            <li><strong>Lifetime:</strong> Session-based or time-limited</li>
+                            <li><strong>Examples:</strong> Current bug reports, feature requirements, meeting notes</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4><i class="bi bi-eye-slash"></i> Vanishers</h4>
+                        <p>
+                            <strong>Sensitive or deprecated information</strong> that should be hidden from context.
+                            Used to prevent LLMs from accessing outdated or sensitive data.
+                        </p>
+                        <ul>
+                            <li><strong>Use for:</strong> Deprecated code, sensitive info, archived materials</li>
+                            <li><strong>Lifetime:</strong> Marked for exclusion</li>
+                            <li><strong>Examples:</strong> Old implementations, secrets, archived features</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Mirrors Section -->
+                <div class="help-section" id="mirrors">
+                    <h2><i class="bi bi-folder-symlink"></i> Mirrors & Vanishers</h2>
+                    <p>
+                        The <strong>Mirror system</strong> creates isolated development environments where you can work on codebases
+                        without affecting the original files. Combined with Vanishers, this provides safe experimentation spaces.
+                    </p>
+
+                    <h3>How Mirrors Work</h3>
+                    <ol>
+                        <li><strong>Create a Mirror:</strong> Copy a project into a managed mirror directory</li>
+                        <li><strong>Work Safely:</strong> Make changes, run experiments, test ideas</li>
+                        <li><strong>Sync Changes:</strong> Selectively apply successful changes back to source</li>
+                        <li><strong>Clean Up:</strong> Remove mirrors when done</li>
+                    </ol>
+
+                    <h3>Mirror + Vanisher Integration</h3>
+                    <p>
+                        Each mirror can have associated "vanisher" content - files or information that should be excluded
+                        from LLM context. This is useful for:
+                    </p>
+                    <ul>
+                        <li>Excluding large binary files or dependencies</li>
+                        <li>Hiding sensitive configuration or credentials</li>
+                        <li>Removing deprecated code from AI suggestions</li>
+                    </ul>
+
+                    <div class="feature-card">
+                        <h4><i class="bi bi-arrow-repeat"></i> Bidirectional Sync</h4>
+                        <p>
+                            Mirrors support two-way synchronization:
+                        </p>
+                        <ul>
+                            <li><strong>Mirror → Source:</strong> Apply tested changes back to original</li>
+                            <li><strong>Source → Mirror:</strong> Pull latest updates from original</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- MCPs Section -->
+                <div class="help-section" id="mcps">
+                    <h2><i class="bi bi-plugin"></i> Model Context Protocol (MCP)</h2>
+                    <p>
+                        <strong>MCP servers</strong> extend Vuhitra CLI with additional tools and capabilities.
+                        They provide specialized functionality for different development tasks.
+                    </p>
+
+                    <h3>Available MCPs</h3>
+                    <div class="feature-card">
+                        <h4><i class="bi bi-tools"></i> Mirror+Vanisher Development MCP</h4>
+                        <p>
+                            Comprehensive development operations on mirrored directories. Includes 18 specialized tools:
+                        </p>
+                        <ul>
+                            <li><strong>Exploration:</strong> Structure analysis, tech stack detection, entrypoint discovery</li>
+                            <li><strong>Architecture:</strong> Pattern identification, dependency mapping</li>
+                            <li><strong>Code Management:</strong> Intelligent chunking for large codebases</li>
+                            <li><strong>Planning:</strong> Implementation plan generation</li>
+                            <li><strong>Quality:</strong> Testing, linting, formatting, type checking</li>
+                            <li><strong>Security:</strong> Secret scanning, vulnerability audits</li>
+                            <li><strong>Workflows:</strong> Feature implementation and bug fixing automation</li>
+                        </ul>
+                        <div class="badge-demo">
+                            <span class="badge bg-primary">Always ON in Coding Mode</span>
+                            <span class="badge bg-warning text-dark">Cannot be manually toggled</span>
+                        </div>
+                    </div>
+
+                    <h3>MCP Management</h3>
+                    <p>Access the <a href="/mcps">MCP Management</a> page to:</p>
+                    <ul>
+                        <li>View all registered MCPs and their tools</li>
+                        <li>Enable/disable user-controllable MCPs</li>
+                        <li>View detailed tool descriptions</li>
+                        <li>Monitor MCP status and registration</li>
+                    </ul>
+                </div>
+
+                <!-- Coding Mode Section -->
+                <div class="help-section" id="coding-mode">
+                    <h2><i class="bi bi-code-square"></i> Coding Mode</h2>
+                    <p>
+                        <strong>Coding Mode</strong> is a specialized operating mode that enables development-focused features
+                        and tools. When activated, it provides enhanced capabilities for software development tasks.
+                    </p>
+
+                    <h3>What Changes in Coding Mode?</h3>
+                    <div class="feature-card">
+                        <h4><i class="bi bi-check-circle"></i> Automatic MCP Activation</h4>
+                        <p>
+                            The Mirror+Vanisher Development MCP is automatically enabled, providing access to all 18 development tools.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4><i class="bi bi-gear"></i> Enhanced Features</h4>
+                        <p>
+                            Additional development-specific features and context are activated to support coding tasks.
+                        </p>
+                    </div>
+
+                    <h3>Toggling Coding Mode</h3>
+                    <p>
+                        Coding mode is controlled via the CLI tool. When disabled (normal mode), development MCPs are
+                        automatically deactivated to maintain a cleaner context for non-coding tasks.
+                    </p>
+
+                    <h3><i class="bi bi-diagram-3"></i> Mode Comparison</h3>
+                    <p>
+                        The table below shows which features are available in each mode:
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-bordered" style="background: white; border-radius: 8px; overflow: hidden;">
+                            <thead style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                                <tr>
+                                    <th style="padding: 1rem; border: none; width: 40%;">Feature</th>
+                                    <th class="text-center" style="padding: 1rem; border-left: 1px solid rgba(255,255,255,0.2); width: 30%;">
+                                        <i class="bi bi-person"></i> Normal Mode
+                                    </th>
+                                    <th class="text-center" style="padding: 1rem; border-left: 1px solid rgba(255,255,255,0.2); width: 30%;">
+                                        <i class="bi bi-code-square"></i> Coding Mode
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="padding: 0.875rem 1rem; font-weight: 500; color: #2d3748; border-color: #e2e8f0;">
+                                        <i class="bi bi-infinity text-primary"></i> Eternals
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Enabled
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #6b7280; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-x-circle"></i> Disabled
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr style="background: #f8f9fb;">
+                                    <td style="padding: 0.875rem 1rem; font-weight: 500; color: #2d3748; border-color: #e2e8f0;">
+                                        <i class="bi bi-clock-history text-info"></i> Ephemerals
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Enabled
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #6b7280; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-x-circle"></i> Disabled
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 0.875rem 1rem; font-weight: 500; color: #2d3748; border-color: #e2e8f0;">
+                                        <i class="bi bi-columns-gap text-success"></i> Pillars
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #6b7280; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-x-circle"></i> Disabled
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Enabled
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr style="background: #f8f9fb;">
+                                    <td style="padding: 0.875rem 1rem; font-weight: 500; color: #2d3748; border-color: #e2e8f0;">
+                                        <i class="bi bi-eye-slash text-warning"></i> Vanishers
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #6b7280; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-x-circle"></i> Disabled
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Enabled
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 0.875rem 1rem; font-weight: 500; color: #2d3748; border-color: #e2e8f0;">
+                                        <i class="bi bi-arrow-left-right text-purple"></i> Mirrors
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Available
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Available
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr style="background: #f8f9fb;">
+                                    <td style="padding: 0.875rem 1rem; font-weight: 500; color: #2d3748; border-color: #e2e8f0;">
+                                        <i class="bi bi-arrow-repeat text-danger"></i> Auto-iteration
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #10b981; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-check-circle"></i> Enabled
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="padding: 0.875rem 1rem; border-color: #e2e8f0;">
+                                        <span class="badge" style="background: #6b7280; color: white; font-size: 0.75rem; padding: 0.4rem 0.75rem; font-weight: 600;">
+                                            <i class="bi bi-x-circle"></i> Disabled
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Quick Start Section -->
+                <div class="help-section" id="quick-start">
+                    <h2><i class="bi bi-rocket"></i> Quick Start Guide</h2>
+                    
+                    <h3>1. Navigate the Interface</h3>
+                    <div class="quick-links">
+                        <a href="/home" class="quick-link">
+                            <i class="bi bi-house-fill"></i>
+                            <div class="quick-link-text">
+                                <h5>Home</h5>
+                                <p>Overview & quick access</p>
+                            </div>
+                        </a>
+                        <a href="/eternals" class="quick-link">
+                            <i class="bi bi-infinity"></i>
+                            <div class="quick-link-text">
+                                <h5>Eternals</h5>
+                                <p>Persistent context</p>
+                            </div>
+                        </a>
+                        <a href="/pillars" class="quick-link">
+                            <i class="bi bi-building"></i>
+                            <div class="quick-link-text">
+                                <h5>Pillars</h5>
+                                <p>Foundation knowledge</p>
+                            </div>
+                        </a>
+                        <a href="/ephemerals" class="quick-link">
+                            <i class="bi bi-clock-history"></i>
+                            <div class="quick-link-text">
+                                <h5>Ephemerals</h5>
+                                <p>Temporary context</p>
+                            </div>
+                        </a>
+                        <a href="/mirrors" class="quick-link">
+                            <i class="bi bi-folder-symlink"></i>
+                            <div class="quick-link-text">
+                                <h5>Mirrors</h5>
+                                <p>Project workspaces</p>
+                            </div>
+                        </a>
+                        <a href="/mcps" class="quick-link">
+                            <i class="bi bi-plugin"></i>
+                            <div class="quick-link-text">
+                                <h5>MCPs</h5>
+                                <p>Tools & extensions</p>
+                            </div>
+                        </a>
+                    </div>
+
+                    <h3>2. Best Practices</h3>
+                    <ul>
+                        <li><strong>Keep Eternals Focused:</strong> Only add truly persistent, broadly useful information</li>
+                        <li><strong>Clean Ephemerals Regularly:</strong> Remove outdated temporary context</li>
+                        <li><strong>Use Mirrors for Experiments:</strong> Protect original codebases from breaking changes</li>
+                        <li><strong>Mark Sensitive Data as Vanishers:</strong> Prevent accidental exposure to LLMs</li>
+                        <li><strong>Enable Coding Mode When Developing:</strong> Get access to full development toolset</li>
+                    </ul>
+
+                    <h3>3. Getting Help</h3>
+                    <p>For additional support:</p>
+                    <ul>
+                        <li>Check the <a href="https://github.com/A-Souhei/vuhitra-cli" target="_blank">GitHub repository</a></li>
+                        <li>Review the documentation in the <code>docs/</code> directory</li>
+                        <li>Explore the <code>pillars/</code> guides for detailed information</li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p class="mb-1">
+                <i class="bi bi-c-circle"></i> 2025 Vuhitra CLI -
+                Licensed under <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>
+            </p>
+            <p class="mb-0">
+                <i class="bi bi-github"></i>
+                <a href="https://github.com/A-Souhei/vuhitra-cli" target="_blank">View on GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

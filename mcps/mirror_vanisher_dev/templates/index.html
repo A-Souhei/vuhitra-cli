@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mirror+Vanisher Development MCP</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 Mirror+Vanisher Development MCP</h1>
+            <p>LLM-Driven Development Operations on Mirrored+Vanisher Directories</p>
+        </header>
+
+        <main>
+            <!-- Mirror+Vanisher Selection -->
+            <section class="card">
+                <h2>📁 Select Mirror+Vanisher Directory</h2>
+                <div class="form-group">
+                    <button id="refreshBtn" class="btn btn-secondary">Refresh List</button>
+                </div>
+                <div id="mirrorList" class="mirror-list">
+                    <p class="loading">Loading...</p>
+                </div>
+            </section>
+
+            <!-- Tabs for Different Operations -->
+            <section class="card">
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="exploration">1. Exploration</button>
+                    <button class="tab-button" data-tab="architecture">2. Architecture</button>
+                    <button class="tab-button" data-tab="planning">3. Planning</button>
+                    <button class="tab-button" data-tab="testing">4. Testing</button>
+                    <button class="tab-button" data-tab="quality">5. Quality</button>
+                    <button class="tab-button" data-tab="security">6. Security</button>
+                    <button class="tab-button" data-tab="workflows">🚀 Workflows</button>
+                </div>
+
+                <!-- Exploration Tab -->
+                <div id="exploration" class="tab-content active">
+                    <h3>Exploration Tools</h3>
+                    <p>Discover project structure, tech stack, and entrypoints</p>
+                    <button class="btn btn-primary" onclick="runExploration()">Run Full Exploration</button>
+                    <div id="explorationResult" class="result"></div>
+                </div>
+
+                <!-- Architecture Tab -->
+                <div id="architecture" class="tab-content">
+                    <h3>Architecture Analysis</h3>
+                    <p>Analyze architectural patterns and dependencies</p>
+                    <button class="btn btn-primary" onclick="runArchitectureAnalysis()">Analyze Architecture</button>
+                    <div id="architectureResult" class="result"></div>
+                </div>
+
+                <!-- Planning Tab -->
+                <div id="planning" class="tab-content">
+                    <h3>Implementation Planning</h3>
+                    <p>Create atomic, file-specific implementation plans</p>
+                    <div class="form-group">
+                        <label for="taskInput">Task Description:</label>
+                        <textarea id="taskInput" rows="3" placeholder="Describe what you want to implement..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="createPlan()">Create Plan</button>
+                    <div id="planningResult" class="result"></div>
+                </div>
+
+                <!-- Testing Tab -->
+                <div id="testing" class="tab-content">
+                    <h3>Testing</h3>
+                    <p>Run tests and verify changes</p>
+                    <button class="btn btn-primary" onclick="runTests()">Run Tests</button>
+                    <div id="testingResult" class="result"></div>
+                </div>
+
+                <!-- Quality Tab -->
+                <div id="quality" class="tab-content">
+                    <h3>Quality Checks</h3>
+                    <p>Run linters, formatters, and type checkers</p>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="autoFixCheck"> Auto-fix issues
+                        </label>
+                    </div>
+                    <button class="btn btn-primary" onclick="runQualityCheck()">Run Quality Check</button>
+                    <div id="qualityResult" class="result"></div>
+                </div>
+
+                <!-- Security Tab -->
+                <div id="security" class="tab-content">
+                    <h3>Security Audit</h3>
+                    <p>Scan for secrets and vulnerabilities</p>
+                    <button class="btn btn-primary" onclick="runSecurityAudit()">Run Security Audit</button>
+                    <div id="securityResult" class="result"></div>
+                </div>
+
+                <!-- Workflows Tab -->
+                <div id="workflows" class="tab-content">
+                    <h3>Multi-Step Workflows</h3>
+                    <p>End-to-end workflows for common tasks</p>
+
+                    <div class="workflow-section">
+                        <h4>Feature Implementation Workflow</h4>
+                        <div class="form-group">
+                            <label for="featureInput">Feature Description:</label>
+                            <textarea id="featureInput" rows="2" placeholder="Describe the feature to implement..."></textarea>
+                        </div>
+                        <button class="btn btn-primary" onclick="runFeatureWorkflow()">Start Feature Workflow</button>
+                    </div>
+
+                    <div class="workflow-section">
+                        <h4>Bugfix Workflow</h4>
+                        <div class="form-group">
+                            <label for="bugInput">Bug Description:</label>
+                            <textarea id="bugInput" rows="2" placeholder="Describe the bug to fix..."></textarea>
+                        </div>
+                        <button class="btn btn-primary" onclick="runBugfixWorkflow()">Start Bugfix Workflow</button>
+                    </div>
+
+                    <div id="workflowResult" class="result"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Mirror+Vanisher Development MCP v1.0.0 | <a href="https://github.com/A-Souhei/vuhitra-cli" target="_blank">Documentation</a></p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

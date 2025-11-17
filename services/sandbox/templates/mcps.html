@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>∞ Eternal Context Management</title>
+    <title>🔌 MCP Management</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mcps.css') }}">
 </head>
 <body>
     <!-- Navigation -->
@@ -26,7 +27,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/eternals">
+                        <a class="nav-link" href="/eternals">
                             <i class="bi bi-infinity"></i> Eternals
                         </a>
                     </li>
@@ -51,7 +52,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/mcps">
+                        <a class="nav-link active" href="/mcps">
                             <i class="bi bi-plugin"></i> MCPs
                         </a>
                     </li>
@@ -60,37 +61,36 @@
         </div>
     </nav>
 
-    <!-- Main Content -->
     <div class="main-content">
         <div class="container">
             <div class="container-custom">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h1 class="header-title mb-0">
-                            <i class="bi bi-infinity"></i> Eternal Context Management
+                            <i class="bi bi-plugin"></i> MCP Management
                         </h1>
-                        <p class="text-muted small mb-0">Persistent cross-session contexts for normal mode</p>
+                        <p class="text-muted small mb-0">Manage Model Context Protocol servers and tools</p>
+                        <div id="codingModeIndicator" class="mt-2"></div>
                     </div>
-                    <button class="btn btn-primary" onclick="loadEternals()">
+                    <button class="btn btn-primary" onclick="loadMCPs()">
                         <i class="bi bi-arrow-clockwise"></i> Refresh
                     </button>
                 </div>
 
                 <div id="message"></div>
 
-                <div id="eternalContainer">
+                <div id="mcpContainer">
                     <div class="text-center py-5">
                         <div class="spinner-border text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
-                        <p class="text-muted mt-2">Loading eternal contexts...</p>
+                        <p class="text-muted mt-2">Loading MCPs...</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="footer">
         <div class="container">
             <p class="mb-1">
@@ -105,6 +105,6 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/eternals.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mcps.js') }}"></script>
 </body>
 </html>

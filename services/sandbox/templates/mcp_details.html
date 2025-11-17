@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔌 MCP Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+    <style>
+        /* Clean, Minimal MCP Details Styles */
+        body {
+            background: #f8f9fb;
+            min-height: 100vh;
+        }
+
+        .mcp-header {
+            background: white;
+            color: #2d3748;
+            padding: 2.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .mcp-header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: #1a202c;
+        }
+
+        .mcp-header .subtitle {
+            font-size: 1.05rem;
+            color: #718096;
+            margin-bottom: 1.5rem;
+            font-weight: 400;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .stat-card {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+            border-color: #cbd5e0;
+        }
+
+        .stat-card .stat-icon {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            color: #667eea;
+        }
+
+        .stat-card .stat-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            line-height: 1;
+            color: #2d3748;
+        }
+
+        .stat-card .stat-label {
+            font-size: 0.9rem;
+            color: #718096;
+            font-weight: 500;
+        }
+
+        .status-badges {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid;
+        }
+
+        .status-badge i {
+            font-size: 1rem;
+        }
+
+        .status-badge.enabled {
+            background: #f0fdf4;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        .status-badge.disabled {
+            background: #f8fafc;
+            color: #64748b;
+            border-color: #cbd5e0;
+        }
+
+        .status-badge.always-on {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fcd34d;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        .info-card h5 {
+            color: #2d3748;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f7fafc;
+        }
+
+        .info-card h5 i {
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+
+        .info-table {
+            width: 100%;
+        }
+
+        .info-table tr {
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .info-table tr:last-child {
+            border-bottom: none;
+        }
+
+        .info-table th {
+            padding: 0.875rem 0;
+            font-weight: 600;
+            color: #4a5568;
+            width: 30%;
+            font-size: 0.9rem;
+        }
+
+        .info-table td {
+            padding: 0.875rem 0;
+            color: #2d3748;
+            font-size: 0.9rem;
+        }
+
+        .tool-item, .resource-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .tool-item:hover {
+            border-color: #cbd5e0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .tool-item h6 {
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .tool-item h6 i {
+            font-size: 1.1rem;
+            color: #667eea;
+        }
+
+        .tool-item h6 code {
+            background: #f7fafc;
+            color: #667eea;
+            padding: 0.35rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: 1px solid #e2e8f0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+
+        .tool-item p {
+            color: #4a5568;
+            line-height: 1.6;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        .resource-item h6 {
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 1rem;
+        }
+
+        .resource-item h6 i {
+            font-size: 1.1rem;
+            color: #f59e0b;
+        }
+
+        .resource-item p {
+            color: #4a5568;
+            line-height: 1.6;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        .resource-type-badge {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid #fcd34d;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .btn-custom {
+            padding: 0.75rem 1.75rem;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: 1px solid;
+            font-size: 0.95rem;
+        }
+
+        .btn-custom:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-toggle-enable {
+            background: #f0fdf4;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        .btn-toggle-enable:hover {
+            background: #dcfce7;
+            border-color: #4ade80;
+        }
+
+        .btn-toggle-disable {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fcd34d;
+        }
+
+        .btn-toggle-disable:hover {
+            background: #fde68a;
+            border-color: #fbbf24;
+        }
+
+        .btn-back {
+            background: #f8fafc;
+            color: #475569;
+            border-color: #cbd5e0;
+        }
+
+        .btn-back:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-count {
+            background: #667eea;
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: #94a3b8;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px dashed #cbd5e0;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .mcp-header h1 {
+                font-size: 2rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .info-table th,
+            .info-table td {
+                display: block;
+                width: 100%;
+            }
+
+            .info-table th {
+                padding-bottom: 0.25rem;
+            }
+
+            .info-table td {
+                padding-top: 0.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-custom">
+        <div class="container">
+            <a class="navbar-brand" href="/home">
+                <i class="bi bi-house-fill"></i> Vuhitra CLI
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/home">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/eternals">
+                            <i class="bi bi-infinity"></i> Eternals
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pillars">
+                            <i class="bi bi-building"></i> Pillars
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/ephemerals">
+                            <i class="bi bi-clock-history"></i> Ephemerals
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/vanishers">
+                            <i class="bi bi-eye-slash"></i> Vanishers
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mirrors">
+                            <i class="bi bi-folder-symlink"></i> Mirrors
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/mcps">
+                            <i class="bi bi-plugin"></i> MCPs
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="container-custom">
+                <!-- Breadcrumb -->
+                <nav aria-label="breadcrumb" class="mb-4">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/home"><i class="bi bi-house"></i> Home</a></li>
+                        <li class="breadcrumb-item"><a href="/mcps"><i class="bi bi-plugin"></i> MCPs</a></li>
+                        <li class="breadcrumb-item active" aria-current="page" id="breadcrumbMcpName">Loading...</li>
+                    </ol>
+                </nav>
+
+                <div id="message"></div>
+
+                <div id="mcpDetailsContainer">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-3" style="font-size: 1.1rem;">Loading MCP details...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p class="mb-1">
+                <i class="bi bi-c-circle"></i> 2025 Vuhitra CLI -
+                Licensed under <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>
+            </p>
+            <p class="mb-0">
+                <i class="bi bi-github"></i>
+                <a href="https://github.com/A-Souhei/vuhitra-cli" target="_blank">View on GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const mcpId = "{{ mcp_id }}";
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMCPDetails();
+        });
+
+        function loadMCPDetails() {
+            const container = document.getElementById('mcpDetailsContainer');
+
+            fetch(`/api/mcps/${mcpId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayMCPDetails(data.mcp);
+                    } else {
+                        container.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i> ${data.error || 'Failed to load MCP details'}
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    container.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Error: ${error.message}
+                        </div>
+                    `;
+                });
+        }
+
+        function displayMCPDetails(mcp) {
+            // Update breadcrumb
+            document.getElementById('breadcrumbMcpName').textContent = mcp.name;
+
+            // Update page title
+            document.title = `🔌 ${mcp.name}`;
+
+            const container = document.getElementById('mcpDetailsContainer');
+
+            // Create status badges
+            const statusBadge = mcp.enabled
+                ? '<span class="status-badge enabled"><i class="bi bi-check-circle-fill"></i>Enabled</span>'
+                : '<span class="status-badge disabled"><i class="bi bi-x-circle-fill"></i>Disabled</span>';
+
+            const alwaysEnabledBadge = mcp.always_enabled
+                ? '<span class="status-badge always-on"><i class="bi bi-star-fill"></i>Always ON</span>'
+                : '';
+
+            let html = `
+                <div class="mcp-header">
+                    <h1>
+                        <i class="bi bi-plugin"></i>
+                        ${mcp.name}
+                    </h1>
+                    <div class="subtitle">${mcp.description}</div>
+                    <div class="status-badges">
+                        ${statusBadge}
+                        ${alwaysEnabledBadge}
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="bi bi-tools"></i></div>
+                            <div class="stat-value">${mcp.tools_count}</div>
+                            <div class="stat-label">Tools</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="bi bi-file-earmark"></i></div>
+                            <div class="stat-value">${mcp.resources_count}</div>
+                            <div class="stat-label">Resources</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+                            <div class="stat-value">${formatDateShort(mcp.registered_at)}</div>
+                            <div class="stat-label">Registered</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h5><i class="bi bi-info-circle-fill"></i>Information</h5>
+                    <table class="info-table">
+                        <tr><th>ID:</th><td><code>${mcp.id}</code></td></tr>
+                        <tr><th>Status:</th><td>${statusBadge}</td></tr>
+                        <tr><th>Always Enabled:</th><td>${mcp.always_enabled ? '<strong>Yes</strong> (managed by coding mode)' : 'No'}</td></tr>
+                        <tr><th>Registered:</th><td>${formatDate(mcp.registered_at)}</td></tr>
+                    </table>
+
+                    ${mcp.always_enabled ? `
+                        <div class="alert alert-info mt-3" style="background: #e0f2fe; border: 1px solid #bae6fd; color: #0c4a6e; border-radius: 6px; padding: 1rem;">
+                            <i class="bi bi-info-circle-fill"></i>
+                            <strong>Note:</strong> This MCP is automatically managed by the system.
+                            It is enabled when coding mode is active and disabled in normal mode.
+                        </div>
+                    ` : `
+                        <div class="action-buttons">
+                            <button class="btn btn-custom btn-toggle-${mcp.enabled ? 'disable' : 'enable'}"
+                                    onclick="toggleMCP('${mcp.id}', ${!mcp.enabled})">
+                                <i class="bi bi-power"></i> ${mcp.enabled ? 'Disable' : 'Enable'} MCP
+                            </button>
+                        </div>
+                    `}
+                </div>
+
+                <div class="info-card">
+                    <div class="section-header">
+                        <h5><i class="bi bi-tools"></i>Tools</h5>
+                        <span class="section-count">${mcp.tools.length}</span>
+                    </div>
+            `;
+
+            if (mcp.tools.length > 0) {
+                mcp.tools.forEach(tool => {
+                    html += `
+                        <div class="tool-item">
+                            <h6><i class="bi bi-gear-fill"></i><code>${tool.name}</code></h6>
+                            <p>${tool.description}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                html += `
+                    <div class="empty-state">
+                        <i class="bi bi-tools"></i>
+                        <p>No tools available</p>
+                    </div>
+                `;
+            }
+
+            html += `
+                </div>
+
+                <div class="info-card">
+                    <div class="section-header">
+                        <h5><i class="bi bi-file-earmark-text-fill"></i>Resources</h5>
+                        <span class="section-count">${mcp.resources.length}</span>
+                    </div>
+            `;
+
+            if (mcp.resources.length > 0) {
+                mcp.resources.forEach(resource => {
+                    html += `
+                        <div class="resource-item">
+                            <h6>
+                                <span><i class="bi bi-file-earmark"></i>${resource.name}</span>
+                                <span class="resource-type-badge">${resource.type}</span>
+                            </h6>
+                            <p>${resource.description}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                html += `
+                    <div class="empty-state">
+                        <i class="bi bi-file-earmark"></i>
+                        <p>No resources available</p>
+                    </div>
+                `;
+            }
+
+            html += `
+                </div>
+
+                <div class="action-buttons">
+                    <a href="/mcps" class="btn btn-custom btn-back">
+                        <i class="bi bi-arrow-left"></i> Back to MCPs
+                    </a>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function toggleMCP(mcpId, enabled) {
+            fetch(`/api/mcps/${mcpId}/toggle`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ enabled: enabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess(`MCP ${enabled ? 'enabled' : 'disabled'} successfully`);
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showError(data.error || 'Failed to toggle MCP');
+                }
+            })
+            .catch(error => {
+                showError('Error toggling MCP: ' + error.message);
+            });
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        function formatDateShort(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return '1d ago';
+            if (diffDays < 30) return `${diffDays}d ago`;
+            if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+            return `${Math.floor(diffDays / 365)}y ago`;
+        }
+
+        function showSuccess(message) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle-fill"></i> ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            setTimeout(() => messageDiv.innerHTML = '', 5000);
+        }
+
+        function showError(message) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill"></i> ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

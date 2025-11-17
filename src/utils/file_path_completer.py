@@ -11,6 +11,7 @@ from typing import Iterable, Optional
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 from src.utils.prompt_injection_completer import PromptInjectionCompleter
+from src.utils.mcp_tool_completer import MCPToolCompleter
 
 
 class FilePathCompleter(Completer):
@@ -152,23 +153,27 @@ class CombinedCompleter(Completer):
     """Combines multiple completers into one.
 
     This completer delegates to different completers based on the context.
+    - If text matches $ pattern, use MCPToolCompleter ONLY
     - If text matches @ pattern, use FilePathCompleter ONLY
     - If text matches : pattern, use PromptInjectionCompleter ONLY
     - Otherwise, use the default command completer ONLY
     """
 
     def __init__(self, command_completer: Completer, file_path_completer: FilePathCompleter,
-                 prompt_injection_completer: Optional[PromptInjectionCompleter] = None):
+                 prompt_injection_completer: Optional[PromptInjectionCompleter] = None,
+                 mcp_tool_completer: Optional[MCPToolCompleter] = None):
         """Initialize the combined completer.
 
         Args:
             command_completer: Completer for commands (e.g., WordCompleter)
             file_path_completer: Completer for file paths with @ prefix
             prompt_injection_completer: Completer for prompt injections with : prefix
+            mcp_tool_completer: Completer for MCP tools with $ prefix
         """
         self.command_completer = command_completer
         self.file_path_completer = file_path_completer
         self.prompt_injection_completer = prompt_injection_completer or PromptInjectionCompleter()
+        self.mcp_tool_completer = mcp_tool_completer or MCPToolCompleter()
 
     def get_completions(self, document: Document, complete_event) -> Iterable[Completion]:
         """Get completion suggestions from appropriate completer.
@@ -181,6 +186,13 @@ class CombinedCompleter(Completer):
             Completion objects from the appropriate completer
         """
         text_before_cursor = document.text_before_cursor
+
+        # Check if we're in a $ MCP tool pattern
+        dollar_match = re.search(r'\$([^\s]*)$', text_before_cursor)
+        if dollar_match:
+            # ONLY use MCP tool completer for $ prefix
+            yield from self.mcp_tool_completer.get_completions(document, complete_event)
+            return
 
         # Check if we're in a : prompt injection pattern
         colon_match = re.search(r':([^\s]*)$', text_before_cursor)
@@ -198,5 +210,5 @@ class CombinedCompleter(Completer):
             yield from self.file_path_completer.get_completions(document, complete_event)
             return
 
-        # If no @ or : pattern, use command completer
+        # If no @, :, or $ pattern, use command completer
         yield from self.command_completer.get_completions(document, complete_event)

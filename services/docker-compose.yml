@@ -67,6 +67,7 @@ services:
       - "18001:8000"     # App port
     volumes:
       - workspace:/app/WORKSPACE
+      - ${VUHITRA_DIR:-..}/.vuhitra:/app/.vuhitra:ro  # Mount .vuhitra directory for context access (read-only, set VUHITRA_DIR to override base path)
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379

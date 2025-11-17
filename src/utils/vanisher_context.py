@@ -225,13 +225,20 @@ class VanisherContextManager(EmbeddingCacheMixin):
             if not path.is_file():
                 return False, f"Not a file: {file_path}"
 
-            # Generate mirror name from path
-            mirror_name = path.stem if path.is_file() else path.name
+            # Generate mirror name from parent directory (not the file itself)
+            # Vanishers work with mirrored directories, so check if parent dir is mirrored
+            # Use full parent path to avoid naming conflicts between different directories
+            # that happen to have the same parent directory name
+            import hashlib
+            parent_path_str = str(path.parent.resolve())
+            # Create a unique mirror name using parent dir name + hash of full path
+            path_hash = hashlib.md5(parent_path_str.encode()).hexdigest()[:8]
+            mirror_name = f"{path.parent.name}_{path_hash}"
 
-            # Check if file is mirrored
+            # Check if parent directory is mirrored
             is_mirrored, mirror_info = self._check_mirror_exists(mirror_name)
             if not is_mirrored:
-                return False, f"Cannot load vanisher: '{mirror_name}' is not mirrored. Use '/mirror do @{file_path}' first to mirror it."
+                return False, f"Cannot load vanisher: parent directory '{mirror_name}' is not mirrored. Use '/mirror do @{path.parent}/' first to mirror it."
 
             # Check file size
             file_size_mb = path.stat().st_size / (1024 * 1024)

@@ -1476,10 +1476,64 @@ def api_get_eternals():
 @app.route('/api/contexts/pillars', methods=['GET'])
 def api_get_pillars():
     """API endpoint to get pillar contexts"""
-    return jsonify({
-        'contexts': [],
-        'message': 'This endpoint requires the CLI to be running in coding mode (--coding flag)'
-    })
+    try:
+        # Get pillar contexts directory from environment or use default
+        pillar_dir = Path(os.getenv('PILLAR_CONTEXTS_DIR', '.vuhitra/pillar_contexts'))
+
+        # Make path absolute if relative
+        if not pillar_dir.is_absolute():
+            # Try relative to /app first (in container), then relative to current dir
+            container_path = Path('/app') / pillar_dir
+            if container_path.exists():
+                pillar_dir = container_path
+            else:
+                pillar_dir = pillar_dir.resolve()
+
+        if not pillar_dir.exists():
+            return jsonify({
+                'contexts': [],
+                'message': 'Pillar contexts directory not found. Start CLI in coding mode (--coding flag) to create pillars.'
+            })
+
+        # Read all JSON files from pillar contexts directory
+        contexts = []
+        for json_file in pillar_dir.glob('*.json'):
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    context_data = json.load(f)
+
+                    # Create summary without full content and embedding
+                    summary = {
+                        'label': context_data.get('label', ''),
+                        'file_path': context_data.get('file_path', ''),
+                        'timestamp': context_data.get('timestamp', ''),
+                        'description': context_data.get('description', ''),
+                        'auto_loaded': context_data.get('auto_loaded', False),
+                        'content_size': len(context_data.get('content', '')),
+                        'is_chunked': len(context_data.get('chunks', [])) > 0,
+                        'num_chunks': len(context_data.get('chunks', []))
+                    }
+                    contexts.append(summary)
+            except Exception as e:
+                logger.warning(f"Failed to read pillar context {json_file}: {e}")
+                continue
+
+        # Sort by label
+        contexts.sort(key=lambda x: x.get('label', ''))
+
+        return jsonify({
+            'contexts': contexts,
+            'count': len(contexts),
+            'message': f'Found {len(contexts)} pillar context(s)' if contexts else 'No pillar contexts found'
+        })
+
+    except Exception as e:
+        logger.error(f"Error reading pillar contexts: {e}")
+        return jsonify({
+            'contexts': [],
+            'error': str(e),
+            'message': 'Failed to read pillar contexts'
+        }), 500
 
 
 @app.route('/api/contexts/ephemerals', methods=['GET'])

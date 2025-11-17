@@ -10,8 +10,11 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
 from rich.table import Table
+from rich.spinner import Spinner
+from rich.live import Live
 from rich import box
 import json
+from contextlib import contextmanager
 # Global console instance
 console = Console()
 
@@ -280,3 +283,24 @@ def print_debug(title: str, data: any):
 def print_separator():
     """Print a visual separator."""
     console.print("[dim]" + "─" * 80 + "[/dim]")
+
+
+@contextmanager
+def spinner(message: str = "Loading...", spinner_type: str = "dots"):
+    """Context manager for displaying a spinner during long operations.
+
+    Args:
+        message: The message to display next to the spinner
+        spinner_type: The type of spinner animation (e.g., 'dots', 'line', 'arc', 'arrow')
+
+    Usage:
+        with spinner("Loading pillars..."):
+            # Do long operation
+            load_pillars()
+    """
+    spinner_obj = Spinner(spinner_type, text=message, style="cyan")
+    with Live(spinner_obj, console=console, refresh_per_second=10):
+        try:
+            yield
+        finally:
+            pass

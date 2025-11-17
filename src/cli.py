@@ -16,7 +16,7 @@ from src.utils.ui_formatter import (
     set_verbose_mode, is_verbose, print_banner, print_response,
     print_context_verbose, print_context_content_verbose, print_elasticsearch_verbose,
     print_nlp_analysis_verbose, print_timing_verbose, print_error, print_warning,
-    print_success, print_info, print_debug, print_user_prompt, console
+    print_success, print_info, print_debug, print_user_prompt, console, spinner
 )
 from src.utils.prompt_history import PromptHistoryManager
 from src.utils.conversation_history import ConversationHistoryManager
@@ -299,8 +299,9 @@ def interactive_mode(model, verbose=False, coding=False):
         pillar_context = PillarContextManager(enabled=True)
         vanisher_context = VanisherContextManager(enabled=True)
 
-        # Auto-load pillars from pillars/ directory
-        loaded_count, loaded_files = pillar_context.auto_load_from_pillars_directory(verbose=verbose)
+        # Auto-load pillars from pillars/ directory with spinner
+        with spinner("🔧 Initializing coding mode, loading pillars..."):
+            loaded_count, loaded_files = pillar_context.auto_load_from_pillars_directory(verbose=verbose)
         if loaded_count > 0:
             print_success(f"✓ Auto-loaded {loaded_count} pillar(s) from pillars/ directory")
             if verbose:

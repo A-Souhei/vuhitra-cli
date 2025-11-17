@@ -1,23 +1,30 @@
 """
 LLM-based Plan Generator - Step 4+ of the Pillars Methodology
 
-Uses LLM to generate comprehensive, context-aware implementation plans
+Uses LLM (Ollama) to generate comprehensive, context-aware implementation plans
 based on loaded vanisher content, pillars documentation, and MCP tool descriptions.
 """
 
 import os
+import sys
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import json
 
+# Add project root to path to import from src
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.agent import generate as ollama_generate
+from src.utils.config_loader import ConfigLoader
 from errors_handler import handle_exception
 
 logger = logging.getLogger(__name__)
 
 
 class LLMPlanGenerator:
-    """LLM-based plan generator with embeddings and context awareness."""
+    """LLM-based plan generator with embeddings and context awareness using Ollama."""
 
     def __init__(self, manager):
         """Initialize LLM plan generator.
@@ -26,33 +33,47 @@ class LLMPlanGenerator:
             manager: MirrorVanisherManager instance
         """
         self.manager = manager
-        self.anthropic_client = None
+        self.config = None
+        self.ollama_model = None
         self.embedding_model = None
         self.tool_embeddings = None
         self._initialize_llm()
         self._initialize_embeddings()
 
     def _initialize_llm(self) -> None:
-        """Initialize Anthropic LLM client."""
+        """Initialize Ollama LLM configuration."""
         try:
-            import anthropic
+            self.config = ConfigLoader()
 
-            # Get API key from environment
-            api_key = os.getenv('ANTHROPIC_API_KEY')
-            if not api_key:
-                logger.warning("ANTHROPIC_API_KEY not set. LLM plan generation will not work.")
-                return
+            # Get default model based on environment (local or remote)
+            ollama_mode = self.config.get('ollama', 'use', default='local')
+            self.ollama_model = self.config.get('model', 'default', ollama_mode, default='llama3.1:8b')
 
-            self.anthropic_client = anthropic.Anthropic(api_key=api_key)
-            logger.info("Anthropic LLM client initialized")
+            # For plan generation, prefer more capable models
+            available_models = self.config.get('model', 'available', default=[])
 
-        except ImportError:
-            logger.error("anthropic package not installed. Run: pip install anthropic")
+            # Prioritize coding models for plan generation
+            preferred_models = [
+                'qwen2.5-coder:7b',
+                'qwen2.5-coder:7b-instruct-q5_K_M',
+                'llama3.1:8b',
+                'qwen3:latest'
+            ]
+
+            for model in preferred_models:
+                if model in available_models:
+                    self.ollama_model = model
+                    break
+
+            logger.info(f"Ollama LLM initialized with model: {self.ollama_model}")
+
         except Exception as e:
             handle_exception(e, context={
                 'function': 'LLMPlanGenerator._initialize_llm',
-                'operation': 'initializing Anthropic client'
+                'operation': 'initializing Ollama configuration'
             })
+            # Fallback to default
+            self.ollama_model = 'llama3.1:8b'
 
     def _initialize_embeddings(self) -> None:
         """Initialize sentence transformer for embeddings."""
@@ -269,10 +290,10 @@ class LLMPlanGenerator:
             vanisher_context = self._get_vanisher_context(path)
 
             # Check if LLM is available
-            if not self.anthropic_client:
+            if not self.ollama_model:
                 return {
                     'success': False,
-                    'error': 'Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.'
+                    'error': 'Ollama model not configured. Check config.yaml for Ollama settings.'
                 }
 
             # Generate plan using LLM
@@ -346,7 +367,7 @@ class LLMPlanGenerator:
 
     def _call_llm_for_plan(self, task: str, pillars_docs: str, tool_descriptions: str,
                           vanisher_context: Dict[str, Any]) -> Dict[str, Any]:
-        """Call Anthropic LLM to generate plan.
+        """Call Ollama LLM to generate plan.
 
         Args:
             task: Task description
@@ -374,10 +395,10 @@ Sample content:
 {vanisher_context.get('content', '')[:2000]}
 
 # Pillars Methodology
-{pillars_docs[:10000]}
+{pillars_docs[:8000]}
 
 # Available MCP Tools
-{tool_descriptions[:8000]}
+{tool_descriptions[:6000]}
 
 # Instructions
 Generate a comprehensive implementation plan following the Pillars methodology (Step 4: Planning).
@@ -397,19 +418,30 @@ The plan MUST include:
 7. **mcp_tools_suggested**: List of MCP tools to use for each pillar step
 
 Return ONLY a valid JSON object with these fields. No explanation text outside the JSON.
+
+Example output format:
+{{
+  "type": "feature_implementation",
+  "task": "Add authentication",
+  "steps": [
+    {{"step": 1, "action": "Design API", "details": "...", "files": ["src/api.py"], "verification": "pytest tests/"}}
+  ],
+  "estimated_files_to_modify": ["src/api.py"],
+  "testing_requirements": ["Unit tests"],
+  "potential_risks": ["Breaking changes"],
+  "mcp_tools_suggested": ["explore_structure", "generate_diff"]
+}}
 """
 
-            # Call Anthropic API
-            message = self.anthropic_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=4000,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+            # Call Ollama
+            logger.info(f"Calling Ollama with model: {self.ollama_model}")
+            response_text, exec_time = ollama_generate(self.ollama_model, prompt)
 
-            # Parse response
-            response_text = message.content[0].text
+            logger.info(f"Ollama response received in {exec_time}ms")
+
+            # Check for errors
+            if response_text.startswith('ERROR:'):
+                raise Exception(response_text)
 
             # Extract JSON from response (handle potential markdown code blocks)
             import re
@@ -417,11 +449,39 @@ Return ONLY a valid JSON object with these fields. No explanation text outside t
             if json_match:
                 response_text = json_match.group(1)
 
+            # Try to find JSON even if not in code blocks
+            if not json_match:
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    response_text = json_match.group(0)
+
             plan = json.loads(response_text)
 
             logger.info("LLM plan generated successfully")
             return plan
 
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from LLM response: {e}")
+            logger.error(f"Response text: {response_text[:500]}")
+            handle_exception(e, context={
+                'function': 'LLMPlanGenerator._call_llm_for_plan',
+                'task': task,
+                'error_type': 'JSONDecodeError'
+            })
+            # Return a basic plan structure as fallback
+            return {
+                'type': 'general',
+                'task': task,
+                'steps': [
+                    {'step': 1, 'action': 'Analyze task', 'details': 'Review requirements and codebase'},
+                    {'step': 2, 'action': 'Implement changes', 'details': 'Make necessary code changes'},
+                    {'step': 3, 'action': 'Test changes', 'details': 'Run tests and verify functionality'}
+                ],
+                'estimated_files_to_modify': [],
+                'testing_requirements': ['Run existing test suite'],
+                'potential_risks': ['Unknown - LLM parsing failed'],
+                'error': f'LLM response parsing failed: {str(e)}'
+            }
         except Exception as e:
             handle_exception(e, context={
                 'function': 'LLMPlanGenerator._call_llm_for_plan',

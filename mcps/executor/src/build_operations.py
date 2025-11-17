@@ -264,6 +264,136 @@ class BuildOperationsTools:
             handle_exception(e, context={'function': 'create_virtual_env', 'path': path})
             return {'success': False, 'error': str(e)}
 
+    def install_in_virtual_env(self, path: str, venv_name: str = 'venv', packages: Optional[List[str]] = None, requirements_file: Optional[str] = None) -> Dict[str, Any]:
+        """Install Python packages in a virtual environment.
+
+        Args:
+            path: Working directory (mirror+vanisher)
+            venv_name: Name of the virtual environment directory
+            packages: Optional list of package names to install
+            requirements_file: Optional requirements.txt file path
+
+        Returns:
+            Installation result
+        """
+        try:
+            resolved_path = self.manager.resolve_path(path)
+            if not resolved_path:
+                return {'success': False, 'error': f'Path not found: {path}'}
+
+            venv_path = resolved_path / venv_name
+            if not venv_path.exists():
+                return {'success': False, 'error': f'Virtual environment not found: {venv_name}. Create it first with create_virtual_env'}
+
+            pip_executable = venv_path / 'bin' / 'pip'
+            if not pip_executable.exists():
+                return {'success': False, 'error': f'pip not found in virtual environment: {venv_name}'}
+
+            installed_packages = []
+
+            # Install from requirements file
+            if requirements_file:
+                req_file = resolved_path / requirements_file
+                if not req_file.exists():
+                    return {'success': False, 'error': f'Requirements file not found: {requirements_file}'}
+                
+                command = [str(pip_executable), 'install', '-r', requirements_file]
+                result = subprocess.run(
+                    command,
+                    cwd=str(resolved_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                
+                if result.returncode != 0:
+                    return {
+                        'success': False,
+                        'error': f'Failed to install from requirements file',
+                        'stdout': result.stdout,
+                        'stderr': result.stderr
+                    }
+                installed_packages.append(f'packages from {requirements_file}')
+
+            # Install individual packages
+            if packages:
+                for package in packages:
+                    command = [str(pip_executable), 'install', package]
+                    result = subprocess.run(
+                        command,
+                        cwd=str(resolved_path),
+                        capture_output=True,
+                        text=True,
+                        timeout=300
+                    )
+                    
+                    if result.returncode == 0:
+                        installed_packages.append(package)
+                    else:
+                        logger.warning(f"Failed to install {package}: {result.stderr}")
+
+            return {
+                'success': len(installed_packages) > 0,
+                'venv_name': venv_name,
+                'installed_packages': installed_packages,
+                'message': f'Installed {len(installed_packages)} package(s) in virtual environment {venv_name}'
+            }
+
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Package installation timed out'}
+        except Exception as e:
+            handle_exception(e, context={'function': 'install_in_virtual_env', 'path': path})
+            return {'success': False, 'error': str(e)}
+
+    def run_in_virtual_env(self, path: str, venv_name: str = 'venv', command: str = '', timeout: int = 30) -> Dict[str, Any]:
+        """Run a command in a virtual environment.
+
+        Args:
+            path: Working directory (mirror+vanisher)
+            venv_name: Name of the virtual environment directory
+            command: Command to run in the activated virtual environment
+            timeout: Execution timeout in seconds
+
+        Returns:
+            Command execution result
+        """
+        try:
+            resolved_path = self.manager.resolve_path(path)
+            if not resolved_path:
+                return {'success': False, 'error': f'Path not found: {path}'}
+
+            venv_path = resolved_path / venv_name
+            if not venv_path.exists():
+                return {'success': False, 'error': f'Virtual environment not found: {venv_name}. Create it first with create_virtual_env'}
+
+            # Build command that activates venv and runs the command
+            full_command = f'source {venv_name}/bin/activate && {command}'
+
+            result = subprocess.run(
+                ['bash', '-c', full_command],
+                cwd=str(resolved_path),
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+
+            return {
+                'success': result.returncode == 0,
+                'return_code': result.returncode,
+                'command': full_command,
+                'venv_name': venv_name,
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'working_directory': str(resolved_path)
+            }
+
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': f'Command timed out after {timeout} seconds'}
+        except Exception as e:
+            handle_exception(e, context={'function': 'run_in_virtual_env', 'path': path})
+            return {'success': False, 'error': str(e)}
+
+
     def run_docker_build(self, path: str, dockerfile: str = 'Dockerfile', tag: str = 'latest', build_args: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """Build a Docker image.
 

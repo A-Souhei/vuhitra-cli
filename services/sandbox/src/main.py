@@ -1577,10 +1577,42 @@ def api_get_ephemerals():
 @app.route('/api/contexts/vanishers', methods=['GET'])
 def api_get_vanishers():
     """API endpoint to get vanisher contexts"""
-    return jsonify({
-        'contexts': [],
-        'message': 'This endpoint requires the CLI to be running in coding mode (--coding flag)'
-    })
+    try:
+        if not redis_client:
+            return jsonify({
+                'contexts': [],
+                'message': 'Redis not available. Vanisher contexts cannot be displayed.'
+            })
+        
+        contexts = []
+        # Get all keys matching vanisher:*
+        for key in redis_client.scan_iter(match='vanisher:*'):
+            vanisher_data = redis_client.hgetall(key)
+            if vanisher_data:
+                contexts.append({
+                    'label': vanisher_data.get('label'),
+                    'file_path': vanisher_data.get('file_path'),
+                    'size_kb': float(vanisher_data.get('size_kb', 0)),
+                    'num_chunks': int(vanisher_data.get('num_chunks', 0)),
+                    'mirror_name': vanisher_data.get('mirror_name'),
+                    'loaded_at': vanisher_data.get('loaded_at')
+                })
+        
+        # Sort by label
+        contexts.sort(key=lambda x: x.get('label', ''))
+        
+        return jsonify({
+            'contexts': contexts,
+            'count': len(contexts),
+            'message': f'Found {len(contexts)} vanisher context(s)' if contexts else 'No vanisher contexts found. Load vanishers in CLI with /vanisher load @<directory>/'
+        })
+    except Exception as e:
+        logger.error(f"Error reading vanisher contexts: {e}")
+        return jsonify({
+            'contexts': [],
+            'error': str(e),
+            'message': 'Failed to read vanisher contexts'
+        }), 500
 
 
 # MCP Management Functions
@@ -1675,7 +1707,7 @@ if redis_client:
         mcp_id='executor',
         name='Executor MCP',
         description='Code execution and file operations on mirrored directories for building and running code',
-        tools_count=24,  # Code execution, file ops, build ops, directory ops
+        tools_count=26,  # 2 mirror+vanisher, 4 code exec, 6 file ops, 8 build ops (inc. venv), 6 dir ops
         resources_count=0,
         always_enabled=True  # Cannot be manually toggled - managed by coding mode
     )

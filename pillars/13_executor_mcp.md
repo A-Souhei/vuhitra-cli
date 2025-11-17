@@ -87,7 +87,7 @@ Then send JSON-RPC requests via stdin.
 
 ## Tool Categories
 
-The Executor MCP provides 24 tools organized into 5 categories:
+The Executor MCP provides 26 tools organized into 5 categories:
 
 ### 1. Mirror+Vanisher Management (2 tools)
 - `list_mirror_vanishers` - List available directories
@@ -107,12 +107,14 @@ The Executor MCP provides 24 tools organized into 5 categories:
 - `copy_file` - Copy files
 - `move_file` - Move/rename files
 
-### 4. Build & Package Management (6 tools)
+### 4. Build & Package Management (8 tools)
 - `install_pip_packages` - Install Python packages
 - `install_npm_packages` - Install Node.js packages
 - `run_build_command` - Run build tools
 - `compile_python` - Compile Python bytecode
 - `create_virtual_env` - Create Python venv
+- `install_in_virtual_env` - Install packages in venv
+- `run_in_virtual_env` - Run commands in venv
 - `run_docker_build` - Build Docker images
 
 ### 5. Directory Operations (6 tools)

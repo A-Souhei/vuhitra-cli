@@ -199,6 +199,53 @@ class VanisherContextManager(EmbeddingCacheMixin):
             })
             return False, None
 
+    def _register_vanisher_in_redis(self, label: str, file_path: str, size_kb: float, num_chunks: int, mirror_name: str):
+        """Register a vanisher in Redis for web UI visibility.
+
+        Args:
+            label: Vanisher label
+            file_path: Original file path
+            size_kb: Size in KB
+            num_chunks: Number of chunks
+            mirror_name: Associated mirror name
+        """
+        if not self.redis_client:
+            return
+
+        try:
+            vanisher_data = {
+                'label': label,
+                'file_path': file_path,
+                'size_kb': f"{size_kb:.1f}",
+                'num_chunks': str(num_chunks),
+                'mirror_name': mirror_name,
+                'loaded_at': datetime.now().isoformat()
+            }
+            self.redis_client.hset(f'vanisher:{label}', mapping=vanisher_data)
+        except Exception as e:
+            # Don't fail the load operation if Redis registration fails
+            handle_exception(e, context={
+                'function': '_register_vanisher_in_redis',
+                'label': label
+            })
+
+    def _unregister_vanisher_from_redis(self, label: str):
+        """Remove a vanisher from Redis.
+
+        Args:
+            label: Vanisher label to remove
+        """
+        if not self.redis_client:
+            return
+
+        try:
+            self.redis_client.delete(f'vanisher:{label}')
+        except Exception as e:
+            handle_exception(e, context={
+                'function': '_unregister_vanisher_from_redis',
+                'label': label
+            })
+
     def load_file(self, file_path: str, label: Optional[str] = None, description: Optional[str] = None) -> Tuple[bool, str]:
         """Load a file into vanisher context if it's mirrored.
 
@@ -225,15 +272,10 @@ class VanisherContextManager(EmbeddingCacheMixin):
             if not path.is_file():
                 return False, f"Not a file: {file_path}"
 
-            # Generate mirror name from parent directory (not the file itself)
-            # Vanishers work with mirrored directories, so check if parent dir is mirrored
-            # Use full parent path to avoid naming conflicts between different directories
-            # that happen to have the same parent directory name
-            import hashlib
-            parent_path_str = str(path.parent.resolve())
-            # Create a unique mirror name using parent dir name + hash of full path
-            path_hash = hashlib.md5(parent_path_str.encode()).hexdigest()[:8]
-            mirror_name = f"{path.parent.name}_{path_hash}"
+            # Generate mirror name from parent directory
+            # The mirror system uses simple directory names without hashes
+            # So we should check for the parent directory name directly
+            mirror_name = path.parent.name
 
             # Check if parent directory is mirrored
             is_mirrored, mirror_info = self._check_mirror_exists(mirror_name)
@@ -318,8 +360,13 @@ class VanisherContextManager(EmbeddingCacheMixin):
             # Add to contexts
             self.contexts.append(context)
 
-            # Build success message
+            # Get size for message
             size_kb = context.get_size_kb()
+
+            # Register in Redis for web UI visibility
+            self._register_vanisher_in_redis(label, str(path), size_kb, len(context.chunks), mirror_name)
+
+            # Build success message
             if context.is_chunked():
                 msg = f"✓ Loaded vanisher '{label}' ({size_kb:.1f} KB, {len(context.chunks)} chunks, {len(context.chunk_embeddings)} embeddings) [mirrored as '{mirror_name}']"
             else:
@@ -479,6 +526,11 @@ class VanisherContextManager(EmbeddingCacheMixin):
             Number of contexts cleared
         """
         count = len(self.contexts)
+        
+        # Unregister all from Redis
+        for ctx in self.contexts:
+            self._unregister_vanisher_from_redis(ctx.label)
+        
         self.contexts.clear()
         return count
 
@@ -495,6 +547,8 @@ class VanisherContextManager(EmbeddingCacheMixin):
             for i, ctx in enumerate(self.contexts):
                 if ctx.label == label:
                     self.contexts.pop(i)
+                    # Unregister from Redis
+                    self._unregister_vanisher_from_redis(label)
                     return True
             return False
 

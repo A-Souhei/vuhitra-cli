@@ -290,6 +290,34 @@ class MCPServer:
                 },
                 "handler": self.build_operations.create_virtual_env
             },
+            "install_in_virtual_env": {
+                "description": "Install Python packages in an existing virtual environment using pip in a mirror+vanisher directory. Use this when you need to install packages in an isolated venv, manage venv-specific dependencies, install libraries without affecting global Python, set up project dependencies in virtual environment, or add packages to an existing venv. Locates virtual environment, uses venv's pip executable, installs from package list or requirements.txt, validates venv existence, reports installed packages, and ensures isolation. Returns installation status with venv name, installed packages list, and success indicator. Essential for managing isolated Python dependencies, installing packages in project-specific environments, and maintaining clean dependency separation.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Working directory (mirror+vanisher)"},
+                        "venv_name": {"type": "string", "description": "Name of the virtual environment directory", "default": "venv"},
+                        "packages": {"type": "array", "items": {"type": "string"}, "description": "Optional list of package names to install"},
+                        "requirements_file": {"type": "string", "description": "Optional requirements.txt file path"}
+                    },
+                    "required": ["path"]
+                },
+                "handler": self.build_operations.install_in_virtual_env
+            },
+            "run_in_virtual_env": {
+                "description": "Run commands in an activated virtual environment in a mirror+vanisher directory. Use this when you need to execute Python scripts with venv-installed packages, run commands using venv Python interpreter, test code in isolated environment, execute tools installed in venv, run development commands with project dependencies, or perform operations using venv-specific packages. Activates virtual environment, executes command in venv context, uses venv's Python and packages, captures output, validates venv existence, and reports execution results. Returns execution status with command output, return code, venv name, and success indicator. Essential for running code with isolated dependencies, testing in virtual environments, and executing venv-specific tools and scripts.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Working directory (mirror+vanisher)"},
+                        "venv_name": {"type": "string", "description": "Name of the virtual environment directory", "default": "venv"},
+                        "command": {"type": "string", "description": "Command to run in the activated virtual environment"},
+                        "timeout": {"type": "integer", "description": "Execution timeout in seconds", "default": 30}
+                    },
+                    "required": ["path", "command"]
+                },
+                "handler": self.build_operations.run_in_virtual_env
+            },
             "run_docker_build": {
                 "description": "Build Docker container images from Dockerfiles in a mirror+vanisher directory with optional build arguments and custom tags for containerization. Use this when you need to build Docker images for applications, containerize applications, create Docker containers from Dockerfiles, build images with specific tags, pass build arguments to Docker builds, create deployable container images, or automate Docker image creation. Executes docker build command, supports custom Dockerfiles, allows image tagging, accepts build arguments, captures build output and logs, validates build success, and reports image creation. Returns build status with image tag, command executed, stdout/stderr output, return code, and build success indicator. Essential for containerization workflows, building application containers, creating Docker images, automating container builds, and deploying containerized applications.",
                 "inputSchema": {

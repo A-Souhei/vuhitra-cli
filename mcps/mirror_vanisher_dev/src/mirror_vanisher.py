@@ -22,7 +22,7 @@ class MirrorVanisherManager:
 
     def __init__(self):
         """Initialize the manager."""
-        self.sandbox_url = os.getenv('SANDBOX_URL', 'http://localhost:5000')
+        self.sandbox_url = os.getenv('SANDBOX_URL', 'http://localhost:18001')
         self.workspace_path = Path(os.getenv('WORKSPACE_PATH', '/app/WORKSPACE'))
         self.mirrors_path = self.workspace_path / 'mirrors'
 
@@ -61,7 +61,7 @@ class MirrorVanisherManager:
         """
         try:
             response = requests.get(
-                f"{self.sandbox_url}/mirrors",
+                f"{self.sandbox_url}/mirror-list",
                 timeout=5
             )
 
@@ -151,7 +151,12 @@ class MirrorVanisherManager:
             is_vanisher = self._check_vanisher_exists(name)
 
             # Check if it's a directory mirror
-            is_directory = mirror_info.get('type') == 'directory' if mirror_info else False
+            # Handle both 'type' == 'directory' and 'is_file' == False
+            if mirror_info:
+                is_directory = (mirror_info.get('type') == 'directory' or
+                              mirror_info.get('is_file') == False)
+            else:
+                is_directory = False
 
             is_valid = is_mirror and is_vanisher and is_directory
 

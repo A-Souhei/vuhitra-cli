@@ -199,7 +199,12 @@ class CodeTools:
                 }
 
             # Determine the command based on file extension
-            command = self._build_command(file_path, args or [])
+            # For Python, check for venv and use it if available
+            venv_python = None
+            if file_path.suffix.lower() == '.py':
+                venv_python = self._detect_venv(vanisher_dir)
+
+            command = self._build_command(file_path, args or [], venv_python=venv_python)
 
             if not command:
                 return {
@@ -223,7 +228,7 @@ class CodeTools:
                 env=run_env
             )
 
-            return {
+            response = {
                 'success': result.returncode == 0,
                 'vanisher': vanisher_name,
                 'filename': filename,
@@ -233,6 +238,13 @@ class CodeTools:
                 'stderr': result.stderr,
                 'command': ' '.join(command)
             }
+
+            # Indicate if venv was used
+            if venv_python:
+                response['venv_used'] = True
+                response['venv_python'] = str(venv_python)
+
+            return response
 
         except subprocess.TimeoutExpired:
             return {
@@ -283,12 +295,46 @@ class CodeTools:
         suffix = Path(filename).suffix.lower()
         return ext_map.get(suffix, 'unknown')
 
-    def _build_command(self, file_path: Path, args: List[str]) -> Optional[List[str]]:
+    def _detect_venv(self, directory: Path) -> Optional[Path]:
+        """Detect virtual environment in directory.
+
+        Checks common venv directory names and returns the Python executable
+        if a valid venv is found.
+
+        Args:
+            directory: Directory to search for venv
+
+        Returns:
+            Path to venv Python executable or None
+        """
+        # Common venv directory names
+        venv_names = ['venv', '.venv', 'env', '.env']
+
+        for venv_name in venv_names:
+            venv_dir = directory / venv_name
+
+            if venv_dir.exists() and venv_dir.is_dir():
+                # Check for Python executable (Unix-style)
+                python_path = venv_dir / 'bin' / 'python'
+                if python_path.exists():
+                    logger.info(f"Found venv at {venv_dir}")
+                    return python_path
+
+                # Check for Python executable (Windows-style)
+                python_path = venv_dir / 'Scripts' / 'python.exe'
+                if python_path.exists():
+                    logger.info(f"Found venv at {venv_dir}")
+                    return python_path
+
+        return None
+
+    def _build_command(self, file_path: Path, args: List[str], venv_python: Optional[Path] = None) -> Optional[List[str]]:
         """Build the command to execute a file.
 
         Args:
             file_path: Path to the file
             args: Command-line arguments
+            venv_python: Optional path to venv Python executable
 
         Returns:
             List of command parts or None if unsupported
@@ -296,7 +342,9 @@ class CodeTools:
         suffix = file_path.suffix.lower()
 
         if suffix == '.py':
-            return ['python', str(file_path)] + args
+            # Use venv Python if available, otherwise system Python
+            python_cmd = str(venv_python) if venv_python else 'python'
+            return [python_cmd, str(file_path)] + args
         elif suffix == '.js':
             return ['node', str(file_path)] + args
         elif suffix in ['.sh', '.bash']:

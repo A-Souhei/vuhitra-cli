@@ -10,11 +10,12 @@ Available only in coding mode.
 
 import json
 import sys
+import os
 import logging
 from typing import Dict, Any
 
 # Add src to path
-sys.path.insert(0, 'src')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from vanisher_manager import VanisherManager
 from code_tools import CodeTools
@@ -248,70 +249,6 @@ Returns exit code, stdout, stderr, and whether venv was used.""",
                     "required": ["vanisher_name", "packages"]
                 },
                 "handler": self.code_tools.pip_install
-            },
-
-            # Vanisher Management
-            "list_vanishers": {
-                "description": """List all vanisher directories.
-
-Returns a list of all vanisher directories that have been created,
-along with their file counts. Use this to see available workspaces
-and their contents.
-
-Returns list of vanisher names, paths, and file counts.""",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                },
-                "handler": self.manager.list_vanishers
-            },
-
-            "list_files": {
-                "description": """List all files in a vanisher directory.
-
-Returns a detailed list of all files in a specific vanisher directory,
-including their relative paths and sizes. Useful for exploring the
-workspace contents.
-
-Parameters:
-- vanisher_name: Name of the vanisher directory to list
-
-Returns list of files with names, paths, and sizes.""",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "vanisher_name": {
-                            "type": "string",
-                            "description": "Name of the vanisher directory"
-                        }
-                    },
-                    "required": ["vanisher_name"]
-                },
-                "handler": self.manager.list_files
-            },
-
-            "delete_vanisher": {
-                "description": """Delete a vanisher directory and all its contents.
-
-Permanently removes a vanisher directory and all files within it.
-Use with caution as this operation cannot be undone.
-
-Parameters:
-- name: Name of the vanisher directory to delete
-
-Returns success status and confirmation message.""",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Name of the vanisher directory to delete"
-                        }
-                    },
-                    "required": ["name"]
-                },
-                "handler": self.manager.delete_vanisher
             }
         }
 

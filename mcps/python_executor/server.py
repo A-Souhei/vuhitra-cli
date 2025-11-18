@@ -51,18 +51,31 @@ class PythonExecutorMCPServer:
         return {
             # Code Operations
             "write_code": {
-                "description": """Write code to a file in a vanisher directory.
+                "description": """Write code to a file in a vanisher directory for code generation and implementation.
 
-Creates a new file or overwrites an existing file with the provided code content.
+Creates a new file or performs a full file overwrite with the provided code content in a safe and traceable manner.
 The vanisher directory will be automatically created if it doesn't exist.
 
+This tool implements Step 5 (Code Generation) of the pillars methodology by providing full file overwrite capability for code generation tasks.
+
 Use this tool when you need to:
-- Create a new code file from scratch
-- Completely replace the contents of an existing file
+- Generate new code files as part of an implementation plan
+- Perform full file overwrite for small files or complete rewrites
+- Create source files following project style conventions
+- Implement new features by writing code to specific file paths
+- Create test files for testing and verification workflows
+- Write configuration files or scripts for automation
 - Start a new coding project in a clean workspace
 
 The tool automatically detects the programming language from the file extension
 and reports useful metadata like file size and line count.
+
+Code Quality Standards:
+- Follow project style conventions
+- Include docstrings/comments for complex logic
+- Handle errors appropriately
+- Use proper type hints if applicable
+- Ensure code is testable and maintainable
 
 Parameters:
 - vanisher_name: Name of the vanisher directory (workspace)
@@ -70,7 +83,7 @@ Parameters:
 - code: The complete code content to write
 - language: Optional language hint (auto-detected from extension if not provided)
 
-Returns success status, file path, detected language, and file statistics.""",
+Returns success status, file path, detected language, and file statistics. Essential for code generation workflows and implementation plan execution.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -97,20 +110,30 @@ Returns success status, file path, detected language, and file statistics.""",
             },
 
             "update_code": {
-                "description": """Update code in an existing file by replacing a specific section.
+                "description": """Update code in an existing file using search-and-replace pattern for targeted changes.
 
-Performs a precise find-and-replace operation on existing code. This is useful
-for making targeted modifications without rewriting the entire file.
+Performs a precise search-and-replace operation on existing code in a safe and traceable manner.
+This implements the search-and-replace method from Step 5 (Code Generation) of the pillars methodology.
 
 Use this tool when you need to:
-- Fix a bug in existing code
-- Update a specific function or class
-- Modify imports or configuration
-- Refactor a particular code section
+- Apply targeted changes to specific code sections without full file overwrite
+- Fix bugs by modifying only necessary lines
+- Implement fixes from an implementation plan
+- Update specific functions, classes, or code blocks
+- Refactor particular code sections while preserving existing code style
+- Modify imports, configuration, or specific logic
+- Apply changes from unified diff or patch generation
 
 The tool ensures the old_code exists exactly once in the file to prevent
 accidental multiple replacements. If the old_code is not found or appears
 multiple times, the operation will fail with helpful error messages.
+
+Code Quality Standards:
+- Only modify necessary lines - no unrelated changes
+- Preserve existing code style and formatting
+- Add comments for complex logic
+- Include error handling where appropriate
+- Follow project conventions
 
 Parameters:
 - vanisher_name: Name of the vanisher directory
@@ -118,7 +141,7 @@ Parameters:
 - old_code: The exact code section to find and replace (must match perfectly)
 - new_code: The replacement code
 
-Returns success status and details about the change (lines affected, size change).""",
+Returns success status and details about the change (lines affected, size change). Essential for implementing bug fixes and targeted refactoring.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -145,26 +168,38 @@ Returns success status and details about the change (lines affected, size change
             },
 
             "run_code": {
-                "description": """Run code from a file in a vanisher directory.
+                "description": """Run code from a file in a vanisher directory for testing and verification.
 
 Executes the code file using the appropriate interpreter based on file extension.
-Captures both stdout and stderr output for analysis.
+Captures both stdout and stderr output for analysis and verification.
+
+This tool implements Step 6 (Testing and Verification) of the pillars methodology by providing code execution capability for running tests and validating implementations.
 
 Supported file types:
-- .py: Python (using python interpreter)
-- .js: JavaScript (using node)
-- .r, .R: R scripts (using Rscript)
-- .sh, .bash: Shell scripts (using bash)
+- .py: Python (using python interpreter) - for unit tests, integration tests, and scripts
+- .js: JavaScript (using node) - for Node.js tests and scripts
+- .r, .R: R scripts (using Rscript) - for data analysis and statistical tests
+- .sh, .bash: Shell scripts (using bash) - for automation and build scripts
 
 Use this tool when you need to:
-- Test code you've written
-- Run scripts and capture output
-- Execute build or test commands
-- Validate code functionality
+- Execute tests for testing and verification of implementations
+- Run unit tests, integration tests, or edge case tests
+- Validate code functionality after code generation
+- Execute test commands (pytest, npm test, etc.)
+- Verify changes by running test suites
+- Run scripts and capture output for analysis
+- Execute build or automation commands
+- Validate implementations from implementation plans
 
 The execution runs with a configurable timeout (default 30 seconds) to prevent
 hanging processes. You can pass command-line arguments and custom environment
 variables as needed.
+
+Testing Best Practices:
+- Run tests after every code change
+- Capture output for verification
+- Check exit codes for test pass/fail status
+- Use timeouts to prevent hanging tests
 
 Parameters:
 - vanisher_name: Name of the vanisher directory
@@ -173,7 +208,7 @@ Parameters:
 - timeout: Execution timeout in seconds (default: 30)
 - env: Optional dictionary of environment variables
 
-Returns exit code, stdout, stderr, and the command that was executed.""",
+Returns exit code, stdout, stderr, and the command that was executed. Essential for testing and verification workflows and validating implementation plans.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -207,27 +242,40 @@ Returns exit code, stdout, stderr, and the command that was executed.""",
             },
 
             "pip_install": {
-                "description": """Install Python packages using pip in a vanisher directory.
+                "description": """Install Python packages using pip in a vanisher directory for dependency management.
 
 Installs packages into the virtual environment if one exists in the vanisher
-directory, otherwise uses the system pip. This is useful for setting up
-dependencies before running Python code.
+directory, otherwise uses the system pip. This is essential for setting up
+project dependencies before code generation and testing workflows.
+
+This tool supports the pillars methodology by enabling proper environment setup
+for code execution, testing, and verification phases.
 
 Use this tool when you need to:
-- Install dependencies for a Python project
-- Add new packages to an existing venv
-- Set up the environment before running code
+- Install dependencies as part of an implementation plan
+- Set up testing frameworks (pytest, unittest) for testing and verification
+- Add packages required for code generation tasks
+- Install libraries needed by generated code
+- Set up the environment before running tests
+- Add development dependencies for quality checks
+- Install packages with version specifiers for reproducible builds
 
 The tool automatically detects and uses the venv if present (checks venv,
 .venv, env, .env directories). Installation has a longer default timeout
 (300 seconds) to accommodate large packages.
+
+Best Practices:
+- Install dependencies early in implementation workflows
+- Use version specifiers for reproducible environments
+- Install test frameworks before running tests
+- Use virtual environments for isolation
 
 Parameters:
 - vanisher_name: Name of the vanisher directory
 - packages: List of package names to install (supports version specifiers like 'numpy>=1.20')
 - timeout: Installation timeout in seconds (default: 300)
 
-Returns exit code, stdout, stderr, and whether venv was used.""",
+Returns exit code, stdout, stderr, and whether venv was used. Essential for setting up environments for code generation and testing workflows.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -253,18 +301,24 @@ Returns exit code, stdout, stderr, and whether venv was used.""",
 
             # Vanisher Management Tools
             "list_vanishers": {
-                "description": """List all vanisher directories.
+                "description": """List all vanisher directories for exploring available workspaces.
 
-Enumerates all vanisher workspaces available for code execution. Each vanisher
-is an isolated directory where you can write, update, and run code.
+Enumerates all vanisher workspaces available for code generation, testing, and execution.
+Each vanisher is an isolated directory where you can write, update, and run code
+following the pillars methodology.
+
+This tool supports Step 1 (Exploration) by helping you discover available workspaces
+for implementation plans and development workflows.
 
 Use this tool when you need to:
-- See what vanisher directories exist
-- Find available workspaces
+- Explore available workspaces before starting an implementation plan
+- See what vanisher directories exist for code generation
+- Find workspaces ready for testing and verification
 - Check vanisher directory contents
 - Discover existing code projects
+- Identify workspaces for new feature implementation
 
-Returns a list of vanisher directories with their names, paths, and file counts.""",
+Returns a list of vanisher directories with their names, paths, and file counts. Essential for exploration and planning workflows.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {},
@@ -274,21 +328,28 @@ Returns a list of vanisher directories with their names, paths, and file counts.
             },
 
             "list_files": {
-                "description": """List all files in a vanisher directory.
+                "description": """List all files in a vanisher directory for exploring codebase structure.
 
 Shows all files present in a specific vanisher workspace, including files
-in subdirectories. Useful for exploring vanisher contents and finding files.
+in subdirectories. Essential for understanding project structure before
+code generation and identifying files for testing and verification.
+
+This tool supports Step 1 (Exploration) of the pillars methodology by enabling
+codebase exploration and file discovery within vanisher workspaces.
 
 Use this tool when you need to:
-- See what files exist in a vanisher
-- Find specific files by name
-- Check directory structure
-- Explore vanisher contents before operations
+- Explore codebase structure before implementing features
+- See what files exist for understanding project organization
+- Find specific files to modify in an implementation plan
+- Check directory structure for architecture analysis
+- Identify test files for testing and verification workflows
+- Discover source files for code generation tasks
+- Find files to read for context before making changes
 
 Parameters:
 - vanisher_name: Name of the vanisher directory to list
 
-Returns a list of files with their names, full paths, and sizes.""",
+Returns a list of files with their names, full paths, and sizes. Essential for exploration and planning phases of development workflows.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -303,21 +364,23 @@ Returns a list of files with their names, full paths, and sizes.""",
             },
 
             "delete_vanisher": {
-                "description": """Delete a vanisher directory and all its contents.
+                "description": """Delete a vanisher directory and all its contents for workspace cleanup.
 
 Permanently removes a vanisher workspace and all files within it. This action
 cannot be undone, so use with caution.
 
 Use this tool when you need to:
-- Clean up temporary workspaces
+- Clean up temporary workspaces after completing implementation plans
 - Remove obsolete vanisher directories
-- Free up disk space
-- Reset a workspace completely
+- Free up disk space after testing and verification is complete
+- Reset a workspace completely for new projects
+- Remove failed or abandoned code generation attempts
+- Clean up after build and test cycles
 
 Parameters:
 - name: Name of the vanisher directory to delete
 
-Returns success status and confirmation message.""",
+Returns success status and confirmation message. Use as part of cleanup phase in development workflows.""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {

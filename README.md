@@ -19,6 +19,141 @@ A minimalist CLI tool to interact with Ollama LLMs, featuring comprehensive erro
 - 🎨 **Clean, maintainable codebase** with modern Python practices
 - 🧠 **Semantic context filtering** with embedding-based relevance matching
 - 💾 **Redis caching** for high-performance embedding storage
+- 🔌 **MCP Servers** for code execution and development operations
+
+## 🔌 MCP Servers
+
+vuhitra-cli includes three Model Context Protocol (MCP) servers for code execution and development operations. These are available in **coding mode only**.
+
+### 1. Executor MCP (26 tools)
+
+Code execution and file operations on mirror+vanisher directories.
+
+**Mirror+Vanisher Management (2 tools)**
+- `list_mirror_vanishers` - List all mirror+vanisher directories
+- `verify_mirror_vanisher` - Verify directory setup
+
+**Code Execution (4 tools)**
+- `execute_python_code` - Run Python scripts
+- `execute_javascript_code` - Run JavaScript/Node.js scripts
+- `execute_shell_command` - Execute shell commands
+- `execute_code_snippet` - Run code snippets dynamically
+
+**File Operations (6 tools)**
+- `create_file` - Create new files
+- `update_file` - Update existing files
+- `append_to_file` - Append to files
+- `delete_file` - Delete files with backup
+- `copy_file` - Copy files
+- `move_file` - Move/rename files
+
+**Build Operations (6 tools)**
+- `install_pip_packages` - Install Python packages
+- `install_npm_packages` - Install Node.js packages
+- `run_build_command` - Run build tools
+- `compile_python` - Compile Python to bytecode
+- `create_virtual_env` - Create Python venv
+- `run_docker_build` - Build Docker images
+
+**Directory Operations (6 tools)**
+- `create_directory` - Create directories
+- `create_directory_structure` - Create directory trees
+- `delete_directory` - Delete directories with backup
+- `copy_directory` - Copy directory trees
+- `move_directory` - Move/rename directories
+- `list_directory_contents` - List directory contents
+
+### 2. Mirror+Vanisher Development MCP (31 tools)
+
+LLM-driven development operations implementing an 8-step methodology.
+
+**Step 1: Exploration (4 tools)**
+- `explore_structure` - Generate directory tree
+- `detect_tech_stack` - Identify languages and frameworks
+- `find_entrypoints` - Locate main executable files
+- `full_exploration` - Combined exploration
+
+**Step 2: Architecture (3 tools)**
+- `analyze_architecture` - Identify architectural patterns
+- `map_dependencies` - Map imports and dependencies
+- `identify_patterns` - Find design patterns
+
+**Step 3: Chunking (2 tools)**
+- `chunk_file` - Break large file into chunks
+- `chunk_directory` - Create chunking strategy
+
+**Step 4: Planning (2 tools)**
+- `create_plan` - Generate implementation plan
+- `validate_plan` - Check plan completeness
+
+**Step 5: Code Generation (3 tools)**
+- `generate_diff` - Create code diff preview
+- `apply_changes` - Apply changes with backups
+- `rewrite_file` - Completely rewrite a file
+
+**Step 6: Testing (3 tools)**
+- `generate_tests` - Create test templates
+- `run_tests` - Execute tests
+- `verify_changes` - Run tests for changed files
+
+**Step 7: Quality Checks (4 tools)**
+- `run_linter` - Run linter
+- `run_formatter` - Format code
+- `run_type_checker` - Check types
+- `full_quality_check` - Combined quality checks
+
+**Step 8: Security (3 tools)**
+- `scan_secrets` - Find hardcoded secrets
+- `check_vulnerabilities` - Scan dependencies
+- `security_audit` - Complete security scan
+
+**Multi-Step Workflows (3 tools)**
+- `complete_feature_workflow` - End-to-end feature implementation
+- `bugfix_workflow` - Bug analysis and fix workflow
+- `refactor_workflow` - Refactoring workflow
+
+### 3. Python Executor MCP (7 tools)
+
+Lightweight code execution in vanisher directories with venv auto-detection.
+
+**Code Operations (4 tools)**
+- `write_code` - Write code to a file
+- `update_code` - Update code with find-and-replace
+- `run_code` - Execute code (Python, JavaScript, R, Shell)
+- `pip_install` - Install Python packages
+
+**Vanisher Management (3 tools)**
+- `list_vanishers` - List all vanisher directories
+- `list_files` - List files in a vanisher directory
+- `delete_vanisher` - Delete a vanisher directory
+
+**Features:**
+- Auto-detects and uses venv for Python (venv, .venv, env, .env)
+- Supports Python (.py), JavaScript (.js), R (.r, .R), Shell (.sh, .bash)
+- 300 second timeout for package installation
+
+### MCP Configuration
+
+Add to your Claude Desktop MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "executor": {
+      "command": "python",
+      "args": ["/path/to/vuhitra-cli/mcps/executor/server.py"]
+    },
+    "mirror-vanisher-dev": {
+      "command": "python",
+      "args": ["/path/to/vuhitra-cli/mcps/mirror_vanisher_dev/server.py"]
+    },
+    "python-executor": {
+      "command": "python",
+      "args": ["/path/to/vuhitra-cli/mcps/python_executor/server.py"]
+    }
+  }
+}
+```
 
 ## 🚀 Quick Start
 

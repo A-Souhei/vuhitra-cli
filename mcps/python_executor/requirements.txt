@@ -1,0 +1,5 @@
+# Python Executor MCP Dependencies
+# No external dependencies required for MCP server - uses standard library only
+
+# Web UI Dependencies (optional - only needed for ui_server.py)
+flask>=2.3.0

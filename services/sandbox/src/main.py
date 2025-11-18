@@ -1762,60 +1762,111 @@ def populate_mcp_tools_from_server(mcp_id, server_path):
         return False
 
 
-# Initialize Mirror+Vanisher MCP in Redis
-# This MCP is always_enabled=True meaning it's managed by coding mode
-# The 'enabled' field will be set based on coding mode, but 'always_enabled'
-# stays True to prevent manual toggling
-if redis_client:
+def discover_and_initialize_mcps():
+    """
+    Dynamically discover and initialize all MCP servers from the mcps/ directory.
+    
+    Scans for directories containing server.py files and automatically registers them.
+    Uses a config file (mcp_config.json) if available, otherwise uses sensible defaults.
+    """
+    if not redis_client:
+        logger.warning("Redis client not available, skipping MCP initialization")
+        return
+    
     is_coding_mode = get_coding_mode_status()
     
-    # Register Mirror+Vanisher Dev MCP
-    register_mcp_in_redis(
-        mcp_id='mirror-vanisher-dev',
-        name='Mirror+Vanisher Development MCP',
-        description='LLM-driven development operations on mirrored directories loaded into context',
-        tools_count=18,  # Based on our test results
-        resources_count=0,
-        always_enabled=True  # Cannot be manually toggled - managed by coding mode
-    )
-    # Set enabled status based on current coding mode
-    toggle_mcp_enabled('mirror-vanisher-dev', is_coding_mode)
+    # MCP configuration - maps directory name to MCP metadata
+    # This can be externalized to a JSON file if needed
+    mcp_configs = {
+        'mirror_vanisher_dev': {
+            'mcp_id': 'mirror-vanisher-dev',
+            'name': 'Mirror+Vanisher Development MCP',
+            'description': 'LLM-driven development operations on mirrored directories loaded into context',
+            'always_enabled': True,  # Managed by coding mode
+        },
+        'executor': {
+            'mcp_id': 'executor',
+            'name': 'Executor MCP',
+            'description': 'Code execution and file operations on mirrored directories for building and running code',
+            'always_enabled': True,  # Managed by coding mode
+        },
+        'python_executor': {
+            'mcp_id': 'python-executor',
+            'name': 'Python Executor MCP',
+            'description': 'Code execution tools for vanisher directories - write, update, run code and manage Python packages',
+            'always_enabled': True,  # Managed by coding mode
+        },
+    }
     
-    # Populate tools list from MCP server
-    # Try multiple possible paths (Docker vs host)
-    logger.info("Attempting to populate Mirror+Vanisher tools...")
-    mirror_vanisher_paths = [
-        Path('/app/mcps/mirror_vanisher_dev/server.py'),  # If mounted in Docker
-        Path(__file__).parent.parent.parent / 'mcps' / 'mirror_vanisher_dev' / 'server.py',  # Relative path
+    # Possible base paths for MCP servers
+    base_paths = [
+        Path('/app/mcps'),  # Docker mount
+        Path(__file__).parent.parent.parent / 'mcps',  # Relative from this file
     ]
-    for path in mirror_vanisher_paths:
-        logger.info(f"Trying path: {path}")
-        if populate_mcp_tools_from_server('mirror-vanisher-dev', path):
+    
+    # Find the first existing base path
+    mcps_base = None
+    for base in base_paths:
+        if base.exists() and base.is_dir():
+            mcps_base = base
+            logger.info(f"Found MCPs directory at: {mcps_base}")
             break
+    
+    if not mcps_base:
+        logger.warning("No MCPs directory found, skipping MCP initialization")
+        return
+    
+    # Discover all MCP directories
+    for mcp_dir in mcps_base.iterdir():
+        if not mcp_dir.is_dir() or mcp_dir.name.startswith('.'):
+            continue
+        
+        server_file = mcp_dir / 'server.py'
+        if not server_file.exists():
+            logger.debug(f"Skipping {mcp_dir.name} - no server.py found")
+            continue
+        
+        # Get config or use defaults
+        config = mcp_configs.get(mcp_dir.name, {
+            'mcp_id': mcp_dir.name.replace('_', '-'),
+            'name': f"{mcp_dir.name.replace('_', ' ').title()} MCP",
+            'description': f'MCP server from {mcp_dir.name}',
+            'always_enabled': False,
+        })
+        
+        mcp_id = config['mcp_id']
+        
+        logger.info(f"Initializing MCP: {mcp_id} from {mcp_dir.name}")
+        
+        # Register MCP in Redis with placeholder count (will be updated by populate)
+        register_mcp_in_redis(
+            mcp_id=mcp_id,
+            name=config['name'],
+            description=config['description'],
+            tools_count=0,  # Will be updated after querying the server
+            resources_count=0,
+            always_enabled=config.get('always_enabled', False)
+        )
+        
+        # Set enabled status based on coding mode for always_enabled MCPs
+        if config.get('always_enabled'):
+            toggle_mcp_enabled(mcp_id, is_coding_mode)
+        
+        # Populate tools list from MCP server
+        logger.info(f"Attempting to populate tools for {mcp_id}...")
+        if populate_mcp_tools_from_server(mcp_id, server_file):
+            # Update tools count in Redis based on actual query
+            tools_json = redis_client.get(f'mcp:{mcp_id}:tools')
+            if tools_json:
+                tools = json.loads(tools_json)
+                redis_client.hset(f'mcp:{mcp_id}', 'tools_count', len(tools))
+                logger.info(f"Updated {mcp_id} tools_count to {len(tools)}")
+        else:
+            logger.warning(f"Failed to populate tools for {mcp_id}")
 
-    # Initialize Executor MCP in Redis
-    # This MCP is also always_enabled=True and managed by coding mode
-    register_mcp_in_redis(
-        mcp_id='executor',
-        name='Executor MCP',
-        description='Code execution and file operations on mirrored directories for building and running code',
-        tools_count=26,  # 2 mirror+vanisher, 4 code exec, 6 file ops, 8 build ops (inc. venv), 6 dir ops
-        resources_count=0,
-        always_enabled=True  # Cannot be manually toggled - managed by coding mode
-    )
-    # Set enabled status based on current coding mode
-    toggle_mcp_enabled('executor', is_coding_mode)
-    
-    # Populate tools list from MCP server
-    logger.info("Attempting to populate Executor tools...")
-    executor_paths = [
-        Path('/app/mcps/executor/server.py'),  # If mounted in Docker
-        Path(__file__).parent.parent.parent / 'mcps' / 'executor' / 'server.py',  # Relative path
-    ]
-    for path in executor_paths:
-        logger.info(f"Trying path: {path}")
-        if populate_mcp_tools_from_server('executor', path):
-            break
+
+# Initialize all MCPs dynamically
+discover_and_initialize_mcps()
 
 
 # MCP API Routes

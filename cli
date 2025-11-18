@@ -1,0 +1,21 @@
+#!/bin/bash
+# Global wrapper for ds-cli
+# This script can be placed anywhere in PATH to run ds-cli globally
+
+# Define the absolute path to the ds-cli directory
+DS_CLI_DIR="/home/toavina/Apps/vuhitra-cli"
+
+# Check if the ds-cli directory exists
+if [ ! -d "$DS_CLI_DIR" ]; then
+    echo "Error: vuhitra-cli directory not found at $DS_CLI_DIR"
+    exit 1
+fi
+
+# Save the current working directory (where user invoked ds-cli)
+ORIGINAL_CWD="$(pwd)"
+
+# Change to the ds-cli directory
+cd "$DS_CLI_DIR"
+
+# Run the original start script with the original working directory
+DSCLI_WORKING_DIR="$ORIGINAL_CWD" ./start.sh "$@"

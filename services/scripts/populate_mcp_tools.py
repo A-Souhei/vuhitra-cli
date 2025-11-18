@@ -98,6 +98,8 @@ def main():
         
         r = redis.Redis(
             host='localhost',
+            # Port 16379 is configured in docker-compose.yml (REDIS_HOST_PORT)
+            # to avoid conflicts with system Redis on default port 6379
             port=16379,
             password=redis_password,
             decode_responses=True

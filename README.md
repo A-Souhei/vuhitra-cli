@@ -25,7 +25,7 @@ A minimalist CLI tool to interact with Ollama LLMs, featuring comprehensive erro
 
 vuhitra-cli includes three Model Context Protocol (MCP) servers for code execution and development operations. These are available in **coding mode only**.
 
-### 1. Executor MCP (24 tools)
+### 1. Executor MCP (26 tools)
 
 Code execution and file operations on mirror+vanisher directories.
 
@@ -63,7 +63,7 @@ Code execution and file operations on mirror+vanisher directories.
 - `move_directory` - Move/rename directories
 - `list_directory_contents` - List directory contents
 
-### 2. Mirror+Vanisher Development MCP (30+ tools)
+### 2. Mirror+Vanisher Development MCP (31 tools)
 
 LLM-driven development operations implementing an 8-step methodology.
 

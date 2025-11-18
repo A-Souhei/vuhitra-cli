@@ -27,6 +27,8 @@ This MCP provides tools for writing, updating, and running code in isolated vani
 - **list_files**: List files in a vanisher directory
 - **delete_vanisher**: Delete a vanisher directory
 
+**Total: 7 tools**
+
 ## Installation
 
 ```bash

@@ -12,7 +12,7 @@ import json
 import sys
 import os
 import logging
-from typing import Dict, Any
+from typing import Dict
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -249,6 +249,86 @@ Returns exit code, stdout, stderr, and whether venv was used.""",
                     "required": ["vanisher_name", "packages"]
                 },
                 "handler": self.code_tools.pip_install
+            },
+
+            # Vanisher Management Tools
+            "list_vanishers": {
+                "description": """List all vanisher directories.
+
+Enumerates all vanisher workspaces available for code execution. Each vanisher
+is an isolated directory where you can write, update, and run code.
+
+Use this tool when you need to:
+- See what vanisher directories exist
+- Find available workspaces
+- Check vanisher directory contents
+- Discover existing code projects
+
+Returns a list of vanisher directories with their names, paths, and file counts.""",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                },
+                "handler": self.manager.list_vanishers
+            },
+
+            "list_files": {
+                "description": """List all files in a vanisher directory.
+
+Shows all files present in a specific vanisher workspace, including files
+in subdirectories. Useful for exploring vanisher contents and finding files.
+
+Use this tool when you need to:
+- See what files exist in a vanisher
+- Find specific files by name
+- Check directory structure
+- Explore vanisher contents before operations
+
+Parameters:
+- vanisher_name: Name of the vanisher directory to list
+
+Returns a list of files with their names, full paths, and sizes.""",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "vanisher_name": {
+                            "type": "string",
+                            "description": "Name of the vanisher directory"
+                        }
+                    },
+                    "required": ["vanisher_name"]
+                },
+                "handler": self.manager.list_files
+            },
+
+            "delete_vanisher": {
+                "description": """Delete a vanisher directory and all its contents.
+
+Permanently removes a vanisher workspace and all files within it. This action
+cannot be undone, so use with caution.
+
+Use this tool when you need to:
+- Clean up temporary workspaces
+- Remove obsolete vanisher directories
+- Free up disk space
+- Reset a workspace completely
+
+Parameters:
+- name: Name of the vanisher directory to delete
+
+Returns success status and confirmation message.""",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Name of the vanisher directory to delete"
+                        }
+                    },
+                    "required": ["name"]
+                },
+                "handler": self.manager.delete_vanisher
             }
         }
 

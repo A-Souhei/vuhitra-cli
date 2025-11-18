@@ -8,8 +8,9 @@ for writing, updating, and running code.
 
 import os
 import logging
+import shutil
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from errors_handler import handle_exception
 
@@ -138,8 +139,6 @@ class VanisherManager:
             Dictionary with deletion result
         """
         try:
-            import shutil
-
             vanisher_dir = self.vanisher_path / name
 
             if not vanisher_dir.exists():

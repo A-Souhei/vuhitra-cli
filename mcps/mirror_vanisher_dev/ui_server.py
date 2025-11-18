@@ -23,6 +23,7 @@ from testing import TestingTools
 from quality_checks import QualityCheckTools
 from security import SecurityTools
 from mirror_vanisher import MirrorVanisherManager
+from execute_plan import ExecutePlan
 from errors_handler import handle_exception
 
 # Configure logging
@@ -47,6 +48,27 @@ code_generation = CodeGenerationTools(manager)
 testing = TestingTools(manager)
 quality = QualityCheckTools(manager)
 security = SecurityTools(manager)
+
+# Create a mock server instance for execute_plan
+class MockServer:
+    def __init__(self):
+        self.tools = {
+            'explore_structure': {'description': 'Explore and visualize the hierarchical directory structure'},
+            'detect_tech_stack': {'description': 'Detect and identify the technology stack'},
+            'find_entrypoints': {'description': 'Find and locate main entrypoints'},
+            'analyze_architecture': {'description': 'Analyze and identify architectural patterns'},
+            'map_dependencies': {'description': 'Map and analyze dependencies'},
+            'identify_patterns': {'description': 'Identify and recognize design patterns'},
+            'create_plan': {'description': 'Create detailed implementation plans'},
+            'generate_diff': {'description': 'Generate safe, reviewable code diffs'},
+            'apply_changes': {'description': 'Apply code changes with safety checks'},
+            'run_tests': {'description': 'Execute and run automated tests'},
+            'run_linter': {'description': 'Run static code analysis linters'},
+            'security_audit': {'description': 'Complete security audit'},
+        }
+
+mock_server = MockServer()
+execute_plan_tool = ExecutePlan(manager, server_instance=mock_server)
 
 
 @app.route('/')
@@ -227,6 +249,121 @@ def api_bugfix_workflow():
         return jsonify(result)
     except Exception as e:
         handle_exception(e, context={'endpoint': '/api/workflow/bugfix'})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/set-todo-list', methods=['POST'])
+def api_set_todo_list():
+    """API: Set TODO_list for testing execute_plan."""
+    try:
+        data = request.get_json()
+        todo_list = data.get('todo_list', [])
+
+        if not todo_list:
+            return jsonify({'success': False, 'error': 'todo_list required'}), 400
+
+        # Store in execute_plan_tool's memory
+        execute_plan_tool.memory_todo_list = todo_list
+
+        return jsonify({
+            'success': True,
+            'message': f'TODO_list set with {len(todo_list)} items',
+            'todo_list_count': len(todo_list)
+        })
+    except Exception as e:
+        handle_exception(e, context={'endpoint': '/api/set-todo-list'})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/execute-plan', methods=['POST'])
+def api_execute_plan():
+    """API: Execute plan with ouroboros tool matching.
+
+    This endpoint:
+    1. Takes an optional TODO_list (or uses existing one)
+    2. Runs ouroboros tool matching to create DETAILED_TODO_list
+    3. Optionally auto-executes the matched steps
+    """
+    try:
+        data = request.get_json() or {}
+
+        # Optional: set TODO_list from request
+        todo_list = data.get('todo_list')
+        if todo_list:
+            execute_plan_tool.memory_todo_list = todo_list
+
+        # Get auto_execute flag (default True)
+        auto_execute = data.get('auto_execute', True)
+
+        # Execute the plan
+        result = execute_plan_tool.execute_plan(auto_execute=auto_execute)
+
+        return jsonify(result)
+    except Exception as e:
+        handle_exception(e, context={'endpoint': '/api/execute-plan'})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ouroboros-match', methods=['POST'])
+def api_ouroboros_match():
+    """API: Run only ouroboros tool matching without execution.
+
+    This is useful for testing the tool matching algorithm.
+    """
+    try:
+        data = request.get_json() or {}
+
+        # Get TODO_list from request
+        todo_list = data.get('todo_list')
+        if not todo_list:
+            return jsonify({'success': False, 'error': 'todo_list required'}), 400
+
+        # Run ouroboros matching
+        detailed_list = execute_plan_tool.ouroboros_match_tools(todo_list)
+
+        return jsonify({
+            'success': True,
+            'todo_list_count': len(todo_list),
+            'detailed_todo_list_count': len(detailed_list),
+            'DETAILED_TODO_list': detailed_list,
+            'message': f'Ouroboros matched {len(detailed_list)} tools from {len(todo_list)} steps'
+        })
+    except Exception as e:
+        handle_exception(e, context={'endpoint': '/api/ouroboros-match'})
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/exploiter', methods=['POST'])
+def api_exploiter():
+    """API: Run exploiter function to generate alternative plan.
+
+    When a step fails, the exploiter generates an alternative approach.
+    """
+    try:
+        data = request.get_json() or {}
+
+        # Get required parameters
+        failure_info = data.get('failure_info')
+        todo_list = data.get('todo_list')
+
+        if not failure_info or not todo_list:
+            return jsonify({
+                'success': False,
+                'error': 'failure_info and todo_list required'
+            }), 400
+
+        # Run exploiter function
+        new_detailed_list = execute_plan_tool.exploiter_function(failure_info, todo_list)
+
+        return jsonify({
+            'success': True,
+            'original_todo_list_count': len(todo_list),
+            'new_detailed_list_count': len(new_detailed_list),
+            'DETAILED_TODO_list': new_detailed_list,
+            'message': f'Exploiter generated alternative plan with {len(new_detailed_list)} steps'
+        })
+    except Exception as e:
+        handle_exception(e, context={'endpoint': '/api/exploiter'})
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

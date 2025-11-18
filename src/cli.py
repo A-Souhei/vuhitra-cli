@@ -1719,11 +1719,11 @@ def interactive_mode(model, verbose=False, coding=False):
 
             task = " ".join(args[2:])
 
-            # Check if pillar context is enabled
-            if not pillar_context.is_enabled():
+            # Check if vanisher context is enabled
+            if not vanisher_context.is_enabled():
                 return CommandResult(
                     success=False,
-                    message="Pillar context is disabled. Enable coding mode with --coding flag to use /code init."
+                    message="Vanisher context is disabled. Enable coding mode with --coding flag to use /code init."
                 )
 
             messages = []
@@ -1739,20 +1739,20 @@ def interactive_mode(model, verbose=False, coding=False):
 
             messages.append(f"[1/2] Mirror: {mirror_result.message}")
 
-            # Step 2: Execute pillar load
+            # Step 2: Execute vanisher load
             # Extract the path without @ for label generation
             target_name = path_arg[1:]  # Remove @
 
-            pillar_result = pillar_command_handler(["load", path_arg])
+            vanisher_result = vanisher_command_handler(["load", path_arg])
 
-            if not pillar_result.success:
-                messages.append(f"[2/2] Pillar load failed: {pillar_result.message}")
+            if not vanisher_result.success:
+                messages.append(f"[2/2] Vanisher load failed: {vanisher_result.message}")
                 return CommandResult(
                     success=False,
                     message="\n\n".join(messages)
                 )
 
-            messages.append(f"[2/2] Pillar: {pillar_result.message}")
+            messages.append(f"[2/2] Vanisher: {vanisher_result.message}")
 
             # Create auto-prompt for create_plan and execute_plan
             auto_prompt = (

@@ -24,7 +24,7 @@ DESCRIPTION_MAX_LENGTH = 200  # Maximum description length
 class EmbeddingCacheMixin:
     """Mixin providing Redis caching for embeddings."""
 
-    def _init_embedding_redis(self):
+    def _init_redis(self):
         """Initialize Redis connection for embedding caching.
 
         Uses a separate Redis client with decode_responses=False for binary embeddings.
@@ -54,10 +54,13 @@ class EmbeddingCacheMixin:
         except Exception as e:
             # Redis is optional - continue without it
             handle_exception(e, context={
-                'function': '_init_embedding_redis',
+                'function': '_init_redis',
                 'note': 'Embedding caching will be disabled'
             })
             self._embedding_redis_client = None
+
+    # Alias for backwards compatibility
+    _init_embedding_redis = _init_redis
 
     def _get_embedding_cache_key(self, text: str) -> str:
         """Generate Redis cache key for an embedding.

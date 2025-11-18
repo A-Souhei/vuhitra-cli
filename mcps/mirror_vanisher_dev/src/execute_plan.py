@@ -16,9 +16,15 @@ import requests
 import numpy as np
 import sys
 import select
-import termios
-import tty
 from redis.exceptions import RedisError
+
+# Only import termios and tty on Unix-like systems
+if sys.platform != "win32":
+    import termios
+    import tty
+else:
+    termios = None
+    tty = None
 import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -489,6 +495,10 @@ class ExecutePlan(EmbeddingCacheMixin):
             if not sys.stdin.isatty():
                 return False
 
+            # ESC key detection not available on Windows
+            if termios is None or tty is None:
+                return False
+
             # Non-blocking check for input
             if select.select([sys.stdin], [], [], 0)[0]:
                 old_settings = termios.tcgetattr(sys.stdin)
@@ -679,7 +689,7 @@ Explain in 1-2 sentences what this step will accomplish:"""
         item: Dict[str, Any],
         error_result: Dict[str, Any],
         todo_list: List[Dict[str, Any]]
-    ) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
+    ) -> Tuple[str, Optional[List[Dict[str, Any]]], Dict[str, Any]]:
         """Handle execution failure with user choice.
 
         Args:

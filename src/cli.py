@@ -1754,17 +1754,19 @@ def interactive_mode(model, verbose=False, coding=False):
 
             messages.append(f"[2/2] Pillar: {pillar_result.message}")
 
-            # Create auto-prompt for create_plan
+            # Create auto-prompt for create_plan and execute_plan
             auto_prompt = (
-                f"Use the create_plan tool to create an implementation plan for the following task:\n"
-                f"Path: {target_name}\n"
-                f"Task: {task}\n\n"
-                f"Call the create_plan tool with these arguments."
+                f"Execute the following workflow for a coding session:\n\n"
+                f"1. First, call the create_plan tool with:\n"
+                f"   - path: \"{target_name}\"\n"
+                f"   - task: \"{task}\"\n\n"
+                f"2. Then, call the execute_plan tool to start executing the generated plan.\n\n"
+                f"This will create an implementation plan and begin automatic execution."
             )
 
             messages.append(f"\nCoding session initialized for '{target_name}'.")
             messages.append(f"Task: {task}")
-            messages.append("Creating implementation plan...")
+            messages.append("Creating and executing implementation plan...")
 
             return CommandResult(
                 success=True,

@@ -6,17 +6,32 @@ Verifies tool registration and basic functionality.
 
 import sys
 import os
+import tempfile
+import importlib.util
 from pathlib import Path
+
+# Set up test workspace in temp directory for CI compatibility
+os.environ['WORKSPACE_PATH'] = tempfile.mkdtemp()
 
 # Add MCP src to path
 mcp_path = Path(__file__).parent.parent / 'mcps' / 'python_executor'
 sys.path.insert(0, str(mcp_path / 'src'))
-sys.path.insert(0, str(mcp_path))
+
+
+def load_python_executor_server():
+    """Dynamically load the Python Executor server module."""
+    spec = importlib.util.spec_from_file_location("python_executor_server", mcp_path / "server.py")
+    if spec and spec.loader:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    raise ImportError("Could not load python_executor_server")
 
 
 def test_python_executor_tool_count():
     """Test that Python Executor MCP registers exactly 7 tools."""
-    from server import PythonExecutorMCPServer
+    module = load_python_executor_server()
+    PythonExecutorMCPServer = module.PythonExecutorMCPServer
     
     server = PythonExecutorMCPServer()
     
@@ -40,7 +55,8 @@ def test_python_executor_tool_count():
 
 def test_tool_schemas():
     """Test that all tools have proper schemas."""
-    from server import PythonExecutorMCPServer
+    module = load_python_executor_server()
+    PythonExecutorMCPServer = module.PythonExecutorMCPServer
     
     server = PythonExecutorMCPServer()
     
@@ -65,7 +81,14 @@ def test_tool_schemas():
 
 def test_vanisher_manager_methods():
     """Test that VanisherManager has all required methods."""
-    from vanisher_manager import VanisherManager
+    # Import VanisherManager directly
+    spec = importlib.util.spec_from_file_location("vanisher_manager", mcp_path / "src" / "vanisher_manager.py")
+    if spec and spec.loader:
+        vm_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(vm_module)
+        VanisherManager = vm_module.VanisherManager
+    else:
+        raise ImportError("Could not load vanisher_manager")
     
     manager = VanisherManager()
     
@@ -80,11 +103,8 @@ def test_vanisher_manager_methods():
 
 def test_imports_clean():
     """Test that there are no unused imports."""
-    import server
-    import vanisher_manager
-    
     # Check server.py doesn't import 'Any' unnecessarily
-    server_file = Path(__file__).parent.parent / 'mcps' / 'python_executor' / 'server.py'
+    server_file = mcp_path / 'server.py'
     with open(server_file) as f:
         content = f.read()
         # Should import Dict but not Any (since it's not used)
@@ -92,7 +112,7 @@ def test_imports_clean():
         assert 'from typing import Dict, Any' not in content
     
     # Check vanisher_manager.py doesn't import Optional
-    vm_file = Path(__file__).parent.parent / 'mcps' / 'python_executor' / 'src' / 'vanisher_manager.py'
+    vm_file = mcp_path / 'src' / 'vanisher_manager.py'
     with open(vm_file) as f:
         content = f.read()
         # Should have shutil at module level

@@ -1745,7 +1745,7 @@ def interactive_mode(model, verbose=False, coding=False):
                     message=f"Failed to mirror folder:\n{mirror_result.message}"
                 )
 
-            messages.append(f"[1/2] Mirror: {mirror_result.message}")
+            messages.append(f"[1/4] Mirror: {mirror_result.message}")
 
             # Step 2: Execute vanisher load
             # Extract the path without @ for label generation
@@ -1754,13 +1754,13 @@ def interactive_mode(model, verbose=False, coding=False):
             vanisher_result = vanisher_command_handler(["load", path_arg])
 
             if not vanisher_result.success:
-                messages.append(f"[2/2] Vanisher load failed: {vanisher_result.message}")
+                messages.append(f"[2/4] Vanisher load failed: {vanisher_result.message}")
                 return CommandResult(
                     success=False,
                     message="\n\n".join(messages)
                 )
 
-            messages.append(f"[2/2] Vanisher: {vanisher_result.message}")
+            messages.append(f"[2/4] Vanisher: {vanisher_result.message}")
 
             messages.append(f"\nCoding session initialized for '{target_name}'.")
             messages.append(f"Task: {task}")

@@ -56,27 +56,32 @@ Initialize a coding session with automatic plan creation and execution.
    - Enables semantic filtering for relevance
    - Content available to LLM during session
 
-3. **Auto-prompt injection**
-   - Automatically sends prompt to LLM
-   - Instructs LLM to call `create_plan` with your task
-   - Then instructs LLM to call `execute_plan`
+3. **Create plan** (direct MCP call to `create_plan`)
+   - Generates step-by-step implementation plan
+   - Stores TODO_list in Redis for execution
+
+4. **Execute plan** (direct MCP call to `execute_plan`)
+   - Retrieves plan from Redis
+   - Matches steps to available MCP tools
+   - Executes plan with Ouroboros auto-executor
 
 **Output:**
 ```
-[1/2] Mirror: Synced 15 file(s) to sandbox 'myproject'
+[1/4] Mirror: Synced 15 file(s) to sandbox 'myproject'
 
-[2/2] Vanisher: Loaded 15 file(s) from @myproject
+[2/4] Vanisher: Loaded 15 file(s) from @myproject
 
 Coding session initialized for 'myproject'.
-
 Task: Add user authentication with JWT tokens
 
-Creating and executing implementation plan...
+[3/4] Creating implementation plan...
+[3/4] Plan created: 5 steps (feature_implementation)
+
+[4/4] Executing plan with Ouroboros auto-executor...
+[4/4] Execution complete: 5/5 steps completed, 0 failed
 ```
 
-The LLM will then automatically:
-1. Call `create_plan` to generate implementation steps
-2. Call `execute_plan` to begin automatic execution
+The command directly calls MCP tools for reliable execution without LLM involvement in the tool calling process.
 
 ### `/code session exit @<path>`
 
@@ -153,29 +158,35 @@ The `/code` command is registered in `src/cli.py` within the `interactive_mode()
 command_handler.register_command("code", code_command_handler)
 ```
 
-### Auto-Prompt Mechanism
+### Direct MCP Tool Calls
 
-The `/code init` command returns a `CommandResult` with `auto_prompt` in its data:
+The `/code init` command directly calls MCP tools via Python for reliable execution:
 
 ```python
+# Initialize MCP server
+mcp_server = MCPServer()
+
+# Create plan
+plan_result = mcp_server.planning.create_plan(target_name, task)
+
+# Execute plan
+exec_result = mcp_server.execute_plan.execute_plan(auto_execute=True)
+
 return CommandResult(
     success=True,
     message="...",
-    data={'auto_prompt': auto_prompt}
+    data={
+        'plan_result': plan_result,
+        'exec_result': exec_result
+    }
 )
 ```
 
-The CLI main loop detects this and processes the prompt:
-
-```python
-if result.data and result.data.get('auto_prompt'):
-    prompt = result.data['auto_prompt']
-    # Falls through to LLM processing
-```
+This approach bypasses the LLM for tool calling, ensuring consistent and reliable execution of the workflow.
 
 ### MCP Tool Integration
 
-The auto-prompt instructs the LLM to call:
+The command directly calls these MCP tools:
 
 1. **`create_plan`** (from Mirror+Vanisher MCP)
    - Generates step-by-step implementation plan
@@ -184,7 +195,7 @@ The auto-prompt instructs the LLM to call:
 2. **`execute_plan`** (from Mirror+Vanisher MCP)
    - Retrieves plan from Redis
    - Matches steps to available tools
-   - Begins automatic execution
+   - Executes with Ouroboros auto-executor
 
 ## Error Handling
 
@@ -227,9 +238,9 @@ If vanisher load fails after successful mirror:
 
 ```bash
 > /code init @myproject Add feature
-[1/2] Mirror: Synced 10 file(s) to sandbox 'myproject'
+[1/4] Mirror: Synced 10 file(s) to sandbox 'myproject'
 
-[2/2] Vanisher load failed: <error details>
+[2/4] Vanisher load failed: <error details>
 ```
 
 The mirror remains in sandbox for manual recovery.
@@ -251,15 +262,15 @@ The mirror remains in sandbox for manual recovery.
 
 ### File Location
 
-- Command handler: `src/cli.py` (lines ~1642-1784)
-- Auto-prompt handling: `src/cli.py` (lines ~1920-1930)
+- Command handler: `src/cli.py` (lines ~1642-1848)
 
 ### Dependencies
 
 - `mirror_command_handler` - For mirror operations
 - `vanisher_command_handler` - For vanisher loading
 - `vanisher_context` - For enabled check
-- `path_resolver` - For path validation
+- `MCPServer` - For direct MCP tool calls
+- `handle_exception` - For error handling
 
 ### CommandResult Data
 
@@ -270,7 +281,7 @@ The `/code init` command uses the `data` field of `CommandResult`:
 class CommandResult:
     success: bool
     message: str = ""
-    data: Any = None  # Contains {'auto_prompt': str} for /code init
+    data: Any = None  # Contains {'plan_result': dict, 'exec_result': dict}
 ```
 
-This allows the command to trigger follow-up actions in the CLI main loop.
+This provides access to the raw results from `create_plan` and `execute_plan` for inspection or debugging.

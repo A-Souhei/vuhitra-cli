@@ -117,6 +117,9 @@ class ExecutePlan(EmbeddingCacheMixin):
         port = transformer_config.get('port', 16050)
         self.transformer_url = f"{protocol}://{host}:{port}"
 
+        # Initialize separate Redis client for embedding caching (from EmbeddingCacheMixin)
+        self._init_embedding_redis()
+
         # Get ouroboros config
         ouroboros_config = self.config.get('ouroboros', default={})
         self.max_auto_iterations = ouroboros_config.get('max_auto_iterations', DEFAULT_MAX_AUTO_ITERATIONS)

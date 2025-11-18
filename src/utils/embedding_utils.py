@@ -23,9 +23,13 @@ DESCRIPTION_MAX_LENGTH = 200  # Maximum description length
 
 class EmbeddingCacheMixin:
     """Mixin providing Redis caching for embeddings."""
-    
-    def _init_redis(self):
-        """Initialize Redis connection for embedding caching."""
+
+    def _init_embedding_redis(self):
+        """Initialize Redis connection for embedding caching.
+
+        Uses a separate Redis client with decode_responses=False for binary embeddings.
+        This is separate from any other Redis client the class may have for JSON data.
+        """
         try:
             redis_host = self.config.get('redis', 'host', default='localhost')
             redis_port = self.config.get('redis', 'port', default=6379)
@@ -36,24 +40,24 @@ class EmbeddingCacheMixin:
             except ValueError:
                 redis_password = None
 
-            self.redis_client = redis.Redis(
+            self._embedding_redis_client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
-                decode_responses=False,  # We'll store binary data (embeddings)
+                decode_responses=False,  # Binary data for embeddings
                 socket_connect_timeout=2
             )
 
             # Test connection
-            self.redis_client.ping()
+            self._embedding_redis_client.ping()
 
         except Exception as e:
             # Redis is optional - continue without it
             handle_exception(e, context={
-                'function': '_init_redis',
+                'function': '_init_embedding_redis',
                 'note': 'Embedding caching will be disabled'
             })
-            self.redis_client = None
+            self._embedding_redis_client = None
 
     def _get_embedding_cache_key(self, text: str) -> str:
         """Generate Redis cache key for an embedding.
@@ -77,12 +81,13 @@ class EmbeddingCacheMixin:
         Returns:
             Cached embedding or None if not found
         """
-        if not self.redis_client:
+        # Check if embedding redis client is initialized
+        if not hasattr(self, '_embedding_redis_client') or not self._embedding_redis_client:
             return None
 
         try:
             key = self._get_embedding_cache_key(text)
-            cached_data = self.redis_client.get(key)
+            cached_data = self._embedding_redis_client.get(key)
 
             if cached_data:
                 # Deserialize numpy array
@@ -108,7 +113,8 @@ class EmbeddingCacheMixin:
         Returns:
             True if cached successfully
         """
-        if not self.redis_client:
+        # Check if embedding redis client is initialized
+        if not hasattr(self, '_embedding_redis_client') or not self._embedding_redis_client:
             return False
 
         try:
@@ -117,7 +123,7 @@ class EmbeddingCacheMixin:
             embedding_bytes = embedding.tobytes()
 
             # Cache with configurable TTL
-            self.redis_client.setex(key, EMBEDDING_CACHE_TTL_SECONDS, embedding_bytes)
+            self._embedding_redis_client.setex(key, EMBEDDING_CACHE_TTL_SECONDS, embedding_bytes)
             return True
 
         except Exception as e:

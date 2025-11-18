@@ -11,7 +11,6 @@ This script tests the execute_plan functionality by:
 
 import sys
 import os
-import json
 import logging
 
 # Add src to path
@@ -19,7 +18,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from execute_plan import ExecutePlan
 from mirror_vanisher import MirrorVanisherManager
-from planning import PlanningTools
 
 # Configure logging
 logging.basicConfig(
@@ -91,7 +89,6 @@ def test_execute_plan():
     # Initialize components
     logger.info("\n1. Initializing components...")
     manager = MirrorVanisherManager()
-    planning_tools = PlanningTools(manager)
 
     # Create mock server
     mock_server = MockServer()

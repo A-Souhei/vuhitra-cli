@@ -18,11 +18,9 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 import sys
-import os
-from pathlib import Path as PathLib
 
 # Add project root to path for imports
-project_root = PathLib(__file__).parent.parent.parent.parent
+project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from errors_handler import handle_exception
@@ -396,21 +394,16 @@ class ExecutePlan(EmbeddingCacheMixin):
         # In a production system, this would be more sophisticated
         params = {}
 
-        required_params = tool_schema.get('required', [])
         properties = tool_schema.get('properties', {})
-
-        # Extract common parameters from step details
-        step_details = step.get('details', '')
-        step_action = step.get('action', '')
 
         # Try to extract path (common in many tools)
         if 'path' in properties:
             # Use a default path or extract from context
             params['path'] = '.'  # Default to current directory
 
-        # Try to extract other parameters from step text
-        # This is a placeholder - a real implementation would use NLP/LLM
-        combined_text = f"{step_action} {step_details}"
+        # TODO: Implement more sophisticated parameter extraction using NLP/LLM
+        # This would analyze step.get('action') and step.get('details') to extract
+        # specific parameter values based on the tool_schema.get('required', [])
 
         return params
 
@@ -449,7 +442,7 @@ class ExecutePlan(EmbeddingCacheMixin):
             # Find matching Mirror+Vanisher tools
             mv_matches = self.find_matching_tools(step_text, mirror_vanisher_tools)
 
-            # Process each matched tool
+            # Process each matched Mirror+Vanisher tool
             for tool, similarity in mv_matches:
                 tool_name = tool.get('name')
                 tool_schema = tool.get('inputSchema', {})
@@ -475,29 +468,29 @@ class ExecutePlan(EmbeddingCacheMixin):
 
                 detailed_list.append(detailed_item)
 
-                # Also check if we should use an Executor tool
-                executor_matches = self.find_matching_tools(step_text, executor_tools)
+            # Find matching Executor tools (once per step, not per MV match)
+            executor_matches = self.find_matching_tools(step_text, executor_tools)
 
-                for exec_tool, exec_similarity in executor_matches:
-                    exec_tool_name = exec_tool.get('name')
+            for exec_tool, exec_similarity in executor_matches:
+                exec_tool_name = exec_tool.get('name')
 
-                    logger.info(f"    Also matched Executor tool: {exec_tool_name} (similarity: {exec_similarity:.2f})")
+                logger.info(f"  Matched Executor tool: {exec_tool_name} (similarity: {exec_similarity:.2f})")
 
-                    # Add executor tool to detailed list
-                    exec_detailed_item = {
-                        'step_number': step_number,
-                        'original_action': action,
-                        'original_details': details,
-                        'tool_type': 'executor',
-                        'tool_name': exec_tool_name,
-                        'tool_description': exec_tool.get('description', ''),
-                        'parameters': {},  # Would need to extract executor-specific params
-                        'similarity_score': exec_similarity,
-                        'status': 'pending',
-                        'execution_result': None
-                    }
+                # Add executor tool to detailed list
+                exec_detailed_item = {
+                    'step_number': step_number,
+                    'original_action': action,
+                    'original_details': details,
+                    'tool_type': 'executor',
+                    'tool_name': exec_tool_name,
+                    'tool_description': exec_tool.get('description', ''),
+                    'parameters': {},  # Would need to extract executor-specific params
+                    'similarity_score': exec_similarity,
+                    'status': 'pending',
+                    'execution_result': None
+                }
 
-                    detailed_list.append(exec_detailed_item)
+                detailed_list.append(exec_detailed_item)
 
         logger.info(f"Built DETAILED_TODO_list with {len(detailed_list)} items")
 

@@ -1651,7 +1651,7 @@ def interactive_mode(model, verbose=False, coding=False):
     def code_command_handler(args):
         """Handle /code command for combined coding workflow operations.
 
-        /code init @<path> - Initialize coding session (mirror + pillar load)
+        /code init @<path> <task> - Initialize coding session (mirror + vanisher load + create_plan + execute_plan)
         /code session exit @<path> - End coding session (revert+sync + exit)
         """
         if not args:

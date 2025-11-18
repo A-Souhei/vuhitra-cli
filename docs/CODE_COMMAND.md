@@ -251,7 +251,8 @@ The mirror remains in sandbox for manual recovery.
 
 ### File Location
 
-- Command handler: `src/cli.py` (lines ~1642-1782)
+- Command handler: `src/cli.py` (lines ~1642-1784)
+- Auto-prompt handling: `src/cli.py` (lines ~1920-1930)
 
 ### Dependencies
 

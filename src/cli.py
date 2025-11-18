@@ -1649,11 +1649,11 @@ def interactive_mode(model, verbose=False, coding=False):
         if not args:
             return CommandResult(
                 success=False,
-                message="Usage: /code init @<path> - Initialize coding session\n"
+                message="Usage: /code init @<path> <task> - Initialize coding session\n"
                         "       /code session exit @<path> - End coding session\n"
                         "\n"
                         "Examples:\n"
-                        "  /code init @myproject - Mirror folder and load as pillar\n"
+                        "  /code init @myproject Add user authentication with JWT\n"
                         "  /code session exit @myproject - Sync changes back and exit"
             )
 
@@ -1694,19 +1694,30 @@ def interactive_mode(model, verbose=False, coding=False):
             )
 
         elif subcommand == "init":
-            # /code init @<path>
+            # /code init @<path> <task description>
             if len(args) < 2:
                 return CommandResult(
                     success=False,
-                    message="Usage: /code init @<path>"
+                    message="Usage: /code init @<path> <task description>"
                 )
 
             path_arg = args[1]
             if not path_arg.startswith('@'):
                 return CommandResult(
                     success=False,
-                    message=f"Path must start with @ prefix. Example: /code init @myproject"
+                    message=f"Path must start with @ prefix. Example: /code init @myproject Add authentication"
                 )
+
+            # Task is everything after the path
+            if len(args) < 3:
+                return CommandResult(
+                    success=False,
+                    message="Task description is required.\n"
+                            "Usage: /code init @<path> <task description>\n"
+                            "Example: /code init @myproject Add user authentication with JWT"
+                )
+
+            task = " ".join(args[2:])
 
             # Check if pillar context is enabled
             if not pillar_context.is_enabled():
@@ -1743,19 +1754,22 @@ def interactive_mode(model, verbose=False, coding=False):
 
             messages.append(f"[2/2] Pillar: {pillar_result.message}")
 
-            # Add instructions for next step
-            messages.append(
-                f"\nCoding session initialized for '{target_name}'.\n"
-                f"Next step: Use the create_plan MCP tool with your task:\n"
-                f"  {{\"tool\": \"create_plan\", \"arguments\": {{\n"
-                f"    \"path\": \"{target_name}\",\n"
-                f"    \"task\": \"Your task description here\"\n"
-                f"  }}}}"
+            # Create auto-prompt for create_plan
+            auto_prompt = (
+                f"Use the create_plan tool to create an implementation plan for the following task:\n"
+                f"Path: {target_name}\n"
+                f"Task: {task}\n\n"
+                f"Call the create_plan tool with these arguments."
             )
+
+            messages.append(f"\nCoding session initialized for '{target_name}'.")
+            messages.append(f"Task: {task}")
+            messages.append("Creating implementation plan...")
 
             return CommandResult(
                 success=True,
-                message="\n\n".join(messages)
+                message="\n\n".join(messages),
+                data={'auto_prompt': auto_prompt}
             )
 
         else:
@@ -1900,7 +1914,18 @@ def interactive_mode(model, verbose=False, coding=False):
                         print_success(result.message)
                     else:
                         print_error(result.message)
-                continue
+
+                    # Check if command returned an auto-prompt to execute
+                    if result.data and isinstance(result.data, dict) and result.data.get('auto_prompt'):
+                        # Use auto_prompt as the next prompt instead of continuing
+                        prompt = result.data['auto_prompt']
+                        if verbose:
+                            print_info("Auto-executing prompt from command...")
+                        # Don't continue - fall through to process the prompt
+                    else:
+                        continue
+                else:
+                    continue
 
             # Detect and load @ references as Sparks (if not already loaded)
             prompt, loaded_sparks, spark_errors = detect_and_load_spark_references(prompt)

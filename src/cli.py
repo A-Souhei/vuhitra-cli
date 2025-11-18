@@ -37,6 +37,14 @@ from src.utils.redis_helper import get_redis_client
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "src"))
 from heuristics_config_loader import HeuristicsConfigLoader
 
+# Add MCP modules to path for direct tool calls
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcps" / "mirror_vanisher_dev"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcps" / "mirror_vanisher_dev" / "src"))
+from mirror_vanisher import MirrorVanisherManager
+from planning import PlanningTools
+from execute_plan import ExecutePlan
+from server import MCPServer
+
 # Maximum prompt length to prevent DoS through excessive payload sizes
 # Note: This is now dynamic - will use discovered model limits from Redis
 # If no limit discovered yet, defaults to infinity (user will discover it)
@@ -1639,6 +1647,207 @@ def interactive_mode(model, verbose=False, coding=False):
 
     command_handler.register_command("mirror", mirror_command_handler)
 
+    # Register /code command for combined coding workflow operations
+    def code_command_handler(args):
+        """Handle /code command for combined coding workflow operations.
+
+        /code init @<path> <task> - Initialize coding session (mirror + vanisher load + create_plan + execute_plan)
+        /code session exit @<path> - End coding session (revert+sync + exit)
+        """
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /code init @<path> <task> - Initialize coding session\n"
+                        "       /code session exit @<path> - End coding session\n"
+                        "\n"
+                        "Examples:\n"
+                        "  /code init @myproject Add user authentication with JWT\n"
+                        "  /code session exit @myproject - Sync changes back and exit"
+            )
+
+        subcommand = args[0].lower()
+
+        # Handle 'session exit' as a two-word subcommand
+        if subcommand == "session" and len(args) > 1 and args[1].lower() == "exit":
+            # /code session exit @<path>
+            if len(args) < 3:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /code session exit @<path>"
+                )
+
+            path_arg = args[2]
+            if not path_arg.startswith('@'):
+                return CommandResult(
+                    success=False,
+                    message=f"Path must start with @ prefix. Example: /code session exit @myproject"
+                )
+
+            # Execute revert+sync
+            revert_result = mirror_command_handler(["revert+sync", path_arg])
+
+            if not revert_result.success:
+                return CommandResult(
+                    success=False,
+                    message=f"Failed to sync changes back:\n{revert_result.message}"
+                )
+
+            # Return success with exit signal
+            return CommandResult(
+                success=True,
+                message=f"{revert_result.message}\n\n"
+                        f"Coding session ended. Changes synced back to host.\n"
+                        f"Type 'exit' to leave the CLI.",
+                data={'should_exit': True}
+            )
+
+        elif subcommand == "init":
+            # /code init @<path> <task description>
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /code init @<path> <task description>"
+                )
+
+            path_arg = args[1]
+            if not path_arg.startswith('@'):
+                return CommandResult(
+                    success=False,
+                    message=f"Path must start with @ prefix. Example: /code init @myproject Add authentication"
+                )
+
+            # Task is everything after the path
+            if len(args) < 3:
+                return CommandResult(
+                    success=False,
+                    message="Task description is required.\n"
+                            "Usage: /code init @<path> <task description>\n"
+                            "Example: /code init @myproject Add user authentication with JWT"
+                )
+
+            task = " ".join(args[2:])
+
+            # Check if vanisher context is enabled
+            if not vanisher_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Vanisher context is disabled. Enable coding mode with --coding flag to use /code init."
+                )
+
+            messages = []
+
+            # Step 1: Execute mirror do
+            mirror_result = mirror_command_handler(["do", path_arg])
+
+            if not mirror_result.success:
+                return CommandResult(
+                    success=False,
+                    message=f"Failed to mirror folder:\n{mirror_result.message}"
+                )
+
+            messages.append(f"[1/4] Mirror: {mirror_result.message}")
+
+            # Step 2: Execute vanisher load
+            # Extract the path without @ for label generation
+            target_name = path_arg[1:]  # Remove @
+
+            vanisher_result = vanisher_command_handler(["load", path_arg])
+
+            if not vanisher_result.success:
+                messages.append(f"[2/4] Vanisher load failed: {vanisher_result.message}")
+                return CommandResult(
+                    success=False,
+                    message="\n\n".join(messages)
+                )
+
+            messages.append(f"[2/4] Vanisher: {vanisher_result.message}")
+
+            messages.append(f"\nCoding session initialized for '{target_name}'.")
+            messages.append(f"Task: {task}")
+
+            # Direct MCP tool calls instead of auto-prompt
+            try:
+                # Initialize MCP server with all tools properly registered
+                mcp_server = MCPServer()
+
+                # Step 3: Create plan
+                messages.append("\n[3/4] Creating implementation plan...")
+                plan_result = mcp_server.planning.create_plan(target_name, task)
+
+                if not plan_result.get('success', False):
+                    error_msg = plan_result.get('error', 'Unknown error creating plan')
+                    messages.append(f"[3/4] Plan creation failed: {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        message="\n\n".join(messages)
+                    )
+
+                # Show plan summary
+                todo_list = plan_result.get('TODO_list', [])
+                plan_type = plan_result.get('type', 'feature')
+                messages.append(f"[3/4] Plan created: {len(todo_list)} steps ({plan_type})")
+
+                # Step 4: Execute plan with Ouroboros
+                messages.append("\n[4/4] Executing plan with Ouroboros auto-executor...")
+
+                # Use the server's execute_plan which has access to all tools
+                exec_result = mcp_server.execute_plan.execute_plan(auto_execute=True)
+
+                if not exec_result.get('success', False):
+                    error_msg = exec_result.get('error', 'Unknown error executing plan')
+                    messages.append(f"[4/4] Execution failed: {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        message="\n\n".join(messages)
+                    )
+
+                # Show execution summary
+                completed = exec_result.get('completed_count', 0)
+                failed = exec_result.get('failed_count', 0)
+                total = exec_result.get('detailed_todo_list_count', 0)
+                cancelled = exec_result.get('cancelled', False)
+
+                if cancelled:
+                    messages.append(f"[4/4] Execution cancelled: {completed}/{total} steps completed")
+                else:
+                    messages.append(f"[4/4] Execution complete: {completed}/{total} steps completed, {failed} failed")
+
+                # Include execution output if available
+                output = exec_result.get('output', '')
+                if output:
+                    messages.append(f"\n{output}")
+
+                return CommandResult(
+                    success=True,
+                    message="\n\n".join(messages),
+                    data={
+                        'plan_result': plan_result,
+                        'exec_result': exec_result
+                    }
+                )
+
+            except Exception as e:
+                handle_exception(e, context={
+                    'function': 'code_command_handler',
+                    'operation': 'direct MCP tool calls',
+                    'target': target_name,
+                    'task': task
+                })
+                messages.append(f"\nError during MCP execution: {str(e)}")
+                return CommandResult(
+                    success=False,
+                    message="\n\n".join(messages)
+                )
+
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown subcommand: {subcommand}\n"
+                        f"Available: /code init @<path>, /code session exit @<path>"
+            )
+
+    command_handler.register_command("code", code_command_handler)
+
     def detect_and_load_spark_references(prompt_text: str) -> tuple:
         """Detect and load @ references in prompt as Sparks.
 
@@ -1772,7 +1981,18 @@ def interactive_mode(model, verbose=False, coding=False):
                         print_success(result.message)
                     else:
                         print_error(result.message)
-                continue
+
+                    # Check if command returned an auto-prompt to execute
+                    if result.data and isinstance(result.data, dict) and result.data.get('auto_prompt'):
+                        # Use auto_prompt as the next prompt instead of continuing
+                        prompt = result.data['auto_prompt']
+                        if verbose:
+                            print_info("Auto-executing prompt from command...")
+                        # Don't continue - fall through to process the prompt
+                    else:
+                        continue
+                else:
+                    continue
 
             # Detect and load @ references as Sparks (if not already loaded)
             prompt, loaded_sparks, spark_errors = detect_and_load_spark_references(prompt)

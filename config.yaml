@@ -15,6 +15,17 @@ cli:
   auto_iteration_max_iterations: 5   # Maximum number of retry attempts
   auto_iteration_negative_weight_increment: 0.1  # Increment for negative heuristic weight per iteration
 
+# Ouroboros auto-execution settings
+ouroboros:
+  # Maximum number of auto-iterations before stopping
+  max_auto_iterations: 25
+  # Similarity threshold for tool matching (0.0-1.0)
+  tool_matching_threshold: 0.3
+  # Minimum relevant history similarity threshold
+  history_similarity_threshold: 0.5
+  # Number of relevant history items to retrieve
+  history_top_k: 3
+
 # Model configuration
 model:
   # Default models per environment

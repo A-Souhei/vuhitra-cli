@@ -38,10 +38,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "
 from heuristics_config_loader import HeuristicsConfigLoader
 
 # Add MCP modules to path for direct tool calls
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcps" / "mirror_vanisher_dev"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "mcps" / "mirror_vanisher_dev" / "src"))
 from mirror_vanisher import MirrorVanisherManager
 from planning import PlanningTools
 from execute_plan import ExecutePlan
+from server import MCPServer
 
 # Maximum prompt length to prevent DoS through excessive payload sizes
 # Note: This is now dynamic - will use discovered model limits from Redis
@@ -1765,13 +1767,12 @@ def interactive_mode(model, verbose=False, coding=False):
 
             # Direct MCP tool calls instead of auto-prompt
             try:
-                # Initialize MCP manager and tools
-                mcp_manager = MirrorVanisherManager()
-                planning_tools = PlanningTools(mcp_manager)
+                # Initialize MCP server with all tools properly registered
+                mcp_server = MCPServer()
 
                 # Step 3: Create plan
                 messages.append("\n[3/4] Creating implementation plan...")
-                plan_result = planning_tools.create_plan(target_name, task)
+                plan_result = mcp_server.planning.create_plan(target_name, task)
 
                 if not plan_result.get('success', False):
                     error_msg = plan_result.get('error', 'Unknown error creating plan')
@@ -1789,8 +1790,8 @@ def interactive_mode(model, verbose=False, coding=False):
                 # Step 4: Execute plan with Ouroboros
                 messages.append("\n[4/4] Executing plan with Ouroboros auto-executor...")
 
-                executor = ExecutePlan(mcp_manager)
-                exec_result = executor.execute_plan(auto_execute=True)
+                # Use the server's execute_plan which has access to all tools
+                exec_result = mcp_server.execute_plan.execute_plan(auto_execute=True)
 
                 if not exec_result.get('success', False):
                     error_msg = exec_result.get('error', 'Unknown error executing plan')

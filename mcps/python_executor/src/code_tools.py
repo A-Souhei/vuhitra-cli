@@ -165,6 +165,91 @@ class CodeTools:
                 'error': str(e)
             }
 
+    def pip_install(
+        self,
+        vanisher_name: str,
+        packages: List[str],
+        timeout: int = 300
+    ) -> Dict[str, Any]:
+        """Install Python packages using pip in a vanisher directory.
+
+        Installs packages into the virtual environment if one exists,
+        otherwise uses the system pip. Creates a venv if requested.
+
+        Args:
+            vanisher_name: Name of the vanisher directory
+            packages: List of package names to install (e.g., ['requests', 'numpy>=1.20'])
+            timeout: Installation timeout in seconds (default: 300)
+
+        Returns:
+            Dictionary with installation result
+        """
+        try:
+            vanisher_dir = self.manager.get_vanisher_dir(vanisher_name)
+
+            if not packages:
+                return {
+                    'success': False,
+                    'error': 'No packages specified'
+                }
+
+            # Detect venv and get pip path
+            venv_python = self._detect_venv(vanisher_dir)
+
+            if venv_python:
+                # Use pip from venv
+                pip_cmd = str(venv_python.parent / 'pip')
+            else:
+                # Use system pip
+                pip_cmd = 'pip'
+
+            # Build install command
+            command = [pip_cmd, 'install'] + packages
+
+            # Execute pip install
+            result = subprocess.run(
+                command,
+                cwd=str(vanisher_dir),
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+
+            response = {
+                'success': result.returncode == 0,
+                'vanisher': vanisher_name,
+                'packages': packages,
+                'exit_code': result.returncode,
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'command': ' '.join(command)
+            }
+
+            if venv_python:
+                response['venv_used'] = True
+                response['venv_path'] = str(venv_python.parent.parent)
+
+            return response
+
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': f'Installation timed out after {timeout} seconds',
+                'vanisher': vanisher_name,
+                'packages': packages
+            }
+
+        except Exception as e:
+            handle_exception(e, context={
+                'function': 'pip_install',
+                'vanisher_name': vanisher_name,
+                'packages': packages
+            })
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
     def run_code(
         self,
         vanisher_name: str,

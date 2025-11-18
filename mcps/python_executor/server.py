@@ -205,6 +205,51 @@ Returns exit code, stdout, stderr, and the command that was executed.""",
                 "handler": self.code_tools.run_code
             },
 
+            "pip_install": {
+                "description": """Install Python packages using pip in a vanisher directory.
+
+Installs packages into the virtual environment if one exists in the vanisher
+directory, otherwise uses the system pip. This is useful for setting up
+dependencies before running Python code.
+
+Use this tool when you need to:
+- Install dependencies for a Python project
+- Add new packages to an existing venv
+- Set up the environment before running code
+
+The tool automatically detects and uses the venv if present (checks venv,
+.venv, env, .env directories). Installation has a longer default timeout
+(300 seconds) to accommodate large packages.
+
+Parameters:
+- vanisher_name: Name of the vanisher directory
+- packages: List of package names to install (supports version specifiers like 'numpy>=1.20')
+- timeout: Installation timeout in seconds (default: 300)
+
+Returns exit code, stdout, stderr, and whether venv was used.""",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "vanisher_name": {
+                            "type": "string",
+                            "description": "Name of the vanisher directory"
+                        },
+                        "packages": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of packages to install (e.g., ['requests', 'numpy>=1.20'])"
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "default": 300,
+                            "description": "Installation timeout in seconds"
+                        }
+                    },
+                    "required": ["vanisher_name", "packages"]
+                },
+                "handler": self.code_tools.pip_install
+            },
+
             # Vanisher Management
             "list_vanishers": {
                 "description": """List all vanisher directories.

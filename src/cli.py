@@ -37,6 +37,12 @@ from src.utils.redis_helper import get_redis_client
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "sandbox" / "src"))
 from heuristics_config_loader import HeuristicsConfigLoader
 
+# Add MCP modules to path for direct tool calls
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcps" / "mirror_vanisher_dev" / "src"))
+from mirror_vanisher import MirrorVanisherManager
+from planning import PlanningTools
+from execute_plan import ExecutePlan
+
 # Maximum prompt length to prevent DoS through excessive payload sizes
 # Note: This is now dynamic - will use discovered model limits from Redis
 # If no limit discovered yet, defaults to infinity (user will discover it)
@@ -1754,25 +1760,83 @@ def interactive_mode(model, verbose=False, coding=False):
 
             messages.append(f"[2/2] Vanisher: {vanisher_result.message}")
 
-            # Create auto-prompt for create_plan and execute_plan
-            auto_prompt = (
-                f"Execute the following workflow for a coding session:\n\n"
-                f"1. First, call the create_plan tool with:\n"
-                f"   - path: \"{target_name}\"\n"
-                f"   - task: \"{task}\"\n\n"
-                f"2. Then, call the execute_plan tool to start executing the generated plan.\n\n"
-                f"This will create an implementation plan and begin automatic execution."
-            )
-
             messages.append(f"\nCoding session initialized for '{target_name}'.")
             messages.append(f"Task: {task}")
-            messages.append("Creating and executing implementation plan...")
 
-            return CommandResult(
-                success=True,
-                message="\n\n".join(messages),
-                data={'auto_prompt': auto_prompt}
-            )
+            # Direct MCP tool calls instead of auto-prompt
+            try:
+                # Initialize MCP manager and tools
+                mcp_manager = MirrorVanisherManager()
+                planning_tools = PlanningTools(mcp_manager)
+
+                # Step 3: Create plan
+                messages.append("\n[3/4] Creating implementation plan...")
+                plan_result = planning_tools.create_plan(target_name, task)
+
+                if not plan_result.get('success', False):
+                    error_msg = plan_result.get('error', 'Unknown error creating plan')
+                    messages.append(f"[3/4] Plan creation failed: {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        message="\n\n".join(messages)
+                    )
+
+                # Show plan summary
+                todo_list = plan_result.get('TODO_list', [])
+                plan_type = plan_result.get('type', 'feature')
+                messages.append(f"[3/4] Plan created: {len(todo_list)} steps ({plan_type})")
+
+                # Step 4: Execute plan with Ouroboros
+                messages.append("\n[4/4] Executing plan with Ouroboros auto-executor...")
+
+                executor = ExecutePlan(mcp_manager)
+                exec_result = executor.execute_plan(auto_execute=True)
+
+                if not exec_result.get('success', False):
+                    error_msg = exec_result.get('error', 'Unknown error executing plan')
+                    messages.append(f"[4/4] Execution failed: {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        message="\n\n".join(messages)
+                    )
+
+                # Show execution summary
+                completed = exec_result.get('completed_count', 0)
+                failed = exec_result.get('failed_count', 0)
+                total = exec_result.get('detailed_todo_list_count', 0)
+                cancelled = exec_result.get('cancelled', False)
+
+                if cancelled:
+                    messages.append(f"[4/4] Execution cancelled: {completed}/{total} steps completed")
+                else:
+                    messages.append(f"[4/4] Execution complete: {completed}/{total} steps completed, {failed} failed")
+
+                # Include execution output if available
+                output = exec_result.get('output', '')
+                if output:
+                    messages.append(f"\n{output}")
+
+                return CommandResult(
+                    success=True,
+                    message="\n\n".join(messages),
+                    data={
+                        'plan_result': plan_result,
+                        'exec_result': exec_result
+                    }
+                )
+
+            except Exception as e:
+                handle_exception(e, context={
+                    'function': 'code_command_handler',
+                    'operation': 'direct MCP tool calls',
+                    'target': target_name,
+                    'task': task
+                })
+                messages.append(f"\nError during MCP execution: {str(e)}")
+                return CommandResult(
+                    success=False,
+                    message="\n\n".join(messages)
+                )
 
         else:
             return CommandResult(

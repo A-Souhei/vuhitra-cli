@@ -1639,6 +1639,134 @@ def interactive_mode(model, verbose=False, coding=False):
 
     command_handler.register_command("mirror", mirror_command_handler)
 
+    # Register /code command for combined coding workflow operations
+    def code_command_handler(args):
+        """Handle /code command for combined coding workflow operations.
+
+        /code init @<path> - Initialize coding session (mirror + pillar load)
+        /code session exit @<path> - End coding session (revert+sync + exit)
+        """
+        if not args:
+            return CommandResult(
+                success=False,
+                message="Usage: /code init @<path> - Initialize coding session\n"
+                        "       /code session exit @<path> - End coding session\n"
+                        "\n"
+                        "Examples:\n"
+                        "  /code init @myproject - Mirror folder and load as pillar\n"
+                        "  /code session exit @myproject - Sync changes back and exit"
+            )
+
+        subcommand = args[0].lower()
+
+        # Handle 'session exit' as a two-word subcommand
+        if subcommand == "session" and len(args) > 1 and args[1].lower() == "exit":
+            # /code session exit @<path>
+            if len(args) < 3:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /code session exit @<path>"
+                )
+
+            path_arg = args[2]
+            if not path_arg.startswith('@'):
+                return CommandResult(
+                    success=False,
+                    message=f"Path must start with @ prefix. Example: /code session exit @myproject"
+                )
+
+            # Execute revert+sync
+            revert_result = mirror_command_handler(["revert+sync", path_arg])
+
+            if not revert_result.success:
+                return CommandResult(
+                    success=False,
+                    message=f"Failed to sync changes back:\n{revert_result.message}"
+                )
+
+            # Return success with exit signal
+            return CommandResult(
+                success=True,
+                message=f"{revert_result.message}\n\n"
+                        f"Coding session ended. Changes synced back to host.\n"
+                        f"Type 'exit' to leave the CLI.",
+                data={'should_exit': True}
+            )
+
+        elif subcommand == "init":
+            # /code init @<path>
+            if len(args) < 2:
+                return CommandResult(
+                    success=False,
+                    message="Usage: /code init @<path>"
+                )
+
+            path_arg = args[1]
+            if not path_arg.startswith('@'):
+                return CommandResult(
+                    success=False,
+                    message=f"Path must start with @ prefix. Example: /code init @myproject"
+                )
+
+            # Check if pillar context is enabled
+            if not pillar_context.is_enabled():
+                return CommandResult(
+                    success=False,
+                    message="Pillar context is disabled. Enable coding mode with --coding flag to use /code init."
+                )
+
+            messages = []
+
+            # Step 1: Execute mirror do
+            mirror_result = mirror_command_handler(["do", path_arg])
+
+            if not mirror_result.success:
+                return CommandResult(
+                    success=False,
+                    message=f"Failed to mirror folder:\n{mirror_result.message}"
+                )
+
+            messages.append(f"[1/2] Mirror: {mirror_result.message}")
+
+            # Step 2: Execute pillar load
+            # Extract the path without @ for label generation
+            target_name = path_arg[1:]  # Remove @
+
+            pillar_result = pillar_command_handler(["load", path_arg])
+
+            if not pillar_result.success:
+                messages.append(f"[2/2] Pillar load failed: {pillar_result.message}")
+                return CommandResult(
+                    success=False,
+                    message="\n\n".join(messages)
+                )
+
+            messages.append(f"[2/2] Pillar: {pillar_result.message}")
+
+            # Add instructions for next step
+            messages.append(
+                f"\nCoding session initialized for '{target_name}'.\n"
+                f"Next step: Use the create_plan MCP tool with your task:\n"
+                f"  {{\"tool\": \"create_plan\", \"arguments\": {{\n"
+                f"    \"path\": \"{target_name}\",\n"
+                f"    \"task\": \"Your task description here\"\n"
+                f"  }}}}"
+            )
+
+            return CommandResult(
+                success=True,
+                message="\n\n".join(messages)
+            )
+
+        else:
+            return CommandResult(
+                success=False,
+                message=f"Unknown subcommand: {subcommand}\n"
+                        f"Available: /code init @<path>, /code session exit @<path>"
+            )
+
+    command_handler.register_command("code", code_command_handler)
+
     def detect_and_load_spark_references(prompt_text: str) -> tuple:
         """Detect and load @ references in prompt as Sparks.
 

@@ -152,6 +152,7 @@ Captures both stdout and stderr output for analysis.
 Supported file types:
 - .py: Python (using python interpreter)
 - .js: JavaScript (using node)
+- .r, .R: R scripts (using Rscript)
 - .sh, .bash: Shell scripts (using bash)
 
 Use this tool when you need to:

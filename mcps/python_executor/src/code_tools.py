@@ -205,7 +205,7 @@ class CodeTools:
                 return {
                     'success': False,
                     'error': f'Unsupported file type: {file_path.suffix}',
-                    'hint': 'Supported types: .py, .js, .sh, .bash'
+                    'hint': 'Supported types: .py, .js, .r, .R, .sh, .bash'
                 }
 
             # Set up environment
@@ -268,6 +268,8 @@ class CodeTools:
             '.ts': 'typescript',
             '.sh': 'shell',
             '.bash': 'shell',
+            '.r': 'r',
+            '.R': 'r',
             '.rb': 'ruby',
             '.go': 'go',
             '.rs': 'rust',
@@ -299,5 +301,7 @@ class CodeTools:
             return ['node', str(file_path)] + args
         elif suffix in ['.sh', '.bash']:
             return ['bash', str(file_path)] + args
+        elif suffix in ['.r', '.R']:
+            return ['Rscript', str(file_path)] + args
         else:
             return None

@@ -12,7 +12,7 @@ services:
     profiles:
       - app
     ports:
-      - "127.0.0.1:15432:5432"     # PostgreSQL port (localhost only for security)
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-15432}:${POSTGRES_CONTAINER_PORT:-5432}"     # PostgreSQL port (localhost only for security)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
@@ -39,7 +39,7 @@ services:
     profiles:
       - app
     ports:
-      - "16379:6379"     # Redis port
+      - "${REDIS_HOST_PORT:-16379}:${REDIS_CONTAINER_PORT:-6379}"     # Redis port
     volumes:
       - redis_data:/data
     environment:
@@ -64,25 +64,25 @@ services:
     profiles:
       - app
     ports:
-      - "18001:8000"     # App port
+      - "${SANDBOX_HOST_PORT:-18001}:${SANDBOX_CONTAINER_PORT:-8000}"     # App port
     volumes:
       - workspace:/app/WORKSPACE
       - ${VUHITRA_DIR:-..}/.vuhitra:/app/.vuhitra:ro  # Mount .vuhitra directory for context access (read-only, set VUHITRA_DIR to override base path)
       - ${VUHITRA_DIR:-..}/mcps:/app/mcps:ro  # Mount MCP servers for tool list queries (read-only)
     environment:
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - REDIS_PORT=${REDIS_CONTAINER_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
       - ELASTICSEARCH_HOST=elasticsearch
-      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_PORT=${ELASTICSEARCH_HTTP_CONTAINER_PORT:-9200}
       - ELASTICSEARCH_INDEX=llm_feedback
       - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
+      - POSTGRES_PORT=${POSTGRES_CONTAINER_PORT:-5432}
       - POSTGRES_USER=${POSTGRES_USER:-vuhitra}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
       - POSTGRES_DB=${POSTGRES_DB:-vuhitra}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${SANDBOX_CONTAINER_PORT:-8000}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -109,7 +109,7 @@ services:
     profiles:
       - app
     ports:
-      - "16050:5050"     # Transformer service port
+      - "${TRANSFORMER_HOST_PORT:-16050}:${TRANSFORMER_CONTAINER_PORT:-5050}"     # Transformer service port
     volumes:
       - transformer_models:/root/.cache/huggingface  # Cache HuggingFace models
     environment:
@@ -117,7 +117,7 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-DEV}
       - SENTRY_DSN=${SENTRY_DSN:-}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${TRANSFORMER_CONTAINER_PORT:-5050}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -146,8 +146,8 @@ services:
       - SPARK_MASTER_WEBUI_PORT=${SPARK_MASTER_WEBUI_PORT}
       - PYSPARK_PYTHON=${PYSPARK_PYTHON}
     ports:
-      - "7077:7077"     # Spark master port
-      - "8081:8081"     # Spark master Web UI
+      - "${SPARK_MASTER_HOST_PORT:-7077}:${SPARK_MASTER_CONTAINER_PORT:-7077}"     # Spark master port
+      - "${SPARK_MASTER_WEBUI_HOST_PORT:-8081}:${SPARK_MASTER_WEBUI_CONTAINER_PORT:-8081}"     # Spark master Web UI
     volumes:
       - spark-data:/opt/bitnami/spark/data
       - ./spark-apps:/opt/bitnami/spark/apps
@@ -184,8 +184,8 @@ services:
       - app
       - dev
     ports:
-      - "9200:9200"      # HTTP API
-      - "9300:9300"      # Transport
+      - "${ELASTICSEARCH_HTTP_HOST_PORT:-9200}:${ELASTICSEARCH_HTTP_CONTAINER_PORT:-9200}"      # HTTP API
+      - "${ELASTICSEARCH_TRANSPORT_HOST_PORT:-9300}:${ELASTICSEARCH_TRANSPORT_CONTAINER_PORT:-9300}"      # Transport
     volumes:
       - elasticsearch_data:/var/lib/elasticsearch
       - elasticsearch_logs:/var/log/elasticsearch
@@ -206,7 +206,7 @@ services:
         soft: 65536
         hard: 65536
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${ELASTICSEARCH_HTTP_CONTAINER_PORT:-9200}/_cluster/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -224,9 +224,9 @@ services:
       - dev
       - app
     ports:
-      - "5601:5601"      # Kibana Web UI
+      - "${KIBANA_HOST_PORT:-5601}:${KIBANA_CONTAINER_PORT:-5601}"      # Kibana Web UI
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:${ELASTICSEARCH_HTTP_CONTAINER_PORT:-9200}
       - SERVER_NAME=vuhitra-kibana
       - xpack.security.enabled=false
       - xpack.encryptedSavedObjects.encryptionKey=fhjskloppd678ehkdfdlliverpoolfcr
@@ -234,7 +234,7 @@ services:
       elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      test: ["CMD", "curl", "-f", "http://localhost:${KIBANA_CONTAINER_PORT:-5601}/api/status"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -252,7 +252,7 @@ services:
     profiles:
       - ollama
     ports:
-      - "11434:11434"    # Ollama API port
+      - "${OLLAMA_HOST_PORT:-11434}:${OLLAMA_CONTAINER_PORT:-11434}"    # Ollama API port
     volumes:
       - ollama_data:/root/.ollama
     environment:
@@ -291,13 +291,13 @@ services:
       echo 'Waiting for Ollama service to be ready...' &&
       sleep 5 &&
       echo 'Pulling tinyllama model (lightweight, ~1GB, CPU-friendly)...' &&
-      curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"tinyllama\"}' &&
+      curl -X POST http://ollama:${OLLAMA_CONTAINER_PORT:-11434}/api/pull -d '{\"name\":\"tinyllama\"}' &&
       echo '' &&
       echo 'Model pull request sent successfully!' &&
       echo 'Waiting for model to finish downloading...' &&
       sleep 30 &&
       echo 'Testing model with a simple prompt...' &&
-      curl -X POST http://ollama:11434/api/generate -d '{\"model\":\"tinyllama\",\"prompt\":\"Say hello\",\"stream\":false}' &&
+      curl -X POST http://ollama:${OLLAMA_CONTAINER_PORT:-11434}/api/generate -d '{\"model\":\"tinyllama\",\"prompt\":\"Say hello\",\"stream\":false}' &&
       echo '' &&
       echo 'Ollama setup complete!'
       "
